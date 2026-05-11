@@ -1,0 +1,31 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Navbar from '../components/Navbar'
+import RegistroForm from '../components/RegistroForm'
+---
+
+<Layout title="Registrarse — Taita Soluciones" description="Creá tu cuenta en Taita Soluciones">
+  <Navbar client:load />
+
+  <div class="min-h-screen bg-cream py-12 px-4">
+    <div class="max-w-lg mx-auto flex flex-col gap-8">
+
+      <div class="text-center flex flex-col items-center gap-3">
+        <a href="/">
+          <div class="w-24 h-24">
+            <img src="/images/taita-avatar.webp" alt="TAITA" class="w-full h-full object-contain mix-blend-multiply" />
+          </div>
+        </a>
+        <div>
+          <h1 class="font-serif font-bold text-primary text-2xl mb-1">Crear cuenta</h1>
+          <p class="text-gray-400 text-sm">Unite a la comunidad de Corrientes</p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-6 sm:p-8 border border-cream-dark">
+        <RegistroForm client:load />
+      </div>
+
+    </div>
+  </div>
+</Layout>

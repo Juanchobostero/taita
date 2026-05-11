@@ -1,0 +1,231 @@
+---
+import Layout from '../../layouts/Layout.astro'
+import Navbar from '../../components/Navbar'
+import { createSupabaseServer } from '../../lib/supabase-server'
+import type { TecnicoConUsuario, SolicitudParaTecnico } from '../../lib/types'
+
+const supabase = createSupabaseServer({ request: Astro.request, cookies: Astro.cookies })
+const userId = Astro.locals.user!.id
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData()
+  const solicitudId = form.get('solicitudId')?.toString()
+  const accion = form.get('accion')?.toString()
+  if (solicitudId && (accion === 'aceptar' || accion === 'rechazar')) {
+    await supabase
+      .from('solicitudes')
+      .update({ estado: accion === 'aceptar' ? 'aceptada' : 'cancelada' })
+      .eq('id', solicitudId)
+  }
+  return Astro.redirect('/dashboard/tecnico')
+}
+
+const { data: rawTecnico } = await supabase
+  .from('tecnicos')
+  .select(`
+    id, descripcion, zona_cobertura, tarifa_hora,
+    calificacion_promedio, total_servicios, activo,
+    usuarios!inner ( nombre_completo, telefono, foto_url ),
+    especialidades_tecnico ( categorias ( nombre, icono ) )
+  `)
+  .eq('usuario_id', userId)
+  .single()
+
+if (!rawTecnico) return Astro.redirect('/dashboard/cliente')
+const tecnico = rawTecnico as TecnicoConUsuario
+
+const { data: rawSolicitudes } = await supabase
+  .from('solicitudes')
+  .select(`
+    id, titulo, estado, total_estimado, fecha_solicitada, creado_en, direccion,
+    usuarios!cliente_id ( nombre_completo, telefono ),
+    categorias ( nombre, icono )
+  `)
+  .eq('tecnico_id', tecnico.id)
+  .order('creado_en', { ascending: false })
+  .limit(20)
+
+const solicitudes = (rawSolicitudes ?? []) as SolicitudParaTecnico[]
+
+const estadoLabel: Record<string, string> = {
+  pendiente:  'Pendiente',
+  aceptada:   'Aceptada',
+  en_curso:   'En curso',
+  completada: 'Completada',
+  cancelada:  'Cancelada',
+}
+const estadoColor: Record<string, string> = {
+  pendiente:  'bg-amber-100 text-amber-800',
+  aceptada:   'bg-blue-100 text-blue-800',
+  en_curso:   'bg-blue-100 text-blue-800',
+  completada: 'bg-primary-soft text-[#1B4D2E]',
+  cancelada:  'bg-gray-100 text-gray-500',
+}
+
+const stats = {
+  pendientes:  solicitudes.filter(s => s.estado === 'pendiente').length,
+  en_curso:    solicitudes.filter(s => ['aceptada', 'en_curso'].includes(s.estado)).length,
+  completadas: solicitudes.filter(s => s.estado === 'completada').length,
+  ganancias:   solicitudes
+    .filter(s => s.estado === 'completada')
+    .reduce((acc, s) => acc + (s.total_estimado ?? 0), 0),
+}
+
+const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nombre).filter(Boolean)
+const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
+---
+
+<Layout title="Panel técnico — Taita Soluciones">
+  <Navbar client:load />
+
+  <div class="bg-cream min-h-screen py-8 px-4">
+    <div class="max-w-5xl mx-auto flex flex-col gap-6">
+
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl">Bienvenido, {nombre} 👋</h1>
+          <p class="text-gray-500 text-sm mt-0.5">Panel del técnico</p>
+        </div>
+        <div class={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium w-fit ${
+          tecnico.activo
+            ? 'bg-primary-soft text-[#1B4D2E]'
+            : 'bg-gray-100 text-gray-500'
+        }`}>
+          <span class={`w-2 h-2 rounded-full ${tecnico.activo ? 'bg-[#1B4D2E]' : 'bg-gray-400'}`}></span>
+          {tecnico.activo ? 'Disponible' : 'No disponible'}
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
+          <p class="text-xs text-gray-500">Solicitudes nuevas</p>
+          <p class="text-3xl font-bold text-amber-500">{stats.pendientes}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
+          <p class="text-xs text-gray-500">En curso</p>
+          <p class="text-3xl font-bold text-blue-500">{stats.en_curso}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
+          <p class="text-xs text-gray-500">Completados</p>
+          <p class="text-3xl font-bold text-[#1B4D2E]">{stats.completadas}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
+          <p class="text-xs text-gray-500">Ganancias</p>
+          <p class="text-2xl font-bold text-violet-600">${stats.ganancias.toLocaleString('es-AR')}</p>
+        </div>
+      </div>
+
+      <!-- Solicitudes -->
+      <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
+        <div class="px-6 py-4 border-b border-cream">
+          <h2 class="font-serif font-bold text-[#1B4D2E] text-lg">Solicitudes recibidas</h2>
+        </div>
+
+        {solicitudes.length === 0 ? (
+          <div class="px-6 py-12 text-center text-gray-400 text-sm flex flex-col items-center gap-3">
+            <span class="text-3xl">📋</span>
+            <p>Todavía no recibiste solicitudes.</p>
+          </div>
+        ) : (
+          <div class="divide-y divide-cream">
+            {solicitudes.map(s => (
+              <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex flex-col gap-1">
+                  <p class="font-semibold text-gray-900 text-sm">{s.titulo}</p>
+                  <p class="text-xs text-gray-400">
+                    {s.categorias?.icono} {s.categorias?.nombre}
+                    {s.usuarios?.nombre_completo && ` · 👤 ${s.usuarios.nombre_completo}`}
+                  </p>
+                  {s.direccion && <p class="text-xs text-gray-400">📍 {s.direccion}</p>}
+                  <p class="text-xs text-gray-400">
+                    📅 {new Date(s.fecha_solicitada ?? s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                  <span class={`text-xs font-medium px-3 py-1 rounded-full ${estadoColor[s.estado]}`}>
+                    {estadoLabel[s.estado]}
+                  </span>
+                  {s.total_estimado != null && (
+                    <span class="text-sm font-semibold text-gray-700">
+                      ${Number(s.total_estimado).toLocaleString('es-AR')}
+                    </span>
+                  )}
+                  {s.estado === 'pendiente' && (
+                    <div class="flex gap-2">
+                      <form method="POST">
+                        <input type="hidden" name="solicitudId" value={s.id} />
+                        <input type="hidden" name="accion" value="aceptar" />
+                        <button type="submit" class="text-xs bg-[#1B4D2E] hover:bg-primary-hover text-white font-medium px-3 py-1.5 rounded-full transition-colors">
+                          Aceptar
+                        </button>
+                      </form>
+                      <form method="POST">
+                        <input type="hidden" name="solicitudId" value={s.id} />
+                        <input type="hidden" name="accion" value="rechazar" />
+                        <button type="submit" class="text-xs border border-cream-dark hover:border-red-300 hover:text-red-500 text-gray-500 font-medium px-3 py-1.5 rounded-full transition-colors">
+                          Rechazar
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <!-- Perfil público -->
+      <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-serif font-bold text-[#1B4D2E] text-lg">Mi perfil público</h2>
+          <a href={`/tecnicos/${tecnico.id}`} class="text-sm text-[#1B4D2E] hover:text-primary-hover font-medium">
+            Ver perfil →
+          </a>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div class="flex flex-col gap-1">
+            <span class="text-gray-400">Nombre</span>
+            <span class="font-medium text-gray-800">{tecnico.usuarios.nombre_completo}</span>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-gray-400">Especialidad</span>
+            <span class="font-medium text-gray-800">{especialidades[0] ?? 'Sin especialidad registrada'}</span>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-gray-400">Calificación</span>
+            <span class="font-medium text-gray-800">
+              ⭐ {Number(tecnico.calificacion_promedio).toFixed(1)} ({tecnico.total_servicios} reseñas)
+            </span>
+          </div>
+          {tecnico.zona_cobertura && (
+            <div class="flex flex-col gap-1">
+              <span class="text-gray-400">Zona</span>
+              <span class="font-medium text-gray-800">{tecnico.zona_cobertura}</span>
+            </div>
+          )}
+          {tecnico.tarifa_hora && (
+            <div class="flex flex-col gap-1">
+              <span class="text-gray-400">Tarifa</span>
+              <span class="font-medium text-gray-800">${Number(tecnico.tarifa_hora).toLocaleString('es-AR')} / hora</span>
+            </div>
+          )}
+          {tecnico.usuarios.telefono && (
+            <div class="flex flex-col gap-1">
+              <span class="text-gray-400">Teléfono</span>
+              <span class="font-medium text-gray-800">{tecnico.usuarios.telefono}</span>
+            </div>
+          )}
+        </div>
+        {!tecnico.activo && (
+          <div class="bg-yellow-50 border border-yellow-100 rounded-xl p-3 text-sm text-yellow-700 text-center">
+            Tu perfil está pendiente de aprobación por un administrador.
+          </div>
+        )}
+      </div>
+
+    </div>
+  </div>
+</Layout>

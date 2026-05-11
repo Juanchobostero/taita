@@ -1,0 +1,153 @@
+---
+import Layout from '../../layouts/Layout.astro'
+import Navbar from '../../components/Navbar'
+import { createSupabaseServer } from '../../lib/supabase-server'
+import type { TecnicoConUsuario, ResenaConAutor } from '../../lib/types'
+
+const { id } = Astro.params
+if (!id) return Astro.redirect('/tecnicos')
+
+const supabase = createSupabaseServer({ request: Astro.request, cookies: Astro.cookies })
+
+const { data: raw } = await supabase
+  .from('tecnicos')
+  .select(`
+    id, descripcion, zona_cobertura, tarifa_hora,
+    calificacion_promedio, total_servicios, activo,
+    usuarios!inner ( nombre_completo, telefono, foto_url ),
+    especialidades_tecnico (
+      categorias ( id, nombre, icono )
+    )
+  `)
+  .eq('id', id)
+  .single()
+
+if (!raw) return Astro.redirect('/tecnicos')
+
+const tecnico = raw as TecnicoConUsuario
+
+const { data: rawResenas } = await supabase
+  .from('resenas')
+  .select(`
+    id, calificacion, comentario, creado_en,
+    usuarios!cliente_id ( nombre_completo )
+  `)
+  .eq('tecnico_id', id)
+  .order('creado_en', { ascending: false })
+  .limit(5)
+
+const resenas = (rawResenas ?? []) as ResenaConAutor[]
+
+const iniciales = tecnico.usuarios.nombre_completo
+  .split(' ').slice(0, 2).map(p => p[0]).join('')
+const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nombre).filter(Boolean)
+---
+
+<Layout title={`${tecnico.usuarios.nombre_completo} — Taita Soluciones`} description={tecnico.descripcion ?? ''}>
+  <Navbar client:load />
+
+  <div class="bg-gray-50 min-h-screen py-10 px-4">
+    <div class="max-w-4xl mx-auto flex flex-col gap-6">
+
+      <a href="/tecnicos" class="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1 w-fit text-sm">
+        ← Volver a técnicos
+      </a>
+
+      <!-- Perfil -->
+      <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-6">
+        <div class="flex flex-col items-center sm:items-start gap-3">
+          <div class="w-24 h-24 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-2xl">
+            {iniciales}
+          </div>
+          {tecnico.activo
+            ? <span class="text-sm bg-green-100 text-green-600 px-3 py-1 rounded-full font-medium">Disponible</span>
+            : <span class="text-sm bg-gray-100 text-gray-400 px-3 py-1 rounded-full font-medium">No disponible</span>
+          }
+        </div>
+
+        <div class="flex-1 flex flex-col gap-3">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">{tecnico.usuarios.nombre_completo}</h1>
+            <p class="text-orange-500 font-semibold">{especialidades[0] ?? 'Servicio general'}</p>
+          </div>
+          <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-500">
+            <span>⭐ <strong class="text-gray-800">{Number(tecnico.calificacion_promedio).toFixed(1)}</strong> ({tecnico.total_servicios} servicios)</span>
+            {tecnico.zona_cobertura && <span>📍 {tecnico.zona_cobertura}</span>}
+          </div>
+          {tecnico.descripcion && <p class="text-gray-600 leading-relaxed text-sm sm:text-base">{tecnico.descripcion}</p>}
+          {especialidades.length > 0 && (
+            <div class="flex flex-wrap gap-2 mt-1">
+              {especialidades.map(e => (
+                <span class="bg-orange-50 text-orange-600 text-xs font-medium px-3 py-1 rounded-full">{e}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <!-- Tarifa + CTA -->
+      <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-6 items-center">
+        <div class="flex-1">
+          {tecnico.tarifa_hora
+            ? <>
+                <p class="text-sm text-gray-500 mb-1">Tarifa estimada</p>
+                <p class="text-3xl font-bold text-gray-900">
+                  ${Number(tecnico.tarifa_hora).toLocaleString('es-AR')}
+                  <span class="text-base font-normal text-gray-400"> / hora</span>
+                </p>
+                <p class="text-xs text-gray-400 mt-1">El total depende del trabajo y los materiales.</p>
+              </>
+            : <p class="text-gray-500 text-sm">Tarifa a convenir según el trabajo.</p>
+          }
+        </div>
+        <a
+          href={`/solicitud?tecnico=${tecnico.id}`}
+          class="bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-4 rounded-full transition-colors text-center w-full sm:w-auto whitespace-nowrap"
+        >
+          Solicitar servicio
+        </a>
+      </div>
+
+      <!-- Reseñas -->
+      <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col gap-6">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold text-gray-900">Reseñas</h2>
+          <span class="text-sm text-gray-400">{tecnico.total_servicios} servicios realizados</span>
+        </div>
+
+        {resenas.length === 0
+          ? <p class="text-gray-400 text-sm py-4 text-center">Todavía no hay reseñas para este técnico.</p>
+          : (
+            <div class="flex flex-col divide-y divide-gray-50">
+              {resenas.map(r => (
+                <div class="py-4 first:pt-0 last:pb-0 flex flex-col gap-1.5">
+                  <div class="flex items-center justify-between">
+                    <p class="font-semibold text-gray-900 text-sm">{r.usuarios?.nombre_completo ?? 'Cliente'}</p>
+                    <p class="text-yellow-400 text-sm">{'⭐'.repeat(r.calificacion)}</p>
+                  </div>
+                  {r.comentario && <p class="text-gray-500 text-sm leading-relaxed">{r.comentario}</p>}
+                  <p class="text-xs text-gray-300">
+                    {new Date(r.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )
+        }
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="bg-gray-900 text-gray-400 py-10 px-4">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+      <span class="text-white font-bold text-xl">Taita <span class="text-orange-500">Soluciones</span></span>
+      <p class="text-sm">© 2026 Taita Soluciones — Corrientes, Argentina</p>
+      <div class="flex gap-6 text-sm">
+        <a href="#" class="hover:text-orange-400 transition-colors">Términos</a>
+        <a href="#" class="hover:text-orange-400 transition-colors">Privacidad</a>
+        <a href="#" class="hover:text-orange-400 transition-colors">Contacto</a>
+      </div>
+    </div>
+  </footer>
+</Layout>

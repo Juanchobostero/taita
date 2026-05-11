@@ -1,0 +1,90 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Navbar from '../components/Navbar'
+import FormSolicitud from '../components/FormSolicitud'
+import { createSupabaseServer } from '../lib/supabase-server'
+
+const tecnicoId = Astro.url.searchParams.get('tecnico')
+if (!tecnicoId) return Astro.redirect('/tecnicos')
+
+const supabase = createSupabaseServer({ request: Astro.request, cookies: Astro.cookies })
+const clienteId = Astro.locals.user!.id
+
+const { data: raw } = await supabase
+  .from('tecnicos')
+  .select(`
+    id, tarifa_hora, activo,
+    usuarios!inner ( nombre_completo ),
+    especialidades_tecnico (
+      categorias ( id, nombre, icono, porcentaje_tasa )
+    )
+  `)
+  .eq('id', tecnicoId)
+  .eq('activo', true)
+  .single()
+
+if (!raw) return Astro.redirect('/tecnicos')
+
+const categorias = raw.especialidades_tecnico
+  .map((e: any) => e.categorias)
+  .filter(Boolean) as { id: string; nombre: string; icono: string | null; porcentaje_tasa: number }[]
+
+const tecnicoNombre = (raw.usuarios as any).nombre_completo as string
+const tarifaHora    = raw.tarifa_hora as number | null
+---
+
+<Layout
+  title={`Solicitar servicio a ${tecnicoNombre} — Taita Soluciones`}
+  description={`Completá el formulario para solicitar un servicio a ${tecnicoNombre}`}
+>
+  <Navbar client:load />
+
+  <div class="bg-gray-50 min-h-screen py-10 px-4">
+    <div class="max-w-2xl mx-auto flex flex-col gap-6">
+
+      <a href={`/tecnicos/${tecnicoId}`} class="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1 w-fit text-sm">
+        ← Volver al perfil
+      </a>
+
+      <!-- Encabezado -->
+      <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100">
+        <h1 class="text-2xl font-bold text-gray-900 mb-1">Solicitar servicio</h1>
+        <p class="text-gray-500 text-sm">
+          Enviándole una solicitud a
+          <span class="font-semibold text-gray-700">{tecnicoNombre}</span>
+        </p>
+      </div>
+
+      <!-- Formulario -->
+      <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100">
+        {categorias.length === 0 ? (
+          <p class="text-gray-400 text-sm text-center py-6">
+            Este técnico no tiene categorías configuradas todavía.
+          </p>
+        ) : (
+          <FormSolicitud
+            client:load
+            tecnicoId={tecnicoId}
+            tecnicoNombre={tecnicoNombre}
+            tarifaHora={tarifaHora}
+            categorias={categorias}
+            clienteId={clienteId}
+          />
+        )}
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="bg-gray-900 text-gray-400 py-10 px-4">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+      <span class="text-white font-bold text-xl">Taita <span class="text-orange-500">Soluciones</span></span>
+      <p class="text-sm">© 2026 Taita Soluciones — Corrientes, Argentina</p>
+      <div class="flex gap-6 text-sm">
+        <a href="#" class="hover:text-orange-400 transition-colors">Términos</a>
+        <a href="#" class="hover:text-orange-400 transition-colors">Privacidad</a>
+        <a href="#" class="hover:text-orange-400 transition-colors">Contacto</a>
+      </div>
+    </div>
+  </footer>
+</Layout>

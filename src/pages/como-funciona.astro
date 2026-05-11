@@ -1,0 +1,177 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Navbar from '../components/Navbar'
+---
+
+<Layout title="Cómo funciona — Taita Soluciones" description="Aprendé cómo conectar con técnicos de confianza en Corrientes">
+  <Navbar client:load />
+
+  <!-- HERO -->
+  <section class="bg-cream py-14 md:py-20 px-4">
+    <div class="max-w-3xl mx-auto text-center flex flex-col gap-4">
+      <span class="bg-primary-soft text-primary text-sm font-semibold px-4 py-1.5 rounded-full w-fit mx-auto border border-primary-pale">
+        Simple y rápido
+      </span>
+      <h1 class="font-serif font-bold text-4xl sm:text-5xl text-primary">¿Cómo funciona?</h1>
+      <p class="text-lg text-gray-500 max-w-xl mx-auto">
+        En pocos pasos conectamos tu problema con el técnico ideal. Sin complicaciones, sin demoras.
+      </p>
+    </div>
+  </section>
+
+  <!-- PASOS PARA CLIENTES -->
+  <section class="py-16 px-4 bg-white">
+    <div class="max-w-4xl mx-auto flex flex-col gap-4">
+      <h2 class="font-serif font-bold text-2xl text-primary mb-6">Para clientes</h2>
+      <div class="flex flex-col gap-8">
+        {[
+          {
+            step: '01',
+            icon: '🔍',
+            title: 'Buscá el servicio que necesitás',
+            desc: 'Ingresá qué tipo de trabajo querés resolver: plomería, electricidad, refrigeración, limpieza y mucho más. Podés filtrar por categoría o buscar directamente por nombre.',
+          },
+          {
+            step: '02',
+            icon: '🤝',
+            title: 'Elegí tu técnico de confianza',
+            desc: 'Mirá los perfiles de los técnicos disponibles, leé sus reseñas de otros vecinos y elegí el que más te convenza. Transparencia total antes de comprometerte.',
+          },
+          {
+            step: '03',
+            icon: '✅',
+            title: 'Coordiná y resolvé',
+            desc: 'Completá el formulario de solicitud, el técnico te contactará para coordinar horario y visita. Una vez resuelto el trabajo, podés dejar tu reseña.',
+          },
+        ].map(({ step, icon, title, desc }, i) => (
+          <div class={`flex flex-col sm:flex-row gap-6 items-start ${i % 2 !== 0 ? 'sm:flex-row-reverse' : ''}`}>
+            <div class="shrink-0 w-20 h-20 bg-primary-soft rounded-2xl flex flex-col items-center justify-center gap-0.5 border border-primary-pale">
+              <span class="text-2xl">{icon}</span>
+              <span class="text-xs font-bold text-primary-light">{step}</span>
+            </div>
+            <div class="flex flex-col gap-2 flex-1">
+              <h3 class="text-xl font-semibold text-gray-900">{title}</h3>
+              <p class="text-gray-500 leading-relaxed">{desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- PARA TÉCNICOS -->
+  <section class="py-16 px-4 bg-cream">
+    <div class="max-w-4xl mx-auto flex flex-col md:flex-row gap-8 items-center">
+      <div class="flex-1 flex flex-col gap-4">
+        <span class="bg-primary-soft text-primary text-sm font-semibold px-4 py-1.5 rounded-full w-fit border border-primary-pale">
+          Para técnicos
+        </span>
+        <h2 class="font-serif font-bold text-3xl text-primary">¿Sos técnico? Sumarte es gratis</h2>
+        <p class="text-gray-500 leading-relaxed">
+          Registrá tu perfil, completá tus especialidades y empezá a recibir solicitudes de clientes en tu zona.
+          Manejá tu agenda y tu reputación desde tu panel personal.
+        </p>
+        <ul class="flex flex-col gap-2 text-gray-600">
+          {['Registro sin costo', 'Clientes verificados', 'Panel de control propio', 'Cobrás directo al cliente'].map(item => (
+            <li class="flex items-center gap-2">
+              <span class="text-primary font-bold">✓</span>
+              {item}
+            </li>
+          ))}
+        </ul>
+        <a
+          href="/registro?tipo=tecnico"
+          class="bg-primary hover:bg-primary-hover text-white font-semibold px-6 py-3 rounded-full w-fit transition-colors mt-2"
+        >
+          Registrarme como técnico
+        </a>
+      </div>
+
+      <div class="flex-1 bg-white rounded-2xl p-8 border border-cream-dark">
+        <div class="flex flex-col gap-4">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 bg-primary-soft rounded-full flex items-center justify-center text-xl border border-primary-pale">👨‍🔧</div>
+            <div>
+              <p class="font-semibold text-gray-900">Carlos M.</p>
+              <p class="text-sm text-gray-500">Carpintero · 4.9 ⭐</p>
+            </div>
+          </div>
+          <p class="text-gray-600 text-sm italic leading-relaxed">
+            "Desde que me sumé a Taita Soluciones conseguí clientes nuevos todas las semanas.
+            El sistema es fácil y mis clientes quedan satisfechos."
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="py-16 px-4 bg-white">
+    <div class="max-w-3xl mx-auto">
+      <h2 class="font-serif font-bold text-3xl text-primary mb-10 text-center">Preguntas frecuentes</h2>
+      <div class="flex flex-col gap-4">
+        {[
+          {
+            q: '¿Cuánto cuesta usar la plataforma como cliente?',
+            a: 'Registrarse y buscar técnicos es completamente gratis. Solo pagás el servicio directamente al técnico.',
+          },
+          {
+            q: '¿Cómo verifican a los técnicos?',
+            a: 'Cada técnico pasa por un proceso de verificación de identidad antes de aparecer en la plataforma. Además, el sistema de reseñas mantiene la calidad del servicio.',
+          },
+          {
+            q: '¿Qué pasa si no quedo conforme con el trabajo?',
+            a: 'Podés dejar una reseña y nuestro equipo de soporte puede mediar en la situación. Todos los técnicos tienen garantía de satisfacción sobre su trabajo.',
+          },
+          {
+            q: '¿Operan solo en la ciudad de Corrientes?',
+            a: 'Por ahora nos enfocamos en Corrientes capital y sus alrededores. Próximamente expandiremos a otras ciudades de la provincia.',
+          },
+          {
+            q: '¿Cómo se calcula el precio del servicio?',
+            a: 'Cada técnico tiene una tarifa de referencia por visita. El precio final puede variar según la complejidad del trabajo y los materiales necesarios.',
+          },
+        ].map(({ q, a }) => (
+          <div class="border border-cream-dark rounded-2xl p-6 flex flex-col gap-2 hover:border-primary-pale transition-colors">
+            <p class="font-semibold text-gray-900">{q}</p>
+            <p class="text-gray-500 text-sm leading-relaxed">{a}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="py-16 px-4 bg-primary">
+    <div class="max-w-2xl mx-auto text-center flex flex-col gap-6">
+      <h2 class="font-serif font-bold text-3xl sm:text-4xl text-white">¿Listo para empezar?</h2>
+      <p class="text-white/75 text-sm leading-relaxed">Unite a los vecinos de Corrientes que ya confían en Taita Soluciones.</p>
+      <div class="flex flex-col sm:flex-row gap-3 justify-center">
+        <a href="/registro?tipo=cliente" class="bg-white text-primary font-bold px-8 py-3.5 rounded-full hover:bg-cream transition-colors text-sm">
+          Buscar un técnico
+        </a>
+        <a href="/tecnicos" class="border-[1.5px] border-white/50 text-white font-medium px-8 py-3.5 rounded-full hover:bg-primary-hover transition-colors text-sm">
+          Ver técnicos
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="bg-[#111111] text-gray-400 py-10 px-4">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-2">
+        <span class="font-serif font-bold text-white text-lg">taita</span>
+        <span class="text-primary-light text-sm font-medium">soluciones</span>
+      </div>
+      <div class="flex flex-col items-center gap-1">
+        <p class="text-sm">© 2026 Taita Soluciones — Corrientes, Argentina</p>
+        <p class="text-xs text-gray-600">Desarrollado por <a href="https://www.jotadev.com" target="_blank" rel="noopener noreferrer" class="text-primary-light hover:text-white transition-colors font-medium">JOTADEV</a></p>
+      </div>
+      <div class="flex gap-6 text-sm">
+        <a href="#" class="hover:text-primary-light transition-colors">Términos</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Privacidad</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Contacto</a>
+      </div>
+    </div>
+  </footer>
+</Layout>

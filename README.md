@@ -1,46 +1,83 @@
-# Astro Starter Kit: Basics
+# Taita Soluciones
 
-```sh
-npm create astro@latest -- --template basics
+Plataforma web para conectar vecinos de Corrientes con técnicos locales verificados. Desarrollada por [JOTADEV](https://www.jotadev.com).
+
+## Stack
+
+- **Astro** — framework principal con SSR (Node adapter)
+- **React** — componentes interactivos (`client:load`)
+- **Tailwind CSS v4** — estilos, design system propio
+- **Supabase** — base de datos, autenticación y RLS
+- **shadcn/ui** — componentes de formulario base
+- **TypeScript**
+
+## Funcionalidades
+
+- Landing pública con categorías de servicios
+- Listado y búsqueda de técnicos verificados
+- Registro y login (cliente / técnico / admin)
+- Panel de cliente: historial de solicitudes
+- Panel de técnico: gestión de trabajos asignados
+- Panel de admin: aprobación de técnicos, gestión de categorías, estadísticas
+- Command palette global (`Ctrl+K`)
+- Middleware de autenticación por rol
+
+## Estructura del proyecto
+
+```
+src/
+├── components/       # Componentes React (Navbar, LoginForm, EmojiPicker, etc.)
+├── data/             # Mock data temporal (mockTecnicos.ts)
+├── layouts/          # Layout base con estilos globales
+├── lib/              # Cliente Supabase, tipos, utils
+├── middleware.ts     # Protección de rutas por rol
+├── pages/
+│   ├── index.astro
+│   ├── login.astro
+│   ├── registro.astro
+│   ├── como-funciona.astro
+│   ├── solicitud.astro
+│   ├── tecnicos/
+│   └── dashboard/    # cliente, tecnico, admin
+└── styles/
+    └── global.css    # Tokens de diseño (Tailwind v4 @theme)
+
+public/
+├── images/           # Avatar del mascota (taita-avatar.webp)
+└── favicon.svg
+
+supabase/
+└── rls_policies.sql  # Políticas de Row Level Security
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## Variables de entorno
 
-## 🚀 Project Structure
+Crear un archivo `.env` en la raíz con:
 
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-│   └── favicon.svg
-├── src
-│   ├── assets
-│   │   └── astro.svg
-│   ├── components
-│   │   └── Welcome.astro
-│   ├── layouts
-│   │   └── Layout.astro
-│   └── pages
-│       └── index.astro
-└── package.json
+```env
+PUBLIC_SUPABASE_URL=tu_url_de_supabase
+PUBLIC_SUPABASE_ANON_KEY=tu_anon_key
 ```
 
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
+## Comandos
 
-## 🧞 Commands
+| Comando           | Acción                                      |
+| :---------------- | :------------------------------------------ |
+| `npm install`     | Instala dependencias                        |
+| `npm run dev`     | Servidor de desarrollo en `localhost:4321`  |
+| `npm run build`   | Build de producción en `./dist/`            |
+| `npm run preview` | Preview del build local                     |
 
-All commands are run from the root of the project, from a terminal:
+## Roles de usuario
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+| Rol       | Acceso                          |
+| :-------- | :------------------------------ |
+| `cliente` | `/dashboard/cliente`            |
+| `tecnico` | `/dashboard/tecnico`            |
+| `admin`   | `/dashboard/admin`              |
 
-## 👀 Want to learn more?
+Los técnicos requieren aprobación manual del admin antes de aparecer en la plataforma.
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+---
+
+Desarrollado por [JOTADEV](https://www.jotadev.com) — Corrientes, Argentina · 2026

@@ -1,0 +1,131 @@
+// ── Enums ─────────────────────────────────────────────────────────────────
+export type UserTipo        = 'cliente' | 'tecnico' | 'admin'
+export type SolicitudEstado = 'pendiente' | 'aceptada' | 'en_curso' | 'completada' | 'cancelada'
+
+// ── Tablas base ───────────────────────────────────────────────────────────
+export interface Usuario {
+  id:              string
+  nombre_completo: string
+  email:           string
+  tipo:            UserTipo
+  telefono:        string | null
+  foto_url:        string | null
+  creado_en:       string
+}
+
+export interface Tecnico {
+  id:                   string
+  usuario_id:           string
+  descripcion:          string | null
+  zona_cobertura:       string | null
+  tarifa_hora:          number | null
+  calificacion_promedio: number
+  total_servicios:      number
+  activo:               boolean
+}
+
+export interface Categoria {
+  id:               string
+  nombre:           string
+  icono:            string | null
+  porcentaje_tasa:  number
+  activa:           boolean
+}
+
+export interface Solicitud {
+  id:               string
+  cliente_id:       string
+  tecnico_id:       string
+  categoria_id:     string
+  titulo:           string
+  descripcion:      string | null
+  horas_estimadas:  number | null
+  precio_base:      number | null
+  tasa_aplicada:    number | null
+  total_estimado:   number | null
+  fecha_solicitada: string | null
+  direccion:        string | null
+  estado:           SolicitudEstado
+  creado_en:        string
+}
+
+export interface Resena {
+  id:          string
+  solicitud_id: string
+  cliente_id:  string
+  tecnico_id:  string
+  calificacion: number
+  comentario:  string | null
+  creado_en:   string
+}
+
+// ── Tipos compuestos (con joins) ──────────────────────────────────────────
+export interface TecnicoConUsuario extends Tecnico {
+  usuarios: Pick<Usuario, 'nombre_completo' | 'telefono' | 'foto_url'>
+  especialidades_tecnico: {
+    categorias: Pick<Categoria, 'id' | 'nombre' | 'icono'>
+  }[]
+}
+
+export interface SolicitudConRelaciones extends Solicitud {
+  tecnicos: {
+    usuarios: Pick<Usuario, 'nombre_completo'>
+  }
+  categorias: Pick<Categoria, 'nombre' | 'icono'>
+}
+
+export interface SolicitudParaTecnico extends Solicitud {
+  usuarios: Pick<Usuario, 'nombre_completo' | 'telefono'>
+  categorias: Pick<Categoria, 'nombre' | 'icono'>
+}
+
+export interface ResenaConAutor extends Resena {
+  usuarios: Pick<Usuario, 'nombre_completo'>
+}
+
+// ── Interfaz para FiltroTecnicos (compatible con mock) ────────────────────
+export interface TecnicoDisplay {
+  id:          string
+  nombre:      string
+  especialidad: string
+  categoria:   string   // slug para filtrado
+  calificacion: number
+  resenas:     number
+  descripcion: string
+  zona:        string
+  tarifa:      number
+  disponible:  boolean
+  habilidades: string[]
+}
+
+// ── Helper: slug de categoría ─────────────────────────────────────────────
+const SLUG_MAP: Record<string, string> = {
+  'Refrigeración': 'refrigeracion',
+  'Electricidad':  'electricidad',
+  'Plomería':      'plomeria',
+  'Limpieza':      'limpieza',
+  'Jardinería':    'jardineria',
+  'Pintura':       'pintura',
+  'Mudanzas':      'mudanzas',
+  'Carpintería':   'carpinteria',
+  'Gas':           'plomeria',
+}
+
+export function tecnicoToDisplay(t: TecnicoConUsuario): TecnicoDisplay {
+  const primaria = t.especialidades_tecnico[0]?.categorias
+  return {
+    id:          t.id,
+    nombre:      t.usuarios.nombre_completo,
+    especialidad: primaria?.nombre ?? 'Servicio general',
+    categoria:   SLUG_MAP[primaria?.nombre ?? ''] ?? '',
+    calificacion: Number(t.calificacion_promedio),
+    resenas:     t.total_servicios,
+    descripcion: t.descripcion ?? 'Técnico especializado.',
+    zona:        t.zona_cobertura ?? 'Corrientes',
+    tarifa:      Number(t.tarifa_hora ?? 0),
+    disponible:  t.activo,
+    habilidades: t.especialidades_tecnico
+      .map(e => e.categorias?.nombre)
+      .filter((n): n is string => Boolean(n)),
+  }
+}

@@ -1,0 +1,57 @@
+---
+import Layout from '../../layouts/Layout.astro'
+import Navbar from '../../components/Navbar'
+import FiltroTecnicos from '../../components/FiltroTecnicos'
+import { createSupabaseServer } from '../../lib/supabase-server'
+import { tecnicoToDisplay } from '../../lib/types'
+import type { TecnicoConUsuario } from '../../lib/types'
+
+const supabase = createSupabaseServer({ request: Astro.request, cookies: Astro.cookies })
+
+const { data: rawTecnicos, error } = await supabase
+  .from('tecnicos')
+  .select(`
+    id, descripcion, zona_cobertura, tarifa_hora,
+    calificacion_promedio, total_servicios, activo,
+    usuarios!inner ( nombre_completo, telefono, foto_url ),
+    especialidades_tecnico (
+      categorias ( id, nombre, icono )
+    )
+  `)
+  .eq('activo', true)
+  .order('calificacion_promedio', { ascending: false })
+
+const tecnicos = (rawTecnicos as TecnicoConUsuario[] ?? []).map(tecnicoToDisplay)
+---
+
+<Layout title="Técnicos disponibles — Taita Soluciones" description="Encontrá al técnico ideal para tu hogar en Corrientes">
+  <Navbar client:load />
+
+  <div class="bg-gray-50 min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 py-10">
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Técnicos disponibles</h1>
+        <p class="text-gray-500 mt-1">
+          {error
+            ? 'Error cargando técnicos.'
+            : `${tecnicos.length} profesional${tecnicos.length !== 1 ? 'es' : ''} verificado${tecnicos.length !== 1 ? 's' : ''} en Corrientes y zona.`
+          }
+        </p>
+      </div>
+
+      <FiltroTecnicos client:load tecnicos={tecnicos} />
+    </div>
+  </div>
+
+  <footer class="bg-gray-900 text-gray-400 py-10 px-4">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+      <span class="text-white font-bold text-xl">Taita <span class="text-orange-500">Soluciones</span></span>
+      <p class="text-sm">© 2026 Taita Soluciones — Corrientes, Argentina</p>
+      <div class="flex gap-6 text-sm">
+        <a href="#" class="hover:text-orange-400 transition-colors">Términos</a>
+        <a href="#" class="hover:text-orange-400 transition-colors">Privacidad</a>
+        <a href="#" class="hover:text-orange-400 transition-colors">Contacto</a>
+      </div>
+    </div>
+  </footer>
+</Layout>

@@ -1,0 +1,348 @@
+---
+import Layout from '../../layouts/Layout.astro'
+import Navbar from '../../components/Navbar'
+import EmojiPicker from '../../components/EmojiPicker'
+import { createSupabaseServer } from '../../lib/supabase-server'
+
+const supabase = createSupabaseServer({ request: Astro.request, cookies: Astro.cookies })
+const userId = Astro.locals.user!.id
+
+const { data: self } = await supabase
+  .from('usuarios')
+  .select('tipo')
+  .eq('id', userId)
+  .single()
+
+if (self?.tipo !== 'admin') return Astro.redirect('/dashboard/cliente')
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData()
+  const accion = form.get('accion')?.toString()
+
+  if (accion === 'aprobar') {
+    const tecnicoId = form.get('tecnicoId')?.toString()
+    if (tecnicoId) await supabase.from('tecnicos').update({ activo: true }).eq('id', tecnicoId)
+
+  } else if (accion === 'rechazar') {
+    const tecnicoId = form.get('tecnicoId')?.toString()
+    if (tecnicoId) await supabase.from('tecnicos').delete().eq('id', tecnicoId)
+
+  } else if (accion === 'editar-categoria') {
+    const catId      = form.get('catId')?.toString()
+    const nombre     = form.get('nombre')?.toString()?.trim()
+    const icono      = form.get('icono')?.toString()?.trim()
+    const porcentaje = parseFloat(form.get('porcentaje')?.toString() ?? '0')
+    if (catId && nombre) {
+      await supabase.from('categorias')
+        .update({ nombre, icono, porcentaje_tasa: porcentaje })
+        .eq('id', catId)
+    }
+
+  } else if (accion === 'toggle-categoria') {
+    const catId  = form.get('catId')?.toString()
+    const activa = form.get('activa')?.toString() === 'true'
+    if (catId) await supabase.from('categorias').update({ activa: !activa }).eq('id', catId)
+
+  } else if (accion === 'crear-categoria') {
+    const nombre     = form.get('nombre')?.toString()?.trim()
+    const icono      = form.get('icono')?.toString()?.trim()
+    const porcentaje = parseFloat(form.get('porcentaje')?.toString() ?? '0')
+    if (nombre) {
+      await supabase.from('categorias').insert({ nombre, icono: icono || null, porcentaje_tasa: porcentaje, activa: true })
+    }
+  }
+
+  return Astro.redirect('/dashboard/admin')
+}
+
+interface TecnicoPendiente {
+  id: string
+  zona_cobertura: string | null
+  usuarios: { nombre_completo: string; creado_en: string }
+  especialidades_tecnico: { categorias: { nombre: string } | null }[]
+}
+interface SolicitudReciente {
+  id: string
+  titulo: string
+  estado: string
+  creado_en: string
+  usuarios: { nombre_completo: string } | null
+  tecnicos: { usuarios: { nombre_completo: string } } | null
+  categorias: { nombre: string } | null
+}
+interface Categoria {
+  id: string
+  nombre: string
+  icono: string | null
+  porcentaje_tasa: number
+  activa: boolean
+}
+
+const [
+  { count: totalUsuarios },
+  { count: totalTecnicosActivos },
+  { count: totalSolicitudes },
+  { data: rawPendientes },
+  { data: rawCategorias },
+  { data: rawRecientes },
+  { data: completadas },
+] = await Promise.all([
+  supabase.from('usuarios').select('*', { count: 'exact', head: true }),
+  supabase.from('tecnicos').select('*', { count: 'exact', head: true }).eq('activo', true),
+  supabase.from('solicitudes').select('*', { count: 'exact', head: true }),
+  supabase
+    .from('tecnicos')
+    .select(`
+      id, zona_cobertura,
+      usuarios!inner ( nombre_completo, creado_en ),
+      especialidades_tecnico ( categorias ( nombre ) )
+    `)
+    .eq('activo', false)
+    .limit(10),
+  supabase
+    .from('categorias')
+    .select('id, nombre, icono, porcentaje_tasa, activa')
+    .order('nombre'),
+  supabase
+    .from('solicitudes')
+    .select(`
+      id, titulo, estado, creado_en,
+      usuarios!cliente_id ( nombre_completo ),
+      tecnicos ( usuarios ( nombre_completo ) ),
+      categorias ( nombre )
+    `)
+    .order('creado_en', { ascending: false })
+    .limit(10),
+  supabase.from('solicitudes').select('total_estimado').eq('estado', 'completada'),
+])
+
+const pendientes  = (rawPendientes  ?? []) as TecnicoPendiente[]
+const categorias  = (rawCategorias  ?? []) as Categoria[]
+const recientes   = (rawRecientes   ?? []) as SolicitudReciente[]
+
+const ingresos = (completadas ?? []).reduce((sum, s) => sum + ((s.total_estimado as number | null) ?? 0), 0)
+
+const estadoColor: Record<string, string> = {
+  pendiente:  'bg-amber-100 text-amber-800',
+  aceptada:   'bg-blue-100 text-blue-800',
+  en_curso:   'bg-blue-100 text-blue-800',
+  completada: 'bg-primary-soft text-[#1B4D2E]',
+  cancelada:  'bg-gray-100 text-gray-500',
+}
+---
+
+<Layout title="Admin — Taita Soluciones">
+  <Navbar client:load />
+
+  <div class="bg-cream min-h-screen py-8 px-4">
+    <div class="max-w-6xl mx-auto flex flex-col gap-6">
+
+      <!-- Header -->
+      <div>
+        <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl">Panel de administración</h1>
+        <p class="text-gray-500 text-sm mt-0.5">Vista general de la plataforma</p>
+      </div>
+
+      <!-- Stats globales -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
+          <p class="text-xs text-gray-500">Usuarios totales</p>
+          <p class="text-3xl font-bold text-blue-500">{totalUsuarios ?? 0}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
+          <p class="text-xs text-gray-500">Técnicos activos</p>
+          <p class="text-3xl font-bold text-[#1B4D2E]">{totalTecnicosActivos ?? 0}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
+          <p class="text-xs text-gray-500">Solicitudes totales</p>
+          <p class="text-3xl font-bold text-blue-500">{totalSolicitudes ?? 0}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
+          <p class="text-xs text-gray-500">Ingresos (completadas)</p>
+          <p class="text-2xl font-bold text-violet-600">${ingresos.toLocaleString('es-AR')}</p>
+          <p class="text-xs text-gray-400">Mov. acumulado</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Técnicos pendientes de aprobación -->
+        <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
+          <div class="px-6 py-4 border-b border-cream flex items-center justify-between">
+            <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Técnicos pendientes de aprobación</h2>
+            {pendientes.length > 0 && (
+              <span class="bg-primary-soft text-[#1B4D2E] text-xs font-bold px-2.5 py-0.5 rounded-full">
+                {pendientes.length}
+              </span>
+            )}
+          </div>
+
+          {pendientes.length === 0 ? (
+            <div class="px-6 py-8 text-center text-gray-400 text-sm">
+              No hay técnicos pendientes
+            </div>
+          ) : (
+            <div class="divide-y divide-cream">
+              {pendientes.map(t => (
+                <div class="px-6 py-4 flex items-center justify-between gap-3">
+                  <div class="flex flex-col gap-0.5">
+                    <p class="font-semibold text-gray-900 text-sm">{t.usuarios.nombre_completo}</p>
+                    <p class="text-xs text-gray-400">
+                      {t.especialidades_tecnico[0]?.categorias?.nombre ?? 'Sin especialidad'}
+                      {t.zona_cobertura && ` · ${t.zona_cobertura}`}
+                    </p>
+                    <p class="text-xs text-gray-400">
+                      Registrado el {new Date(t.usuarios.creado_en).toLocaleDateString('es-AR')}
+                    </p>
+                  </div>
+                  <div class="flex gap-2 shrink-0">
+                    <form method="POST">
+                      <input type="hidden" name="accion" value="aprobar" />
+                      <input type="hidden" name="tecnicoId" value={t.id} />
+                      <button type="submit" class="text-xs bg-[#1B4D2E] hover:bg-primary-hover text-white font-medium px-3 py-1.5 rounded-full transition-colors">
+                        Aprobar
+                      </button>
+                    </form>
+                    <form method="POST">
+                      <input type="hidden" name="accion" value="rechazar" />
+                      <input type="hidden" name="tecnicoId" value={t.id} />
+                      <button type="submit" class="text-xs border border-cream-dark hover:border-red-300 hover:text-red-500 text-gray-500 font-medium px-3 py-1.5 rounded-full transition-colors">
+                        Rechazar
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <!-- Categorías -->
+        <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
+          <div class="px-6 py-4 border-b border-cream flex items-center justify-between">
+            <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Categorías</h2>
+            <span class="text-xs text-gray-400">{categorias.length} registradas</span>
+          </div>
+
+          <div class="divide-y divide-cream">
+            {categorias.map(c => (
+              <form method="POST" class="px-4 py-3 flex items-center gap-2">
+                <input type="hidden" name="accion" value="editar-categoria" />
+                <input type="hidden" name="catId" value={c.id} />
+
+                <EmojiPicker client:load name="icono" value={c.icono ?? ''} />
+                <input
+                  name="nombre"
+                  value={c.nombre}
+                  required
+                  class="flex-1 border border-cream-dark rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary min-w-0"
+                />
+                <div class="flex items-center gap-1 shrink-0">
+                  <input
+                    name="porcentaje"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    value={c.porcentaje_tasa}
+                    class="w-16 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary"
+                  />
+                  <span class="text-xs text-gray-400">%</span>
+                </div>
+                <button type="submit" class="text-xs bg-primary hover:bg-primary-hover text-white font-medium px-3 py-1.5 rounded-full transition-colors shrink-0">
+                  Guardar
+                </button>
+                <form method="POST" class="m-0">
+                  <input type="hidden" name="accion" value="toggle-categoria" />
+                  <input type="hidden" name="catId" value={c.id} />
+                  <input type="hidden" name="activa" value={String(c.activa)} />
+                  <button
+                    type="submit"
+                    title={c.activa ? 'Desactivar' : 'Activar'}
+                    class={`text-xs font-medium px-2.5 py-1.5 rounded-full border transition-colors shrink-0 ${
+                      c.activa
+                        ? 'border-cream-dark text-gray-400 hover:border-red-300 hover:text-red-500'
+                        : 'border-primary-pale text-primary-light hover:bg-primary-soft'
+                    }`}
+                  >
+                    {c.activa ? 'Off' : 'On'}
+                  </button>
+                </form>
+              </form>
+            ))}
+
+            <!-- Nueva categoría -->
+            <form method="POST" class="px-4 py-3 flex items-center gap-2 bg-cream/50">
+              <input type="hidden" name="accion" value="crear-categoria" />
+              <EmojiPicker client:load name="icono" value="" />
+              <input
+                name="nombre"
+                placeholder="Nueva categoría"
+                required
+                class="flex-1 border border-cream-dark rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary min-w-0 bg-white"
+              />
+              <div class="flex items-center gap-1 shrink-0">
+                <input
+                  name="porcentaje"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  placeholder="0"
+                  class="w-16 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary bg-white"
+                />
+                <span class="text-xs text-gray-400">%</span>
+              </div>
+              <button type="submit" class="text-xs bg-primary-soft hover:bg-primary-pale text-primary font-semibold px-3 py-1.5 rounded-full transition-colors shrink-0 border border-primary-pale">
+                + Agregar
+              </button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Solicitudes recientes -->
+      <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
+        <div class="px-6 py-4 border-b border-cream">
+          <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Solicitudes recientes</h2>
+        </div>
+        {recientes.length === 0 ? (
+          <div class="px-6 py-8 text-center text-gray-400 text-sm">Sin solicitudes aún</div>
+        ) : (
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-cream text-left">
+                <tr>
+                  <th class="px-6 py-3 text-xs font-semibold text-gray-500">Servicio</th>
+                  <th class="px-6 py-3 text-xs font-semibold text-gray-500">Cliente</th>
+                  <th class="px-6 py-3 text-xs font-semibold text-gray-500">Técnico</th>
+                  <th class="px-6 py-3 text-xs font-semibold text-gray-500">Estado</th>
+                  <th class="px-6 py-3 text-xs font-semibold text-gray-500">Fecha</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-cream">
+                {recientes.map(s => (
+                  <tr class="hover:bg-cream transition-colors">
+                    <td class="px-6 py-3 font-medium text-gray-800 max-w-45 truncate">{s.titulo}</td>
+                    <td class="px-6 py-3 text-gray-600">{s.usuarios?.nombre_completo ?? '—'}</td>
+                    <td class="px-6 py-3 text-gray-600">{s.tecnicos?.usuarios?.nombre_completo ?? '—'}</td>
+                    <td class="px-6 py-3">
+                      <span class={`text-xs font-medium px-2.5 py-1 rounded-full ${estadoColor[s.estado] ?? 'bg-gray-100 text-gray-500'}`}>
+                        {s.estado.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td class="px-6 py-3 text-gray-400 whitespace-nowrap">
+                      {new Date(s.creado_en).toLocaleDateString('es-AR')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+    </div>
+  </div>
+</Layout>

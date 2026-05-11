@@ -1,11 +1,160 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
-
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+import Layout from '../layouts/Layout.astro'
+import Navbar from '../components/Navbar'
 ---
 
 <Layout>
-	<Welcome />
+  <Navbar client:load />
+
+  <!-- HERO -->
+  <section class="bg-cream py-12 px-8">
+    <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-8 md:gap-12">
+
+      <!-- Mascota -->
+      <div class="shrink-0">
+        <img src="/images/taita-avatar.webp" alt="TAITA" class="w-40 h-40 md:w-48 md:h-48 object-contain mix-blend-multiply animate-fade-up hover:scale-105 transition-transform duration-300 ease-out cursor-pointer [clip-path:circle(50%)]" />
+      </div>
+
+      <!-- Contenido -->
+      <div class="flex-1 flex flex-col items-center md:items-start text-center md:text-left">
+        <span class="inline-block bg-primary-soft text-primary border border-primary-pale rounded-full px-3 py-1 text-xs font-medium mb-3">
+          📍 Corrientes y zona
+        </span>
+
+        <h1 class="font-serif font-bold text-primary text-[28px] sm:text-[44px] leading-none tracking-tight mb-1">
+          TAITA
+        </h1>
+
+        <p class="font-serif italic text-primary-light text-[14px] sm:text-[15px] mb-4">
+          Ayuda confiable, cuando la necesitás.
+        </p>
+
+        <p class="text-gray-500 text-sm leading-relaxed mb-5 max-w-md">
+          Encontrá los mejores técnicos locales para refrigeración, electricidad,
+          plomería y más. Rápido, seguro y garantizado.
+        </p>
+
+        <div class="flex items-center gap-2 flex-wrap justify-center md:justify-start">
+          <span class="text-xs text-gray-400 font-medium">Populares:</span>
+          {[
+            { label: 'Refrigeración',  slug: 'refrigeracion' },
+            { label: 'Electricidad',   slug: 'electricidad' },
+            { label: 'Limpieza',       slug: 'limpieza' },
+            { label: 'Mudanzas',       slug: 'mudanzas' },
+          ].map(({ label, slug }) => (
+            <a href={`/tecnicos?categoria=${slug}`}
+               class="text-xs bg-white text-primary border border-primary-pale rounded-full px-3 py-1 font-medium hover:border-primary transition-colors">
+              {label}
+            </a>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- POR QUÉ USARNOS -->
+  <section class="py-16 px-4 bg-white">
+    <div class="max-w-6xl mx-auto">
+      <div class="mb-8">
+        <h2 class="font-serif font-bold text-primary text-2xl mb-1">¿Por qué usar Taita Soluciones?</h2>
+        <p class="text-gray-400 text-sm">Construida para darte tranquilidad y resultados excelentes.</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          { icon: '🛡️', title: 'Seguridad garantizada', desc: 'Todos nuestros técnicos pasan por verificación de identidad y antecedentes.' },
+          { icon: '⚡', title: 'Respuesta rápida',       desc: 'Encontrá ayuda para hoy mismo. Técnicos disponibles en tu zona en minutos.' },
+          { icon: '⭐', title: 'Calidad evaluada',       desc: 'Leé reseñas reales de otros clientes de tu comunidad antes de contratar.' },
+        ].map(({ icon, title, desc }) => (
+          <div class="bg-cream rounded-2xl border border-cream-dark p-6 flex flex-col items-center text-center gap-3">
+            <div class="w-11 h-11 bg-primary-soft rounded-xl flex items-center justify-center text-[22px]">
+              {icon}
+            </div>
+            <h3 class="text-sm font-semibold text-primary">{title}</h3>
+            <p class="text-xs text-gray-400 leading-relaxed">{desc}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- CATEGORÍAS -->
+  <section class="py-16 px-4 bg-cream">
+    <div class="max-w-6xl mx-auto">
+      <div class="mb-8">
+        <h2 class="font-serif font-bold text-primary text-2xl mb-1">Categorías populares</h2>
+        <p class="text-gray-400 text-sm">Encontrá al experto adecuado para tu necesidad.</p>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        {[
+          { href: '/tecnicos?categoria=refrigeracion',          icon: '❄️',  label: 'Refrigeración' },
+          { href: '/tecnicos?categoria=limpieza',               icon: '🧹',  label: 'Limpieza' },
+          { href: '/tecnicos?categoria=mudanzas',               icon: '📦',  label: 'Mudanzas' },
+          { href: '/tecnicos?categoria=jardineria',             icon: '🌿',  label: 'Jardinería' },
+          { href: '/tecnicos?categoria=electricidad',           icon: '⚡',  label: 'Electricidad' },
+          { href: '/tecnicos?categoria=armado-muebles',         icon: '🪑',  label: 'Armado de muebles' },
+          { href: '/tecnicos?categoria=pintura-domiciliaria',   icon: '🖌️', label: 'Pintura domiciliaria' },
+          { href: '/tecnicos?categoria=auxilios-mecanicos',     icon: '🚗',  label: 'Auxilios mecánicos' },
+          { href: '/tecnicos?categoria=soluciones-informaticas',icon: '💻',  label: 'Soluciones informáticas' },
+        ].map(({ href, icon, label }) => (
+          <a href={href} class="bg-white rounded-2xl border border-[#D8D4CC] hover:border-primary-hover p-6 flex flex-col items-center gap-3 transition-colors group cursor-pointer">
+            <div class="text-3xl">{icon}</div>
+            <span class="text-sm font-semibold text-gray-700 group-hover:text-primary transition-colors">{label}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- BANNER CTA TÉCNICO -->
+  <section class="py-12 px-4 bg-white">
+    <div class="max-w-6xl mx-auto">
+      <div class="bg-primary-soft rounded-2xl border border-primary-pale p-7 flex flex-col sm:flex-row items-center justify-between gap-5">
+        <div>
+          <h3 class="font-serif font-bold text-primary text-xl mb-1.5">¿Sos taita y querés ofrecer tus servicios?</h3>
+          <p class="text-sm text-gray-500">Unite a nuestra comunidad y empezá a ganar.</p>
+        </div>
+        <a href="/registro?tipo=tecnico" class="bg-primary hover:bg-primary-hover text-white rounded-full px-6 py-3 text-sm font-semibold shrink-0 transition-colors">
+          Quiero registrarme
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA FINAL -->
+  <section class="py-16 px-4 bg-primary">
+    <div class="max-w-2xl mx-auto text-center flex flex-col gap-6">
+      <h2 class="font-serif font-bold text-white text-3xl">¿Listo para resolver tu problema?</h2>
+      <p class="text-white/75 text-sm leading-relaxed">
+        Unite a los vecinos de Corrientes que ya confían en Taita Soluciones para mantener su hogar en perfecto estado.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-3 justify-center">
+        <a href="/registro?tipo=cliente" class="bg-white text-primary font-bold px-7 py-3 rounded-full hover:bg-cream transition-colors text-sm">
+          Buscar un técnico
+        </a>
+        <a href="/registro?tipo=tecnico" class="border-[1.5px] border-white/50 text-white font-medium px-7 py-3 rounded-full hover:bg-primary-hover transition-colors text-sm">
+          Quiero ser técnico
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="bg-[#111111] text-gray-400 py-10 px-4">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-2">
+        <span class="font-serif font-bold text-white text-lg">taita</span>
+        <span class="text-primary-light text-sm font-medium">soluciones</span>
+      </div>
+      <div class="flex flex-col items-center gap-1">
+        <p class="text-sm">© 2026 Taita Soluciones — Corrientes, Argentina</p>
+        <p class="text-xs text-gray-600">Desarrollado por <a href="https://www.jotadev.com.ar" target="_blank" rel="noopener noreferrer" class="text-primary-light hover:text-white transition-colors font-medium">JOTADEV</a></p>
+      </div>
+      <div class="flex gap-6 text-sm">
+        <a href="#" class="hover:text-primary-light transition-colors">Términos</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Privacidad</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Contacto</a>
+      </div>
+    </div>
+  </footer>
 </Layout>
