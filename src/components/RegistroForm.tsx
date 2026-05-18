@@ -27,15 +27,12 @@ const tecnicoSchema = z.object({
   experiencia:  z.coerce.number({ invalid_type_error: 'Ingresá un número' }).min(0).max(60),
   zona:         z.string().min(2, 'Ingresá tu zona de trabajo'),
   descripcion:  z.string().min(20, 'Mínimo 20 caracteres'),
+  tarifa_hora:  z.coerce.number({ invalid_type_error: 'Ingresá un número' }).min(0).optional(),
 })
 
 type ClienteData = z.infer<typeof clienteSchema>
 type TecnicoData = z.infer<typeof tecnicoSchema>
 
-const ESPECIALIDADES = [
-  'Electricidad', 'Refrigeración', 'Plomería', 'Limpieza',
-  'Jardinería', 'Pintura', 'Mudanzas', 'Carpintería', 'Gas', 'Otra',
-]
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function FieldError({ msg }: { msg?: string }) {
@@ -96,7 +93,9 @@ function Tabs({ tipo, onChange }: { tipo: 'cliente' | 'tecnico'; onChange: (t: '
 // ── Cliente form ───────────────────────────────────────────────────────────
 function ClienteForm() {
   const [serverError, setServerError] = useState('')
-  const [success, setSuccess] = useState(false)
+  const [success, setSuccess]         = useState(false)
+  const params     = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+  const redirectTo = params.get('redirect')
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ClienteData>({
     resolver: zodResolver(clienteSchema),
@@ -123,7 +122,7 @@ function ClienteForm() {
         .eq('id', authData.user.id)
     }
     setSuccess(true)
-    setTimeout(() => { window.location.href = '/dashboard/cliente' }, 1500)
+    setTimeout(() => { window.location.href = redirectTo ?? '/dashboard/cliente' }, 1500)
   }
 
   if (success) return <SuccessMessage tipo="cliente" />
@@ -159,14 +158,14 @@ function ClienteForm() {
       </Button>
       <p className="text-center text-sm text-gray-500">
         ¿Ya tenés cuenta?{' '}
-        <a href="/login" className="text-primary hover:text-primary-hover font-medium">Ingresá aquí</a>
+        <a href={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login'} className="text-primary hover:text-primary-hover font-medium">Ingresá aquí</a>
       </p>
     </form>
   )
 }
 
 // ── Técnico form ───────────────────────────────────────────────────────────
-function TecnicoForm() {
+function TecnicoForm({ especialidades }: { especialidades: string[] }) {
   const [serverError, setServerError] = useState('')
   const [success, setSuccess] = useState(false)
 
@@ -195,14 +194,23 @@ function TecnicoForm() {
         .update({ telefono: data.telefono })
         .eq('id', authData.user.id)
 
-      // Crear fila en tecnicos con activo = false (pendiente aprobación)
-      const { error: tecErr } = await supabase.from('tecnicos').insert({
-        usuario_id:     authData.user.id,
-        descripcion:    data.descripcion,
-        zona_cobertura: data.zona,
-        activo:         false,
+      // Crear fila en tecnicos via endpoint servidor (service_role bypasea RLS)
+      const res = await fetch('/api/registro-tecnico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId:      authData.user.id,
+          descripcion: data.descripcion,
+          zona:        data.zona,
+          especialidad: data.especialidad,
+          tarifaHora:  data.tarifa_hora ?? null,
+        }),
       })
-      if (tecErr) { setServerError(tecErr.message); return }
+      if (!res.ok) {
+        const { error: msg } = await res.json()
+        setServerError(msg ?? 'Error al crear perfil de técnico')
+        return
+      }
     }
 
     setSuccess(true)
@@ -232,7 +240,7 @@ function TecnicoForm() {
       <Field label="Especialidad principal" error={err('especialidad')}>
         <Select {...register('especialidad')} className={ecls('especialidad')}>
           <option value="">Seleccioná una especialidad</option>
-          {ESPECIALIDADES.map(e => <option key={e} value={e.toLowerCase()}>{e}</option>)}
+          {especialidades.map(e => <option key={e} value={e}>{e}</option>)}
         </Select>
       </Field>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -243,6 +251,14 @@ function TecnicoForm() {
           <Input placeholder="Ej: Centro, toda la ciudad..." {...register('zona')} className={ecls('zona')} />
         </Field>
       </div>
+      <Field label="Tarifa por hora (opcional)" error={err('tarifa_hora')}>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500 shrink-0">$</span>
+          <Input type="number" min="0" step="100" placeholder="Ej: 5000" {...register('tarifa_hora')} className={`flex-1 ${ecls('tarifa_hora')}`} />
+          <span className="text-sm text-gray-400 shrink-0">/ hora</span>
+        </div>
+        <p className="text-xs text-gray-400">Podés ajustarla después desde tu panel.</p>
+      </Field>
       <Field label="Descripción breve" error={err('descripcion')}>
         <Textarea rows={3} placeholder="Contanos sobre tu experiencia (mínimo 20 caracteres)..." {...register('descripcion')} className={ecls('descripcion')} />
       </Field>
@@ -262,7 +278,7 @@ function TecnicoForm() {
 }
 
 // ── Root ───────────────────────────────────────────────────────────────────
-export default function RegistroForm() {
+export default function RegistroForm({ especialidades = [] }: { especialidades?: string[] }) {
   const [tipo, setTipo] = useState<'cliente' | 'tecnico'>('cliente')
 
   useEffect(() => {
@@ -273,7 +289,7 @@ export default function RegistroForm() {
   return (
     <div className="flex flex-col gap-6">
       <Tabs tipo={tipo} onChange={setTipo} />
-      {tipo === 'cliente' ? <ClienteForm /> : <TecnicoForm />}
+      {tipo === 'cliente' ? <ClienteForm /> : <TecnicoForm especialidades={especialidades} />}
     </div>
   )
 }

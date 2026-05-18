@@ -2,11 +2,11 @@
 import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
 import FiltroTecnicos from '../../components/FiltroTecnicos'
-import { createSupabaseServer } from '../../lib/supabase-server'
+import { createSupabaseAdmin } from '../../lib/supabase-admin'
 import { tecnicoToDisplay } from '../../lib/types'
 import type { TecnicoConUsuario } from '../../lib/types'
 
-const supabase = createSupabaseServer({ request: Astro.request, cookies: Astro.cookies })
+const supabase = createSupabaseAdmin()
 
 const { data: rawTecnicos, error } = await supabase
   .from('tecnicos')
@@ -45,12 +45,12 @@ const tecnicos = (rawTecnicos as TecnicoConUsuario[] ?? []).map(tecnicoToDisplay
 
   <footer class="bg-gray-900 text-gray-400 py-10 px-4">
     <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-      <span class="text-white font-bold text-xl">Taita <span class="text-orange-500">Soluciones</span></span>
+      <span class="text-white font-bold text-xl">Taita <span class="text-primary-light">Soluciones</span></span>
       <p class="text-sm">© 2026 Taita Soluciones — Corrientes, Argentina</p>
       <div class="flex gap-6 text-sm">
-        <a href="#" class="hover:text-orange-400 transition-colors">Términos</a>
-        <a href="#" class="hover:text-orange-400 transition-colors">Privacidad</a>
-        <a href="#" class="hover:text-orange-400 transition-colors">Contacto</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Términos</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Privacidad</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Contacto</a>
       </div>
     </div>
   </footer>

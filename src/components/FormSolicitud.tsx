@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { supabase } from '@/lib/supabase'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -21,7 +20,6 @@ interface Props {
   tecnicoNombre: string
   tarifaHora: number | null
   categorias: CategoriaOpt[]
-  clienteId: string
 }
 
 const schema = z.object({
@@ -40,7 +38,7 @@ function FieldError({ msg }: { msg?: string }) {
   return <p className="text-xs text-destructive mt-1">{msg}</p>
 }
 
-export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, categorias, clienteId }: Props) {
+export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, categorias }: Props) {
   const [serverError, setServerError] = useState('')
   const [success, setSuccess]         = useState(false)
 
@@ -63,22 +61,27 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, ca
 
   const onSubmit = async (data: FormData) => {
     setServerError('')
-    const { error } = await supabase.from('solicitudes').insert({
-      cliente_id:       clienteId,
-      tecnico_id:       tecnicoId,
-      categoria_id:     data.categoria_id,
-      titulo:           data.titulo,
-      descripcion:      data.descripcion || null,
-      horas_estimadas:  data.horas_estimadas,
-      precio_base:      precioBase,
-      tasa_aplicada:    tasa,
-      total_estimado:   total,
-      fecha_solicitada: data.fecha_solicitada,
-      direccion:        data.direccion,
-      estado:           'pendiente',
+    const res = await fetch('/api/crear-solicitud', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tecnicoId,
+        categoriaId:     data.categoria_id,
+        titulo:          data.titulo,
+        descripcion:     data.descripcion || null,
+        horasEstimadas:  data.horas_estimadas,
+        precioBase,
+        tasaAplicada:    tasa,
+        totalEstimado:   total,
+        fechaSolicitada: data.fecha_solicitada,
+        direccion:       data.direccion,
+      }),
     })
-
-    if (error) { setServerError(error.message); return }
+    if (!res.ok) {
+      const { error } = await res.json()
+      setServerError(error ?? 'Error al enviar la solicitud')
+      return
+    }
     setSuccess(true)
   }
 
@@ -88,7 +91,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, ca
         <p className="text-2xl">✅</p>
         <p className="font-bold text-lg">¡Solicitud enviada!</p>
         <p className="text-sm">Le avisamos a {tecnicoNombre}. Podés ver el estado en tu panel.</p>
-        <a href="/dashboard/cliente" className="mt-2 text-orange-500 hover:text-orange-600 font-medium text-sm">
+        <a href="/dashboard/cliente" className="mt-2 text-primary hover:text-primary-hover font-medium text-sm">
           Ir a mi panel →
         </a>
       </div>
@@ -177,7 +180,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, ca
       {/* Estimación de precio */}
       {tarifaHora ? (
         <div className={`rounded-2xl border p-5 flex flex-col gap-3 transition-colors ${
-          total != null ? 'bg-orange-50 border-orange-100' : 'bg-gray-50 border-gray-100'
+          total != null ? 'bg-primary-soft border-primary-pale' : 'bg-gray-50 border-gray-100'
         }`}>
           <p className="text-sm font-semibold text-gray-700">Estimación de costo</p>
           <div className="grid grid-cols-2 gap-y-2 text-sm">
@@ -198,9 +201,9 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, ca
               {precioBase != null ? `$${(precioBase * tasa / 100).toLocaleString('es-AR')}` : '—'}
             </span>
           </div>
-          <div className="border-t border-orange-100 pt-3 flex items-center justify-between">
+          <div className="border-t border-primary-pale pt-3 flex items-center justify-between">
             <span className="font-bold text-gray-900">Total estimado</span>
-            <span className="text-2xl font-bold text-orange-500">
+            <span className="text-2xl font-bold text-primary">
               {total != null ? `$${Math.round(total).toLocaleString('es-AR')}` : '—'}
             </span>
           </div>

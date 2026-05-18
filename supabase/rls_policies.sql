@@ -15,6 +15,15 @@ ALTER TABLE especialidades_tecnico ENABLE ROW LEVEL SECURITY;
 -- USUARIOS
 -- ============================================================
 
+-- Lectura pública de datos básicos de técnicos activos (necesario para joins en /tecnicos)
+CREATE POLICY "usuarios: lectura publica de tecnicos activos"
+  ON usuarios FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM tecnicos t WHERE t.usuario_id = id AND t.activo = true
+    )
+  );
+
 -- Cualquier usuario autenticado puede leer su propio perfil
 CREATE POLICY "usuarios: leer propio"
   ON usuarios FOR SELECT

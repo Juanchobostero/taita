@@ -99,16 +99,13 @@ export interface TecnicoDisplay {
 }
 
 // ── Helper: slug de categoría ─────────────────────────────────────────────
-const SLUG_MAP: Record<string, string> = {
-  'Refrigeración': 'refrigeracion',
-  'Electricidad':  'electricidad',
-  'Plomería':      'plomeria',
-  'Limpieza':      'limpieza',
-  'Jardinería':    'jardineria',
-  'Pintura':       'pintura',
-  'Mudanzas':      'mudanzas',
-  'Carpintería':   'carpinteria',
-  'Gas':           'plomeria',
+function toSlug(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
 }
 
 export function tecnicoToDisplay(t: TecnicoConUsuario): TecnicoDisplay {
@@ -117,7 +114,7 @@ export function tecnicoToDisplay(t: TecnicoConUsuario): TecnicoDisplay {
     id:          t.id,
     nombre:      t.usuarios.nombre_completo,
     especialidad: primaria?.nombre ?? 'Servicio general',
-    categoria:   SLUG_MAP[primaria?.nombre ?? ''] ?? '',
+    categoria:   toSlug(primaria?.nombre ?? ''),
     calificacion: Number(t.calificacion_promedio),
     resenas:     t.total_servicios,
     descripcion: t.descripcion ?? 'Técnico especializado.',

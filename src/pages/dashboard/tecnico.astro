@@ -1,21 +1,44 @@
 ---
 import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
-import { createSupabaseServer } from '../../lib/supabase-server'
+import { createSupabaseAdmin } from '../../lib/supabase-admin'
 import type { TecnicoConUsuario, SolicitudParaTecnico } from '../../lib/types'
 
-const supabase = createSupabaseServer({ request: Astro.request, cookies: Astro.cookies })
+const supabase = createSupabaseAdmin()
 const userId = Astro.locals.user!.id
 
 if (Astro.request.method === 'POST') {
-  const form = await Astro.request.formData()
+  const form      = await Astro.request.formData()
   const solicitudId = form.get('solicitudId')?.toString()
-  const accion = form.get('accion')?.toString()
-  if (solicitudId && (accion === 'aceptar' || accion === 'rechazar')) {
+  const accion    = form.get('accion')?.toString()
+  const { data: tec } = await supabase.from('tecnicos').select('id, total_servicios').eq('usuario_id', userId).single()
+
+  if (accion === 'actualizar-tarifa' && tec) {
+    const tarifa = parseFloat(form.get('tarifa')?.toString() ?? '0')
+    if (!isNaN(tarifa) && tarifa >= 0) {
+      await supabase.from('tecnicos').update({ tarifa_hora: tarifa }).eq('id', tec.id)
+    }
+
+  } else if (solicitudId && tec && (accion === 'aceptar' || accion === 'rechazar')) {
     await supabase
       .from('solicitudes')
       .update({ estado: accion === 'aceptar' ? 'aceptada' : 'cancelada' })
       .eq('id', solicitudId)
+      .eq('tecnico_id', tec.id)
+
+  } else if (accion === 'completar' && solicitudId && tec) {
+    const { data: sol } = await supabase
+      .from('solicitudes')
+      .select('estado')
+      .eq('id', solicitudId)
+      .eq('tecnico_id', tec.id)
+      .single()
+    if (sol && ['aceptada', 'en_curso'].includes(sol.estado)) {
+      await Promise.all([
+        supabase.from('solicitudes').update({ estado: 'completada' }).eq('id', solicitudId),
+        supabase.from('tecnicos').update({ total_servicios: (tec.total_servicios ?? 0) + 1 }).eq('id', tec.id),
+      ])
+    }
   }
   return Astro.redirect('/dashboard/tecnico')
 }
@@ -170,6 +193,15 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
                       </form>
                     </div>
                   )}
+                  {(s.estado === 'aceptada' || s.estado === 'en_curso') && (
+                    <form method="POST">
+                      <input type="hidden" name="solicitudId" value={s.id} />
+                      <input type="hidden" name="accion" value="completar" />
+                      <button type="submit" class="text-xs bg-primary-soft hover:bg-primary text-primary hover:text-white border border-primary-pale font-medium px-3 py-1.5 rounded-full transition-colors">
+                        ✓ Marcar completado
+                      </button>
+                    </form>
+                  )}
                 </div>
               </div>
             ))}
@@ -206,12 +238,6 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
               <span class="font-medium text-gray-800">{tecnico.zona_cobertura}</span>
             </div>
           )}
-          {tecnico.tarifa_hora && (
-            <div class="flex flex-col gap-1">
-              <span class="text-gray-400">Tarifa</span>
-              <span class="font-medium text-gray-800">${Number(tecnico.tarifa_hora).toLocaleString('es-AR')} / hora</span>
-            </div>
-          )}
           {tecnico.usuarios.telefono && (
             <div class="flex flex-col gap-1">
               <span class="text-gray-400">Teléfono</span>
@@ -219,6 +245,33 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
             </div>
           )}
         </div>
+
+        <!-- Tarifa editable -->
+        <div class="border-t border-cream pt-4">
+          <p class="text-sm text-gray-500 mb-3">
+            Tu tarifa aparece en tu perfil y se usa para calcular el costo estimado al cliente.
+          </p>
+          <form method="POST" class="flex items-center gap-3">
+            <input type="hidden" name="accion" value="actualizar-tarifa" />
+            <div class="flex items-center gap-2 flex-1 max-w-xs">
+              <span class="text-sm text-gray-500 shrink-0">$</span>
+              <input
+                type="number"
+                name="tarifa"
+                min="0"
+                step="100"
+                value={tecnico.tarifa_hora ?? ''}
+                placeholder="Ej: 5000"
+                class="flex-1 border border-cream-dark rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary"
+              />
+              <span class="text-sm text-gray-400 shrink-0">/ hora</span>
+            </div>
+            <button type="submit" class="bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors shrink-0">
+              Guardar tarifa
+            </button>
+          </form>
+        </div>
+
         {!tecnico.activo && (
           <div class="bg-yellow-50 border border-yellow-100 rounded-xl p-3 text-sm text-yellow-700 text-center">
             Tu perfil está pendiente de aprobación por un administrador.

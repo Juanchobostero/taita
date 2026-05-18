@@ -1,13 +1,13 @@
 ---
 import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
-import { createSupabaseServer } from '../../lib/supabase-server'
+import { createSupabaseAdmin } from '../../lib/supabase-admin'
 import type { TecnicoConUsuario, ResenaConAutor } from '../../lib/types'
 
 const { id } = Astro.params
 if (!id) return Astro.redirect('/tecnicos')
 
-const supabase = createSupabaseServer({ request: Astro.request, cookies: Astro.cookies })
+const supabase = createSupabaseAdmin()
 
 const { data: raw } = await supabase
   .from('tecnicos')
@@ -49,14 +49,14 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
   <div class="bg-gray-50 min-h-screen py-10 px-4">
     <div class="max-w-4xl mx-auto flex flex-col gap-6">
 
-      <a href="/tecnicos" class="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1 w-fit text-sm">
+      <a href="/tecnicos" class="text-primary hover:text-primary-hover font-medium flex items-center gap-1 w-fit text-sm">
         ← Volver a técnicos
       </a>
 
       <!-- Perfil -->
       <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-6">
         <div class="flex flex-col items-center sm:items-start gap-3">
-          <div class="w-24 h-24 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-2xl">
+          <div class="w-24 h-24 rounded-2xl bg-primary-soft flex items-center justify-center text-primary font-bold text-2xl">
             {iniciales}
           </div>
           {tecnico.activo
@@ -68,7 +68,7 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
         <div class="flex-1 flex flex-col gap-3">
           <div>
             <h1 class="text-2xl font-bold text-gray-900">{tecnico.usuarios.nombre_completo}</h1>
-            <p class="text-orange-500 font-semibold">{especialidades[0] ?? 'Servicio general'}</p>
+            <p class="text-primary font-semibold">{especialidades[0] ?? 'Servicio general'}</p>
           </div>
           <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-500">
             <span>⭐ <strong class="text-gray-800">{Number(tecnico.calificacion_promedio).toFixed(1)}</strong> ({tecnico.total_servicios} servicios)</span>
@@ -78,7 +78,7 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
           {especialidades.length > 0 && (
             <div class="flex flex-wrap gap-2 mt-1">
               {especialidades.map(e => (
-                <span class="bg-orange-50 text-orange-600 text-xs font-medium px-3 py-1 rounded-full">{e}</span>
+                <span class="bg-primary-soft text-primary text-xs font-medium px-3 py-1 rounded-full">{e}</span>
               ))}
             </div>
           )}
@@ -102,7 +102,7 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
         </div>
         <a
           href={`/solicitud?tecnico=${tecnico.id}`}
-          class="bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-4 rounded-full transition-colors text-center w-full sm:w-auto whitespace-nowrap"
+          class="bg-primary hover:bg-primary-hover text-white font-bold px-8 py-4 rounded-full transition-colors text-center w-full sm:w-auto whitespace-nowrap"
         >
           Solicitar servicio
         </a>
@@ -141,12 +141,12 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
 
   <footer class="bg-gray-900 text-gray-400 py-10 px-4">
     <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-      <span class="text-white font-bold text-xl">Taita <span class="text-orange-500">Soluciones</span></span>
+      <span class="text-white font-bold text-xl">Taita <span class="text-primary-light">Soluciones</span></span>
       <p class="text-sm">© 2026 Taita Soluciones — Corrientes, Argentina</p>
       <div class="flex gap-6 text-sm">
-        <a href="#" class="hover:text-orange-400 transition-colors">Términos</a>
-        <a href="#" class="hover:text-orange-400 transition-colors">Privacidad</a>
-        <a href="#" class="hover:text-orange-400 transition-colors">Contacto</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Términos</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Privacidad</a>
+        <a href="#" class="hover:text-primary-light transition-colors">Contacto</a>
       </div>
     </div>
   </footer>

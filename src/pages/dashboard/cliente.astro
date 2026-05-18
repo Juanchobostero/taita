@@ -1,10 +1,10 @@
 ---
 import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
-import { createSupabaseServer } from '../../lib/supabase-server'
+import { createSupabaseAdmin } from '../../lib/supabase-admin'
 import type { SolicitudConRelaciones } from '../../lib/types'
 
-const supabase = createSupabaseServer({ request: Astro.request, cookies: Astro.cookies })
+const supabase = createSupabaseAdmin()
 const userId = Astro.locals.user!.id
 
 const [{ data: usuario }, { data: rawSolicitudes }] = await Promise.all([
@@ -16,8 +16,9 @@ const [{ data: usuario }, { data: rawSolicitudes }] = await Promise.all([
   supabase
     .from('solicitudes')
     .select(`
-      id, titulo, estado, total_estimado, fecha_solicitada, creado_en,
-      tecnicos ( usuarios ( nombre_completo ) ),
+      id, titulo, descripcion, estado, direccion, horas_estimadas,
+      precio_base, tasa_aplicada, total_estimado, fecha_solicitada, creado_en,
+      tecnicos ( tarifa_hora, usuarios ( nombre_completo, telefono ) ),
       categorias ( nombre, icono )
     `)
     .eq('cliente_id', userId)
@@ -103,30 +104,98 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
           </div>
         ) : (
           <div class="divide-y divide-cream">
-            {solicitudes.map(s => (
-              <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div class="flex flex-col gap-0.5">
-                  <p class="font-semibold text-gray-900 text-sm">{s.titulo}</p>
-                  <p class="text-xs text-gray-400">
-                    {s.categorias?.icono} {s.categorias?.nombre}
-                    {s.tecnicos?.usuarios?.nombre_completo && (
-                      ` · 👤 ${s.tecnicos.usuarios.nombre_completo}`
-                    )}
-                    {` · 📅 ${new Date(s.fecha_solicitada ?? s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}`}
-                  </p>
-                </div>
-                <div class="flex items-center gap-3 shrink-0">
-                  <span class={`text-xs font-medium px-3 py-1 rounded-full ${estadoColor[s.estado]}`}>
-                    {estadoLabel[s.estado]}
-                  </span>
-                  {s.total_estimado != null && (
-                    <span class="text-sm font-semibold text-gray-700">
-                      ${Number(s.total_estimado).toLocaleString('es-AR')}
+            {solicitudes.map(s => {
+              const waUrl = (tel: string, titulo: string) => {
+                const digits = tel.replace(/\D/g, '')
+                const number = digits.startsWith('54') ? digits : `549${digits}`
+                const msg = encodeURIComponent(`Hola, te contacto por mi solicitud "${titulo}" en Taita Soluciones.`)
+                return `https://wa.me/${number}?text=${msg}`
+              }
+              const tec      = s.tecnicos as any
+              const cat      = s.categorias as any
+              const total    = s.total_estimado as number | null
+              const base     = s.precio_base   as number | null
+              const tasa     = s.tasa_aplicada as number | null
+              const ganancia = (total != null && base != null) ? total - base : null
+              const fmt      = (n: number) => `$${n.toLocaleString('es-AR')}`
+              const fecha    = new Date(s.fecha_solicitada ?? s.creado_en)
+                .toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+              return (
+                <div class="px-6 py-5 flex flex-col gap-4">
+
+                  {/* Fila principal */}
+                  <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                    <div class="flex flex-col gap-1">
+                      <p class="font-semibold text-gray-900">{s.titulo}</p>
+                      <p class="text-xs text-gray-400">
+                        {cat?.icono} {cat?.nombre} · 📅 {fecha}
+                      </p>
+                    </div>
+                    <span class={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 w-fit ${estadoColor[s.estado]}`}>
+                      {estadoLabel[s.estado]}
                     </span>
+                  </div>
+
+                  {/* Grid de detalles */}
+                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+
+                    {/* Técnico */}
+                    {tec?.usuarios && (
+                      <div class="flex items-start gap-2.5">
+                        <div class="w-8 h-8 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-xs shrink-0 mt-0.5">
+                          {tec.usuarios.nombre_completo?.split(' ').slice(0,2).map((p: string) => p[0]).join('')}
+                        </div>
+                        <div class="flex flex-col gap-0.5">
+                          <span class="text-xs text-gray-400">Técnico</span>
+                          <span class="font-medium text-gray-800 text-xs">{tec.usuarios.nombre_completo}</span>
+                          {tec.usuarios.telefono && (
+                            <a
+                              href={waUrl(tec.usuarios.telefono, s.titulo)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="text-xs text-white bg-[#25D366] hover:bg-[#1da851] font-medium flex items-center gap-1.5 w-fit px-2.5 py-1 rounded-full transition-colors"
+                            >
+                              <svg viewBox="0 0 24 24" class="w-3.5 h-3.5 fill-current shrink-0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.124 1.532 5.855L.057 23.428a.75.75 0 0 0 .916.916l5.573-1.475A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.713 9.713 0 0 1-4.953-1.355l-.355-.211-3.684.974.984-3.592-.232-.371A9.712 9.712 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/></svg>
+                              {tec.usuarios.telefono}
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dirección */}
+                    {s.direccion && (
+                      <div class="flex flex-col gap-0.5">
+                        <span class="text-xs text-gray-400">Dirección</span>
+                        <span class="text-xs font-medium text-gray-800">📍 {s.direccion}</span>
+                      </div>
+                    )}
+
+                    {/* Descripción */}
+                    {s.descripcion && (
+                      <div class="flex flex-col gap-0.5 sm:col-span-2 lg:col-span-1">
+                        <span class="text-xs text-gray-400">Detalle</span>
+                        <span class="text-xs text-gray-600 leading-relaxed">{s.descripcion}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Financiero (solo si hay tarifa) */}
+                  {total != null && (
+                    <div class="bg-cream rounded-xl px-4 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
+                      {s.horas_estimadas && tec?.tarifa_hora && (
+                        <span>{s.horas_estimadas}h × {fmt(tec.tarifa_hora)}/h</span>
+                      )}
+                      {tasa != null && tasa > 0 && (
+                        <span>Tasa plataforma {tasa}%{ganancia != null ? ` = ${fmt(ganancia)}` : ''}</span>
+                      )}
+                      <span class="font-bold text-gray-900 ml-auto">Total: {fmt(total)}</span>
+                    </div>
                   )}
+
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

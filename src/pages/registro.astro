@@ -2,6 +2,15 @@
 import Layout from '../layouts/Layout.astro'
 import Navbar from '../components/Navbar'
 import RegistroForm from '../components/RegistroForm'
+import { createSupabaseAdmin } from '../lib/supabase-admin'
+
+const supabase = createSupabaseAdmin()
+const { data: cats } = await supabase
+  .from('categorias')
+  .select('nombre')
+  .order('nombre', { ascending: true })
+
+const especialidades = (cats ?? []).map((c: { nombre: string }) => c.nombre)
 ---
 
 <Layout title="Registrarse — Taita Soluciones" description="Creá tu cuenta en Taita Soluciones">
@@ -23,7 +32,7 @@ import RegistroForm from '../components/RegistroForm'
       </div>
 
       <div class="bg-white rounded-2xl p-6 sm:p-8 border border-cream-dark">
-        <RegistroForm client:load />
+        <RegistroForm especialidades={especialidades} client:load />
       </div>
 
     </div>

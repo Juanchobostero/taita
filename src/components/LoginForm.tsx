@@ -22,6 +22,8 @@ const DASHBOARD: Record<string, string> = {
 
 export default function LoginForm() {
   const [serverError, setServerError] = useState('')
+  const params     = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+  const redirectTo = params.get('redirect')
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
@@ -46,7 +48,9 @@ export default function LoginForm() {
       .single()
 
     const tipo = usuario?.tipo ?? 'cliente'
-    window.location.href = DASHBOARD[tipo] ?? '/dashboard/cliente'
+    // Si viene de una URL protegida y es cliente, vuelve ahí; si no, va al dashboard
+    const dest = (redirectTo && tipo === 'cliente') ? redirectTo : (DASHBOARD[tipo] ?? '/dashboard/cliente')
+    window.location.href = dest
   }
 
   return (
@@ -90,7 +94,7 @@ export default function LoginForm() {
 
       <p className="text-center text-sm text-gray-500">
         ¿No tenés cuenta?{' '}
-        <a href="/registro" className="text-primary hover:text-primary-hover font-medium">
+        <a href={redirectTo ? `/registro?redirect=${encodeURIComponent(redirectTo)}` : '/registro'} className="text-primary hover:text-primary-hover font-medium">
           Registrate gratis
         </a>
       </p>

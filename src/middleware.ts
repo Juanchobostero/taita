@@ -13,7 +13,10 @@ export const onRequest = defineMiddleware(async ({ url, request, cookies, locals
   locals.user    = session?.user ?? null
 
   const isProtected = PROTECTED_PATHS.some(p => url.pathname.startsWith(p))
-  if (isProtected && !session) return redirect('/login')
+  if (isProtected && !session) {
+    const origin = encodeURIComponent(url.pathname + url.search)
+    return redirect(`/login?redirect=${origin}`)
+  }
 
   return next()
 })
