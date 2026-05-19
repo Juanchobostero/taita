@@ -170,7 +170,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, ca
       <div className="flex flex-col gap-1.5">
         <Label>Dirección del trabajo</Label>
         <Input
-          placeholder="Ej: San Juan 850, Centro, Corrientes"
+          placeholder="Ej: San Martín 850, Centro"
           {...register('direccion')}
           className={errors.direccion ? 'border-destructive' : ''}
         />

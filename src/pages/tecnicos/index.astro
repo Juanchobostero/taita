@@ -24,7 +24,7 @@ const { data: rawTecnicos, error } = await supabase
 const tecnicos = (rawTecnicos as TecnicoConUsuario[] ?? []).map(tecnicoToDisplay)
 ---
 
-<Layout title="Técnicos disponibles — Taita Soluciones" description="Encontrá al técnico ideal para tu hogar en Corrientes">
+<Layout title="Técnicos disponibles — Taita Soluciones" description="Encontrá al técnico ideal para tu hogar">
   <Navbar client:load />
 
   <div class="bg-gray-50 min-h-screen">
@@ -34,7 +34,7 @@ const tecnicos = (rawTecnicos as TecnicoConUsuario[] ?? []).map(tecnicoToDisplay
         <p class="text-gray-500 mt-1">
           {error
             ? 'Error cargando técnicos.'
-            : `${tecnicos.length} profesional${tecnicos.length !== 1 ? 'es' : ''} verificado${tecnicos.length !== 1 ? 's' : ''} en Corrientes y zona.`
+            : `${tecnicos.length} profesional${tecnicos.length !== 1 ? 'es' : ''} verificado${tecnicos.length !== 1 ? 's' : ''} disponible${tecnicos.length !== 1 ? 's' : ''}.`
           }
         </p>
       </div>
@@ -46,7 +46,7 @@ const tecnicos = (rawTecnicos as TecnicoConUsuario[] ?? []).map(tecnicoToDisplay
   <footer class="bg-gray-900 text-gray-400 py-10 px-4">
     <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
       <span class="text-white font-bold text-xl">Taita <span class="text-primary-light">Soluciones</span></span>
-      <p class="text-sm">© 2026 Taita Soluciones — Corrientes, Argentina</p>
+      <p class="text-sm">© 2026 Taita Soluciones — Argentina</p>
       <div class="flex gap-6 text-sm">
         <a href="#" class="hover:text-primary-light transition-colors">Términos</a>
         <a href="#" class="hover:text-primary-light transition-colors">Privacidad</a>

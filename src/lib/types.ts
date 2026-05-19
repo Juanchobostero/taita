@@ -118,7 +118,7 @@ export function tecnicoToDisplay(t: TecnicoConUsuario): TecnicoDisplay {
     calificacion: Number(t.calificacion_promedio),
     resenas:     t.total_servicios,
     descripcion: t.descripcion ?? 'Técnico especializado.',
-    zona:        t.zona_cobertura ?? 'Corrientes',
+    zona:        t.zona_cobertura ?? '',
     tarifa:      Number(t.tarifa_hora ?? 0),
     disponible:  t.activo,
     habilidades: t.especialidades_tecnico
