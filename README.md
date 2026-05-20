@@ -1,6 +1,6 @@
 # Taita Soluciones
 
-Plataforma web para conectar vecinos de Corrientes con técnicos locales verificados. Desarrollada por [JOTADEV](https://www.jotadev.com).
+Plataforma web para conectar personas con técnicos locales verificados. Desarrollada por [JOTADEV](https://www.jotadev.com.ar).
 
 ## Stack
 
@@ -80,4 +80,4 @@ Los técnicos requieren aprobación manual del admin antes de aparecer en la pla
 
 ---
 
-Desarrollado por [JOTADEV](https://www.jotadev.com) — Corrientes, Argentina · 2026
+Desarrollado por [JOTADEV](https://www.jotadev.com.ar) — Argentina · 2026
