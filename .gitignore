@@ -27,5 +27,3 @@ pnpm-debug.log*
 # Claude Code local settings
 .claude/
 
-# pnpm lockfile (project uses npm)
-pnpm-lock.yaml
