@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mockup — Navbar + Hero</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #f5f5f0; }
+
+    /* TOKENS */
+    :root {
+      --primary:      #1B4D2E;
+      --primary-soft: #e8f0eb;
+      --primary-pale: #c5d9ca;
+      --cream:        #f9f7f2;
+      --cream-dark:   #eceae3;
+    }
+
+    /* ── SECCIÓN LABEL ── */
+    .section-label {
+      background: #111;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 6px 16px;
+    }
+
+    /* ═══════════════════════════════════════
+       DESKTOP NAVBAR — ACTUAL
+    ═══════════════════════════════════════ */
+    .navbar {
+      background: #fff;
+      border-bottom: 1px solid var(--cream-dark);
+      display: grid;
+      grid-template-columns: 1fr 1.1fr 1fr;
+      align-items: center;
+      gap: 16px;
+      padding: 0 32px;
+      height: 64px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo img { object-fit: contain; }
+    .logo-text { line-height: 1; }
+    .logo-text .brand { font-family: 'Playfair Display', serif; font-weight: 700; color: var(--primary); letter-spacing: -.5px; }
+    .logo-text .sub   { text-transform: uppercase; letter-spacing: .18em; color: #aaa; }
+
+    .search {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--cream); border-radius: 999px;
+      padding: 8px 16px; font-size: 14px; color: #aaa;
+    }
+    .nav-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+    .nav-link { font-size: 14px; color: #555; text-decoration: none; }
+    .avatar-btn {
+      display: flex; align-items: center; gap: 8px;
+      border: 1px solid var(--cream-dark); border-radius: 999px;
+      padding: 4px 12px 4px 4px; background: #fff;
+    }
+    .avatar-circle {
+      border-radius: 50%; background: var(--primary);
+      color: #fff; font-weight: 700; display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .avatar-name { font-size: 14px; font-weight: 500; color: #555; }
+
+    /* ═══════════════════════════════════════
+       HERO — ACTUAL
+    ═══════════════════════════════════════ */
+    .hero {
+      background: var(--cream);
+      padding: 48px 32px;
+      display: flex;
+      align-items: center;
+      gap: 48px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .hero-text { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+    .badge {
+      display: inline-flex; align-items: center;
+      background: var(--primary-soft); color: var(--primary);
+      border: 1px solid var(--primary-pale);
+      border-radius: 999px; padding: 4px 12px;
+      font-size: 12px; font-weight: 500; width: fit-content;
+    }
+    .hero-img { width: 260px; flex-shrink: 0; }
+    .hero-img img { width: 100%; border-radius: 24px; }
+
+    /* ── MOBILE ── */
+    .mobile-wrap {
+      max-width: 390px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 32px;
+      overflow: hidden;
+      box-shadow: 0 8px 40px rgba(0,0,0,.15);
+    }
+    .mobile-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; height: 56px;
+      background: #fff; border-bottom: 1px solid var(--cream-dark);
+    }
+    .mobile-logo { display: flex; align-items: center; gap: 8px; }
+    .mobile-logo .brand { font-family: 'Playfair Display', serif; font-weight: 700; color: var(--primary); }
+
+    /* ═════════════════════════════════════════════════════════
+       UTILS
+    ═════════════════════════════════════════════════════════ */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding: 32px; background: #fff; }
+    .col-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #999; margin-bottom: 12px; }
+    .tag-actual   { display: inline-block; background: #eee; color: #666; font-size: 10px; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+    .tag-propuesto{ display: inline-block; background: #d4edda; color: #1B4D2E; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+    .spacer { height: 32px; background: #f0ede6; }
+    h2.section-title { font-family: 'Playfair Display', serif; color: var(--primary); }
+    p.section-desc { font-size: 13px; color: #777; margin-top: 4px; }
+    .divider { border: none; border-top: 2px dashed #ddd; margin: 0 32px; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════
+     DESKTOP NAVBAR
+══════════════════════════════════ -->
+<div class="section-label">Desktop Navbar</div>
+
+<div class="grid-2">
+
+  <!-- ACTUAL -->
+  <div>
+    <div class="tag-actual">ACTUAL</div>
+    <div style="border:1px solid #eee; border-radius:12px; overflow:hidden;">
+      <div class="navbar" style="max-width:100%; padding:0 20px;">
+        <a class="logo" href="#">
+          <img src="/images/taita-avatar.webp" width="40" height="40" onerror="this.style.background='#c5d9ca';this.style.borderRadius='50%'" />
+          <div class="logo-text">
+            <div class="brand" style="font-size:18px;">TAITA</div>
+            <div class="sub" style="font-size:8px; margin-top:2px;">soluciones</div>
+          </div>
+        </a>
+        <div class="search"><span>🔍</span><span>Buscá técnicos…</span></div>
+        <div class="nav-actions">
+          <a class="nav-link" href="#">Técnicos</a>
+          <div class="avatar-btn">
+            <div class="avatar-circle" style="width:32px;height:32px;font-size:11px;">AN</div>
+            <span class="avatar-name">Ana</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROPUESTO -->
+  <div>
+    <div class="tag-propuesto">PROPUESTO</div>
+    <div style="border:1px solid var(--primary-pale); border-radius:12px; overflow:hidden;">
+      <div class="navbar" style="max-width:100%; padding:0 20px;">
+        <a class="logo" href="#">
+          <img src="/images/taita-avatar.webp" width="52" height="52" onerror="this.style.background='#c5d9ca';this.style.borderRadius='50%';this.style.width='52px';this.style.height='52px';this.style.display='block'" />
+          <div class="logo-text">
+            <div class="brand" style="font-size:26px; letter-spacing:-1px;">TAITA</div>
+            <div class="sub" style="font-size:9px; margin-top:3px; letter-spacing:.2em;">soluciones</div>
+          </div>
+        </a>
+        <div class="search"><span>🔍</span><span>Buscá técnicos…</span></div>
+        <div class="nav-actions">
+          <a class="nav-link" href="#">Técnicos</a>
+          <div class="avatar-btn">
+            <div class="avatar-circle" style="width:38px;height:38px;font-size:13px;font-weight:800;">AN</div>
+            <span class="avatar-name" style="font-size:14px;font-weight:600;">Ana</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="spacer"></div>
+<hr class="divider" />
+<div class="spacer"></div>
+
+<!-- ══════════════════════════════════
+     MOBILE NAVBAR
+══════════════════════════════════ -->
+<div class="section-label">Mobile Navbar</div>
+
+<div class="grid-2" style="align-items:start;">
+
+  <!-- ACTUAL -->
+  <div>
+    <div class="tag-actual">ACTUAL</div>
+    <div style="max-width:220px; border:1px solid #eee; border-radius:16px; overflow:hidden;">
+      <div class="mobile-nav">
+        <div class="mobile-logo">
+          <img src="/images/taita-avatar.webp" width="32" height="32" onerror="this.style.background='#c5d9ca';this.style.borderRadius='50%'" />
+          <span class="brand" style="font-size:16px;">TAITA</span>
+        </div>
+        <div class="avatar-circle" style="width:32px;height:32px;font-size:11px;">AN</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROPUESTO -->
+  <div>
+    <div class="tag-propuesto">PROPUESTO</div>
+    <div style="max-width:220px; border:1px solid var(--primary-pale); border-radius:16px; overflow:hidden;">
+      <div class="mobile-nav" style="height:64px;">
+        <div class="mobile-logo" style="gap:10px;">
+          <img src="/images/taita-avatar.webp" width="44" height="44" onerror="this.style.background='#c5d9ca';this.style.borderRadius='50%';this.style.width='44px';this.style.height='44px';this.style.display='block'" />
+          <div>
+            <div class="brand" style="font-size:22px; letter-spacing:-0.5px;">TAITA</div>
+            <div style="font-size:8px; text-transform:uppercase; letter-spacing:.18em; color:#aaa; margin-top:1px;">soluciones</div>
+          </div>
+        </div>
+        <div class="avatar-circle" style="width:38px;height:38px;font-size:13px;font-weight:800;">AN</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="spacer"></div>
+<hr class="divider" />
+<div class="spacer"></div>
+
+<!-- ══════════════════════════════════
+     HERO — DESKTOP
+══════════════════════════════════ -->
+<div class="section-label">Hero — Desktop (títulos)</div>
+
+<div style="padding:32px; background:#fff;">
+
+  <!-- ACTUAL -->
+  <div class="tag-actual">ACTUAL</div>
+  <div style="background:var(--cream); padding:32px; border-radius:16px; margin-bottom:24px;">
+    <span class="badge">📍 Servicios a domicilio</span>
+    <h1 style="font-family:'Playfair Display',serif; font-weight:700; color:var(--primary); font-size:28px; line-height:1; margin-top:8px;">TAITA</h1>
+    <p style="font-family:'Playfair Display',serif; font-style:italic; color:#7a9e85; font-size:14px; margin-top:4px;">Ayuda confiable, cuando la necesitás.</p>
+    <p style="color:#888; font-size:13px; margin-top:10px; max-width:400px;">Encontrá los mejores técnicos locales para refrigeración, electricidad, plomería y más.</p>
+  </div>
+
+  <!-- PROPUESTO -->
+  <div class="tag-propuesto">PROPUESTO</div>
+  <div style="background:var(--cream); padding:32px; border-radius:16px;">
+    <span class="badge">📍 Servicios a domicilio</span>
+    <div style="display:flex; align-items:center; gap:16px; margin-top:12px;">
+      <img src="/images/taita-avatar.webp" width="90" height="90"
+           onerror="this.style.background='#c5d9ca';this.style.borderRadius='50%';this.style.width='90px';this.style.height='90px';this.style.display='block'" />
+      <div>
+        <h1 style="font-family:'Playfair Display',serif; font-weight:700; color:var(--primary); font-size:56px; line-height:.95; letter-spacing:-2px;">TAITA</h1>
+        <p style="font-family:'Playfair Display',serif; font-style:italic; color:#7a9e85; font-size:17px; margin-top:6px;">Ayuda confiable, cuando la necesitás.</p>
+      </div>
+    </div>
+    <p style="color:#888; font-size:13px; margin-top:14px; max-width:400px;">Encontrá los mejores técnicos locales para refrigeración, electricidad, plomería y más.</p>
+  </div>
+
+</div>
+
+<div class="spacer"></div>
+
+<!-- ══════════════════════════════════
+     NOTA
+══════════════════════════════════ -->
+<div style="padding:20px 32px; background:#fffbe6; border-top:2px solid #f0d060;">
+  <p style="font-size:12px; color:#856404;">
+    <strong>Nota:</strong> Si la imagen del avatar no carga (es un archivo local), el círculo verde es el placeholder. En el sitio real se verá con la imagen del mascota.
+  </p>
+</div>
+
+</body>
+</html>

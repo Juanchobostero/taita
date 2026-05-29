@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 
 export const POST: APIRoute = async ({ request }) => {
-  const { userId, descripcion, zona, especialidad, tarifaHora } = await request.json()
+  const { userId, descripcion, zona, especialidad, tarifaHora, cvu } = await request.json()
 
   if (!userId || !descripcion || !zona) {
     return new Response(JSON.stringify({ error: 'Datos incompletos' }), { status: 400 })
@@ -18,6 +18,7 @@ export const POST: APIRoute = async ({ request }) => {
       zona_cobertura: zona,
       activo:         false,
       tarifa_hora:    tarifaHora ?? null,
+      cvu:            cvu ?? null,
     })
     .select('id')
     .single()

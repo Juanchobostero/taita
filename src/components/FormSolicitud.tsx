@@ -13,12 +13,12 @@ interface CategoriaOpt {
   nombre: string
   icono: string | null
   porcentaje_tasa: number
+  precio_base: number | null
 }
 
 interface Props {
   tecnicoId: string
   tecnicoNombre: string
-  tarifaHora: number | null
   categorias: CategoriaOpt[]
 }
 
@@ -38,7 +38,7 @@ function FieldError({ msg }: { msg?: string }) {
   return <p className="text-xs text-destructive mt-1">{msg}</p>
 }
 
-export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, categorias }: Props) {
+export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias }: Props) {
   const [serverError, setServerError] = useState('')
   const [success, setSuccess]         = useState(false)
 
@@ -47,17 +47,15 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, ca
     defaultValues: { categoria_id: categorias[0]?.id ?? '' },
   })
 
-  const categoriaId   = watch('categoria_id')
-  const horasEstimadas = watch('horas_estimadas')
+  const categoriaId = watch('categoria_id')
 
   const { tasa, precioBase, total } = useMemo(() => {
-    const cat  = categorias.find(c => c.id === categoriaId)
-    const tasa = cat?.porcentaje_tasa ?? 0
-    if (!tarifaHora || !horasEstimadas || horasEstimadas <= 0) return { tasa, precioBase: null, total: null }
-    const precioBase = tarifaHora * horasEstimadas
-    const total      = precioBase * (1 + tasa / 100)
+    const cat      = categorias.find(c => c.id === categoriaId)
+    const tasa     = cat?.porcentaje_tasa ?? 0
+    const precioBase = cat?.precio_base ?? null
+    const total    = precioBase != null ? Math.round(precioBase * (1 + tasa / 100)) : null
     return { tasa, precioBase, total }
-  }, [categoriaId, horasEstimadas, tarifaHora, categorias])
+  }, [categoriaId, categorias])
 
   const onSubmit = async (data: FormData) => {
     setServerError('')
@@ -178,42 +176,34 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, tarifaHora, ca
       </div>
 
       {/* Estimación de precio */}
-      {tarifaHora ? (
-        <div className={`rounded-2xl border p-5 flex flex-col gap-3 transition-colors ${
-          total != null ? 'bg-primary-soft border-primary-pale' : 'bg-gray-50 border-gray-100'
-        }`}>
-          <p className="text-sm font-semibold text-gray-700">Estimación de costo</p>
-          <div className="grid grid-cols-2 gap-y-2 text-sm">
-            <span className="text-gray-500">Tarifa del técnico</span>
-            <span className="font-medium text-gray-800 text-right">
-              ${Number(tarifaHora).toLocaleString('es-AR')} / hora
-            </span>
-            <span className="text-gray-500">Horas estimadas</span>
-            <span className="font-medium text-gray-800 text-right">
-              {horasEstimadas > 0 ? `${horasEstimadas} h` : '—'}
-            </span>
-            <span className="text-gray-500">Subtotal de trabajo</span>
-            <span className="font-medium text-gray-800 text-right">
-              {precioBase != null ? `$${precioBase.toLocaleString('es-AR')}` : '—'}
-            </span>
-            <span className="text-gray-500">Tasa de plataforma ({tasa}%)</span>
-            <span className="font-medium text-gray-800 text-right">
-              {precioBase != null ? `$${(precioBase * tasa / 100).toLocaleString('es-AR')}` : '—'}
-            </span>
-          </div>
-          <div className="border-t border-primary-pale pt-3 flex items-center justify-between">
-            <span className="font-bold text-gray-900">Total estimado</span>
-            <span className="text-2xl font-bold text-primary">
-              {total != null ? `$${Math.round(total).toLocaleString('es-AR')}` : '—'}
-            </span>
-          </div>
-          <p className="text-xs text-gray-400">El total final puede variar según materiales y duración real del trabajo.</p>
-        </div>
-      ) : (
-        <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm text-gray-500 text-center">
-          La tarifa se acordará directamente con el técnico.
-        </div>
-      )}
+      <div className={`rounded-2xl border p-5 flex flex-col gap-3 ${
+        precioBase != null ? 'bg-primary-soft border-primary-pale' : 'bg-gray-50 border-gray-100'
+      }`}>
+        {precioBase != null ? (
+          <>
+            <p className="text-sm font-semibold text-gray-700">Estimación de costo</p>
+            <div className="grid grid-cols-2 gap-y-2 text-sm">
+              <span className="text-gray-500">Precio base del servicio</span>
+              <span className="font-medium text-gray-800 text-right">${precioBase.toLocaleString('es-AR')}</span>
+              {tasa > 0 && (
+                <>
+                  <span className="text-gray-500">Tasa de plataforma ({tasa}%)</span>
+                  <span className="font-medium text-gray-800 text-right">
+                    ${Math.round(precioBase * tasa / 100).toLocaleString('es-AR')}
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="border-t border-primary-pale pt-3 flex items-center justify-between">
+              <span className="font-bold text-gray-900">Total estimado</span>
+              <span className="text-2xl font-bold text-primary">${total!.toLocaleString('es-AR')}</span>
+            </div>
+            <p className="text-xs text-gray-400">El total final puede variar según materiales y complejidad del trabajo.</p>
+          </>
+        ) : (
+          <p className="text-sm text-gray-500 text-center">La tarifa se acordará directamente con el técnico.</p>
+        )}
+      </div>
 
       {serverError && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 text-center">

@@ -78,13 +78,13 @@ export default function Navbar() {
         <div className="hidden md:grid grid-cols-[1fr_1.1fr_1fr] items-center gap-4 px-8 h-16 max-w-7xl mx-auto">
 
           {/* Logo */}
-          <a href="/" className="flex items-center gap-2.5">
-            <div className="w-10 h-10 shrink-0">
+          <a href="/" className="flex items-center gap-3">
+            <div className="w-13 h-13 shrink-0">
               <img src="/images/taita-avatar.webp" alt="TAITA" className="w-full h-full object-contain mix-blend-multiply" />
             </div>
             <div className="leading-none">
-              <div className="font-serif font-bold text-primary text-[18px] leading-none tracking-tight">TAITA</div>
-              <div className="text-[8px] text-gray-400 uppercase tracking-widest mt-0.5">soluciones</div>
+              <div className="font-serif font-bold text-primary text-[26px] leading-none tracking-tight">TAITA</div>
+              <div className="text-[9px] text-gray-400 uppercase tracking-widest mt-1">soluciones</div>
             </div>
           </a>
 
@@ -112,10 +112,10 @@ export default function Navbar() {
                     onClick={() => setDropdownOpen(o => !o)}
                     className="flex items-center gap-2 border border-cream-dark rounded-full pr-3 pl-1 py-1 bg-white hover:border-primary-pale transition-colors"
                   >
-                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs">
+                    <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-extrabold text-sm">
                       {initials}
                     </div>
-                    <span className="text-sm font-medium text-gray-600 max-w-20 truncate">{firstName}</span>
+                    <span className="text-sm font-semibold text-gray-600 max-w-20 truncate">{firstName}</span>
                     <svg
                       className={`w-3 h-3 text-gray-400 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
                       fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -168,11 +168,14 @@ export default function Navbar() {
 
         {/* ── Mobile ───────────────────────────────────────────────────── */}
         <div className="md:hidden flex items-center justify-between h-16 px-4">
-          <a href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 shrink-0">
+          <a href="/" className="flex items-center gap-2.5">
+            <div className="w-11 h-11 shrink-0">
               <img src="/images/taita-avatar.webp" alt="TAITA" className="w-full h-full object-contain mix-blend-multiply" />
             </div>
-            <span className="font-serif font-bold text-primary text-base">TAITA</span>
+            <div className="leading-none">
+              <div className="font-serif font-bold text-primary text-[22px] leading-none tracking-tight">TAITA</div>
+              <div className="text-[8px] text-gray-400 uppercase tracking-widest mt-0.5">soluciones</div>
+            </div>
           </a>
           <div className="flex items-center gap-2">
             <button aria-label="Buscar" onClick={openPalette} className="p-2 rounded-lg text-gray-500 hover:bg-cream transition-colors">
@@ -201,7 +204,7 @@ export default function Navbar() {
             {!loading && (userInfo ? (
               <>
                 <div className="px-3 py-2 flex items-center gap-2.5 border-t border-cream mt-1 pt-3">
-                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-extrabold text-sm shrink-0">
                     {initials}
                   </div>
                   <div>

@@ -27,7 +27,7 @@ const tecnicoSchema = z.object({
   experiencia:  z.coerce.number({ invalid_type_error: 'Ingresá un número' }).min(0).max(60),
   zona:         z.string().min(2, 'Ingresá tu zona de trabajo'),
   descripcion:  z.string().min(20, 'Mínimo 20 caracteres'),
-  tarifa_hora:  z.coerce.number({ invalid_type_error: 'Ingresá un número' }).min(0).optional(),
+  cvu:          z.string().regex(/^\d{22}$/, 'El CVU debe tener exactamente 22 dígitos').optional().or(z.literal('')),
 })
 
 type ClienteData = z.infer<typeof clienteSchema>
@@ -203,7 +203,7 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
           descripcion: data.descripcion,
           zona:        data.zona,
           especialidad: data.especialidad,
-          tarifaHora:  data.tarifa_hora ?? null,
+          cvu:         data.cvu || null,
         }),
       })
       if (!res.ok) {
@@ -251,13 +251,16 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
           <Input placeholder="Ej: Centro, toda la ciudad..." {...register('zona')} className={ecls('zona')} />
         </Field>
       </div>
-      <Field label="Tarifa por hora (opcional)" error={err('tarifa_hora')}>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500 shrink-0">$</span>
-          <Input type="number" min="0" step="100" placeholder="Ej: 5000" {...register('tarifa_hora')} className={`flex-1 ${ecls('tarifa_hora')}`} />
-          <span className="text-sm text-gray-400 shrink-0">/ hora</span>
-        </div>
-        <p className="text-xs text-gray-400">Podés ajustarla después desde tu panel.</p>
+      <Field label="CVU (opcional)" error={err('cvu')}>
+        <Input
+          type="text"
+          inputMode="numeric"
+          maxLength={22}
+          placeholder="22 dígitos — para recibir pagos"
+          {...register('cvu')}
+          className={ecls('cvu')}
+        />
+        <p className="text-xs text-gray-400">Podés agregarlo después desde tu panel.</p>
       </Field>
       <Field label="Descripción breve" error={err('descripcion')}>
         <Textarea rows={3} placeholder="Contanos sobre tu experiencia (mínimo 20 caracteres)..." {...register('descripcion')} className={ecls('descripcion')} />

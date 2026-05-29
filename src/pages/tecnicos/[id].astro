@@ -88,17 +88,7 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
       <!-- Tarifa + CTA -->
       <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-6 items-center">
         <div class="flex-1">
-          {tecnico.tarifa_hora
-            ? <>
-                <p class="text-sm text-gray-500 mb-1">Tarifa estimada</p>
-                <p class="text-3xl font-bold text-gray-900">
-                  ${Number(tecnico.tarifa_hora).toLocaleString('es-AR')}
-                  <span class="text-base font-normal text-gray-400"> / hora</span>
-                </p>
-                <p class="text-xs text-gray-400 mt-1">El total depende del trabajo y los materiales.</p>
-              </>
-            : <p class="text-gray-500 text-sm">Tarifa a convenir según el trabajo.</p>
-          }
+          <p class="text-gray-500 text-sm">El precio varía según el tipo de servicio solicitado.</p>
         </div>
         <a
           href={`/solicitud?tecnico=${tecnico.id}`}

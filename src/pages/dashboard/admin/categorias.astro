@@ -24,9 +24,10 @@ if (Astro.request.method === 'POST') {
     const nombre     = form.get('nombre')?.toString()?.trim()
     const icono      = form.get('icono')?.toString()?.trim()
     const porcentaje = parseFloat(form.get('porcentaje')?.toString() ?? '0')
+    const precioBase = form.get('precio_base')?.toString()
     if (catId && nombre) {
       await supabase.from('categorias')
-        .update({ nombre, icono, porcentaje_tasa: porcentaje })
+        .update({ nombre, icono, porcentaje_tasa: porcentaje, precio_base: precioBase ? parseInt(precioBase) : null })
         .eq('id', catId)
     }
 
@@ -39,8 +40,9 @@ if (Astro.request.method === 'POST') {
     const nombre     = form.get('nombre')?.toString()?.trim()
     const icono      = form.get('icono')?.toString()?.trim()
     const porcentaje = parseFloat(form.get('porcentaje')?.toString() ?? '0')
+    const precioBase = form.get('precio_base')?.toString()
     if (nombre) {
-      await supabase.from('categorias').insert({ nombre, icono: icono || null, porcentaje_tasa: porcentaje, activa: true })
+      await supabase.from('categorias').insert({ nombre, icono: icono || null, porcentaje_tasa: porcentaje, precio_base: precioBase ? parseInt(precioBase) : null, activa: true })
     }
   }
 
@@ -52,12 +54,13 @@ interface Categoria {
   nombre: string
   icono: string | null
   porcentaje_tasa: number
+  precio_base: number | null
   activa: boolean
 }
 
 const { data: rawCategorias } = await supabase
   .from('categorias')
-  .select('id, nombre, icono, porcentaje_tasa, activa')
+  .select('id, nombre, icono, porcentaje_tasa, precio_base, activa')
   .order('nombre')
 
 const categorias = (rawCategorias ?? []) as Categoria[]
@@ -82,7 +85,7 @@ const activas    = categorias.filter(c => c.activa).length
       <!-- Lista -->
       <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
         <div class="px-6 py-4 border-b border-cream">
-          <p class="text-xs text-gray-400">Editá nombre, ícono y porcentaje de tasa. Activá o desactivá cada categoría.</p>
+          <p class="text-xs text-gray-400">Editá nombre, ícono, precio base y tasa. Activá o desactivá cada categoría.</p>
         </div>
 
         <div class="divide-y divide-cream">
@@ -100,6 +103,18 @@ const activas    = categorias.filter(c => c.activa).length
                   class="flex-1 border border-cream-dark rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary min-w-0"
                 />
                 <div class="flex items-center gap-1 shrink-0">
+                  <span class="text-xs text-gray-400">$</span>
+                  <input
+                    name="precio_base"
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={c.precio_base ?? ''}
+                    placeholder="—"
+                    class="w-20 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
                   <input
                     name="porcentaje"
                     type="number"
@@ -107,7 +122,7 @@ const activas    = categorias.filter(c => c.activa).length
                     max="100"
                     step="0.5"
                     value={c.porcentaje_tasa}
-                    class="w-16 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary"
+                    class="w-14 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary"
                   />
                   <span class="text-xs text-gray-400">%</span>
                 </div>
@@ -146,6 +161,17 @@ const activas    = categorias.filter(c => c.activa).length
               class="flex-1 border border-cream-dark rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary min-w-0 bg-white"
             />
             <div class="flex items-center gap-1 shrink-0">
+              <span class="text-xs text-gray-400">$</span>
+              <input
+                name="precio_base"
+                type="number"
+                min="0"
+                step="100"
+                placeholder="—"
+                class="w-20 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary bg-white"
+              />
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
               <input
                 name="porcentaje"
                 type="number"
@@ -153,7 +179,7 @@ const activas    = categorias.filter(c => c.activa).length
                 max="100"
                 step="0.5"
                 placeholder="0"
-                class="w-16 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary bg-white"
+                class="w-14 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary bg-white"
               />
               <span class="text-xs text-gray-400">%</span>
             </div>

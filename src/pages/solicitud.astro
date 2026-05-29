@@ -13,10 +13,10 @@ const clienteId  = Astro.locals.user!.id
 const { data: raw } = await supabase
   .from('tecnicos')
   .select(`
-    id, tarifa_hora, activo,
+    id, activo,
     usuarios!inner ( nombre_completo ),
     especialidades_tecnico (
-      categorias ( id, nombre, icono, porcentaje_tasa )
+      categorias ( id, nombre, icono, porcentaje_tasa, precio_base )
     )
   `)
   .eq('id', tecnicoId)
@@ -27,10 +27,9 @@ if (!raw) return Astro.redirect('/tecnicos')
 
 const categorias = raw.especialidades_tecnico
   .map((e: any) => e.categorias)
-  .filter(Boolean) as { id: string; nombre: string; icono: string | null; porcentaje_tasa: number }[]
+  .filter(Boolean) as { id: string; nombre: string; icono: string | null; porcentaje_tasa: number; precio_base: number | null }[]
 
 const tecnicoNombre = (raw.usuarios as any).nombre_completo as string
-const tarifaHora    = raw.tarifa_hora as number | null
 ---
 
 <Layout
@@ -66,7 +65,6 @@ const tarifaHora    = raw.tarifa_hora as number | null
             client:load
             tecnicoId={tecnicoId}
             tecnicoNombre={tecnicoNombre}
-            tarifaHora={tarifaHora}
             categorias={categorias}
           />
         )}

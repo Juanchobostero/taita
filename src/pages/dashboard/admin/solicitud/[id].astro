@@ -126,9 +126,6 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                     <div class="flex flex-col gap-0.5">
                       <p class="font-semibold text-gray-900 text-sm">{tecnico.usuarios?.nombre_completo ?? '—'}</p>
                       {tecnico.usuarios?.telefono && <p class="text-xs text-gray-400">📞 {tecnico.usuarios.telefono}</p>}
-                      {tecnico.tarifa_hora && (
-                        <p class="text-xs text-gray-400">Tarifa: {fmt(tecnico.tarifa_hora)} / h</p>
-                      )}
                     </div>
                   </div>
                 ) : (
@@ -208,12 +205,6 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                 <div class="flex justify-between text-gray-600">
                   <span>Precio base</span>
                   <span class="font-medium text-gray-800">{fmt(precioBase)}</span>
-                </div>
-                <div class="flex justify-between text-gray-600">
-                  <span>Horas × tarifa</span>
-                  <span class="text-gray-500">
-                    {sol.horas_estimadas}h × {tecnico?.tarifa_hora ? fmt(tecnico.tarifa_hora) : '—'}
-                  </span>
                 </div>
                 <div class="flex justify-between text-gray-600">
                   <span>Tasa plataforma ({tasa ?? 0}%)</span>
