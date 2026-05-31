@@ -1,7 +1,7 @@
 ---
 import Layout from '../../../layouts/Layout.astro'
 import Navbar from '../../../components/Navbar'
-import EmojiPicker from '../../../components/EmojiPicker'
+import GestionCategorias from '../../../components/GestionCategorias'
 import { createSupabaseAdmin } from '../../../lib/supabase-admin'
 
 const supabase = createSupabaseAdmin()
@@ -15,56 +15,12 @@ const { data: self } = await supabase
 
 if (self?.tipo !== 'admin') return Astro.redirect('/dashboard/cliente')
 
-if (Astro.request.method === 'POST') {
-  const form   = await Astro.request.formData()
-  const accion = form.get('accion')?.toString()
-
-  if (accion === 'editar-categoria') {
-    const catId      = form.get('catId')?.toString()
-    const nombre     = form.get('nombre')?.toString()?.trim()
-    const icono      = form.get('icono')?.toString()?.trim()
-    const porcentaje = parseFloat(form.get('porcentaje')?.toString() ?? '0')
-    const precioBase = form.get('precio_base')?.toString()
-    if (catId && nombre) {
-      await supabase.from('categorias')
-        .update({ nombre, icono, porcentaje_tasa: porcentaje, precio_base: precioBase ? parseInt(precioBase) : null })
-        .eq('id', catId)
-    }
-
-  } else if (accion === 'toggle-categoria') {
-    const catId  = form.get('catId')?.toString()
-    const activa = form.get('activa')?.toString() === 'true'
-    if (catId) await supabase.from('categorias').update({ activa: !activa }).eq('id', catId)
-
-  } else if (accion === 'crear-categoria') {
-    const nombre     = form.get('nombre')?.toString()?.trim()
-    const icono      = form.get('icono')?.toString()?.trim()
-    const porcentaje = parseFloat(form.get('porcentaje')?.toString() ?? '0')
-    const precioBase = form.get('precio_base')?.toString()
-    if (nombre) {
-      await supabase.from('categorias').insert({ nombre, icono: icono || null, porcentaje_tasa: porcentaje, precio_base: precioBase ? parseInt(precioBase) : null, activa: true })
-    }
-  }
-
-  return Astro.redirect('/dashboard/admin/categorias')
-}
-
-interface Categoria {
-  id: string
-  nombre: string
-  icono: string | null
-  porcentaje_tasa: number
-  precio_base: number | null
-  activa: boolean
-}
-
 const { data: rawCategorias } = await supabase
   .from('categorias')
-  .select('id, nombre, icono, porcentaje_tasa, precio_base, activa')
+  .select('id, nombre, icono, imagen_url, porcentaje_tasa, precio_base, activa')
   .order('nombre')
 
-const categorias = (rawCategorias ?? []) as Categoria[]
-const activas    = categorias.filter(c => c.activa).length
+const categorias = rawCategorias ?? []
 ---
 
 <Layout title="Categorías — Admin Taita">
@@ -73,122 +29,12 @@ const activas    = categorias.filter(c => c.activa).length
   <div class="bg-cream min-h-screen py-8 px-4">
     <div class="max-w-3xl mx-auto flex flex-col gap-6">
 
-      <!-- Header -->
-      <div class="flex items-center justify-between">
-        <div>
-          <a href="/dashboard/admin" class="text-xs text-gray-400 hover:text-primary transition-colors">← Panel admin</a>
-          <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl mt-1">Categorías de servicio</h1>
-          <p class="text-gray-500 text-sm mt-0.5">{categorias.length} registradas · {activas} activas</p>
-        </div>
+      <div>
+        <a href="/dashboard/admin" class="text-xs text-gray-400 hover:text-primary transition-colors">← Panel admin</a>
+        <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl mt-1">Categorías de servicio</h1>
       </div>
 
-      <!-- Lista -->
-      <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
-        <div class="px-6 py-4 border-b border-cream">
-          <p class="text-xs text-gray-400">Editá nombre, ícono, precio base y tasa. Activá o desactivá cada categoría.</p>
-        </div>
-
-        <div class="divide-y divide-cream">
-          {categorias.map(c => (
-            <div class={`px-4 py-3 flex items-center gap-2 ${!c.activa ? 'opacity-50' : ''}`}>
-              <form method="POST" class="flex items-center gap-2 flex-1 min-w-0">
-                <input type="hidden" name="accion" value="editar-categoria" />
-                <input type="hidden" name="catId" value={c.id} />
-
-                <EmojiPicker client:load name="icono" value={c.icono ?? ''} />
-                <input
-                  name="nombre"
-                  value={c.nombre}
-                  required
-                  class="flex-1 border border-cream-dark rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary min-w-0"
-                />
-                <div class="flex items-center gap-1 shrink-0">
-                  <span class="text-xs text-gray-400">$</span>
-                  <input
-                    name="precio_base"
-                    type="number"
-                    min="0"
-                    step="100"
-                    value={c.precio_base ?? ''}
-                    placeholder="—"
-                    class="w-20 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary"
-                  />
-                </div>
-                <div class="flex items-center gap-1 shrink-0">
-                  <input
-                    name="porcentaje"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.5"
-                    value={c.porcentaje_tasa}
-                    class="w-14 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary"
-                  />
-                  <span class="text-xs text-gray-400">%</span>
-                </div>
-                <button type="submit" class="text-xs bg-primary hover:bg-primary-hover text-white font-medium px-3 py-1.5 rounded-full transition-colors shrink-0">
-                  Guardar
-                </button>
-              </form>
-
-              <form method="POST" class="m-0 shrink-0">
-                <input type="hidden" name="accion" value="toggle-categoria" />
-                <input type="hidden" name="catId" value={c.id} />
-                <input type="hidden" name="activa" value={String(c.activa)} />
-                <button
-                  type="submit"
-                  title={c.activa ? 'Desactivar' : 'Activar'}
-                  class={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                    c.activa
-                      ? 'border-cream-dark text-gray-400 hover:border-red-300 hover:text-red-500'
-                      : 'border-primary-pale text-primary-light hover:bg-primary-soft'
-                  }`}
-                >
-                  {c.activa ? 'Desactivar' : 'Activar'}
-                </button>
-              </form>
-            </div>
-          ))}
-
-          <!-- Nueva categoría -->
-          <form method="POST" class="px-4 py-4 flex items-center gap-2 bg-cream/60">
-            <input type="hidden" name="accion" value="crear-categoria" />
-            <EmojiPicker client:load name="icono" value="" />
-            <input
-              name="nombre"
-              placeholder="Nueva categoría"
-              required
-              class="flex-1 border border-cream-dark rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary min-w-0 bg-white"
-            />
-            <div class="flex items-center gap-1 shrink-0">
-              <span class="text-xs text-gray-400">$</span>
-              <input
-                name="precio_base"
-                type="number"
-                min="0"
-                step="100"
-                placeholder="—"
-                class="w-20 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary bg-white"
-              />
-            </div>
-            <div class="flex items-center gap-1 shrink-0">
-              <input
-                name="porcentaje"
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                placeholder="0"
-                class="w-14 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary bg-white"
-              />
-              <span class="text-xs text-gray-400">%</span>
-            </div>
-            <button type="submit" class="text-xs bg-primary-soft hover:bg-primary-pale text-primary font-semibold px-3 py-1.5 rounded-full transition-colors shrink-0 border border-primary-pale">
-              + Agregar
-            </button>
-          </form>
-        </div>
-      </div>
+      <GestionCategorias client:load inicial={categorias} />
 
     </div>
   </div>

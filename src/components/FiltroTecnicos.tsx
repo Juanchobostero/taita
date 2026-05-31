@@ -1,25 +1,26 @@
 import { useState, useEffect } from 'react'
-import type { Tecnico } from '../data/mockTecnicos'
+import type { TecnicoDisplay as Tecnico } from '../lib/types'
+import { toSlug } from '../lib/types'
 
-const CATEGORIAS = [
-  { slug: '',                        label: 'Todos' },
-  { slug: 'refrigeracion',           label: 'Refrigeración' },
-  { slug: 'limpieza',                label: 'Limpieza' },
-  { slug: 'jardineria',              label: 'Jardinería' },
-  { slug: 'mudanzas',                label: 'Mudanzas' },
-  { slug: 'electricidad',            label: 'Electricidad' },
-  { slug: 'armado-muebles',          label: 'Armado de muebles' },
-  { slug: 'pintura-domiciliaria',    label: 'Pintura domiciliaria' },
-  { slug: 'auxilios-mecanicos',      label: 'Auxilios mecánicos' },
-  { slug: 'soluciones-informaticas', label: 'Soluciones informáticas' },
-  { slug: 'fumigacion',              label: 'Fumigación' },
-]
+interface CategoriaFiltro {
+  id:         string
+  nombre:     string
+  icono:      string | null
+  imagen_url: string | null
+}
 
 function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map(p => p[0]).join('')
 }
 
-export default function FiltroTecnicos({ tecnicos }: { tecnicos: Tecnico[] }) {
+function CatIcon({ c, size = 'sm' }: { c: CategoriaFiltro; size?: 'sm' | 'md' }) {
+  const dim = size === 'md' ? 'w-8 h-8' : 'w-5 h-5'
+  if (c.imagen_url) return <img src={c.imagen_url} alt={c.nombre} className={`${dim} object-cover rounded`} />
+  if (c.icono) return <span className={size === 'md' ? 'text-xl' : 'text-sm'}>{c.icono}</span>
+  return null
+}
+
+export default function FiltroTecnicos({ tecnicos, categoriasFiltro = [] }: { tecnicos: Tecnico[]; categoriasFiltro?: CategoriaFiltro[] }) {
   const [categoria, setCategoria] = useState('')
   const [busqueda, setBusqueda] = useState('')
 
@@ -27,6 +28,11 @@ export default function FiltroTecnicos({ tecnicos }: { tecnicos: Tecnico[] }) {
     const params = new URLSearchParams(window.location.search)
     setCategoria(params.get('categoria') ?? '')
   }, [])
+
+  const cats: ({ slug: string; label: string; icono: string | null; imagen_url: string | null })[] = [
+    { slug: '', label: 'Todos', icono: null, imagen_url: null },
+    ...categoriasFiltro.map(c => ({ slug: toSlug(c.nombre), label: c.nombre, icono: c.icono, imagen_url: c.imagen_url })),
+  ]
 
   const filtrados = tecnicos.filter(t => {
     const coincideCategoria = !categoria || t.categoria === categoria
@@ -48,16 +54,17 @@ export default function FiltroTecnicos({ tecnicos }: { tecnicos: Tecnico[] }) {
       />
 
       <div className="flex flex-wrap gap-2">
-        {CATEGORIAS.map(c => (
+        {cats.map(c => (
           <button
             key={c.slug}
             onClick={() => setCategoria(c.slug)}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
               categoria === c.slug
                 ? 'bg-primary text-white'
                 : 'bg-white border border-cream-dark text-gray-600 hover:border-primary hover:text-primary'
             }`}
           >
+            {c.imagen_url && <img src={c.imagen_url} alt="" className="w-4 h-4 object-cover rounded" />}
             {c.label}
           </button>
         ))}
@@ -78,8 +85,11 @@ export default function FiltroTecnicos({ tecnicos }: { tecnicos: Tecnico[] }) {
               className="bg-white rounded-2xl p-6 border border-cream-dark hover:border-primary-pale transition-all flex flex-col gap-4"
             >
               <div className="flex items-start gap-3">
-                <div className="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                  {iniciales(t.nombre)}
+                <div className="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-sm shrink-0 overflow-hidden">
+                  {t.foto_url
+                    ? <img src={t.foto_url} alt={t.nombre} className="w-full h-full object-cover" />
+                    : iniciales(t.nombre)
+                  }
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900 truncate">{t.nombre}</p>

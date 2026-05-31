@@ -28,6 +28,7 @@ export interface Categoria {
   id:               string
   nombre:           string
   icono:            string | null
+  imagen_url:       string | null
   porcentaje_tasa:  number
   activa:           boolean
 }
@@ -35,7 +36,7 @@ export interface Categoria {
 export interface Solicitud {
   id:               string
   cliente_id:       string
-  tecnico_id:       string
+  tecnico_id:       string | null
   categoria_id:     string
   titulo:           string
   descripcion:      string | null
@@ -96,10 +97,11 @@ export interface TecnicoDisplay {
   tarifa:      number
   disponible:  boolean
   habilidades: string[]
+  foto_url:    string | null
 }
 
 // ── Helper: slug de categoría ─────────────────────────────────────────────
-function toSlug(s: string): string {
+export function toSlug(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
@@ -121,6 +123,7 @@ export function tecnicoToDisplay(t: TecnicoConUsuario): TecnicoDisplay {
     zona:        t.zona_cobertura ?? '',
     tarifa:      Number(t.tarifa_hora ?? 0),
     disponible:  t.activo,
+    foto_url:    t.usuarios.foto_url ?? null,
     habilidades: t.especialidades_tecnico
       .map(e => e.categorias?.nombre)
       .filter((n): n is string => Boolean(n)),

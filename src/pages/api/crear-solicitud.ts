@@ -14,14 +14,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const { tecnicoId, categoriaId, titulo, descripcion, horasEstimadas,
           precioBase, tasaAplicada, totalEstimado, fechaSolicitada, direccion } = body
 
-  if (!tecnicoId || !categoriaId || !titulo || !fechaSolicitada || !direccion) {
+  if (!categoriaId || !titulo || !fechaSolicitada || !direccion) {
     return new Response(JSON.stringify({ error: 'Datos incompletos' }), { status: 400 })
   }
 
   const supabase = createSupabaseAdmin()
   const { error } = await supabase.from('solicitudes').insert({
     cliente_id:       user.id,
-    tecnico_id:       tecnicoId,
+    tecnico_id:       tecnicoId || null,
     categoria_id:     categoriaId,
     titulo,
     descripcion:      descripcion || null,

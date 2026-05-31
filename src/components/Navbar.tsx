@@ -5,8 +5,9 @@ import { mockTecnicos } from '@/data/mockTecnicos'
 import type { UserTipo } from '@/lib/types'
 
 interface UserInfo {
-  nombre: string
-  tipo:   UserTipo
+  nombre:   string
+  tipo:     UserTipo
+  foto_url: string | null
 }
 
 const DASHBOARD: Record<string, string> = {
@@ -30,10 +31,10 @@ export default function Navbar() {
     const loadUser = async (userId: string) => {
       const { data } = await supabase
         .from('usuarios')
-        .select('nombre_completo, tipo')
+        .select('nombre_completo, tipo, foto_url')
         .eq('id', userId)
         .single()
-      if (data) setUserInfo({ nombre: data.nombre_completo, tipo: data.tipo as UserTipo })
+      if (data) setUserInfo({ nombre: data.nombre_completo, tipo: data.tipo as UserTipo, foto_url: data.foto_url ?? null })
       setLoading(false)
     }
 
@@ -102,7 +103,10 @@ export default function Navbar() {
 
           {/* Links / Usuario */}
           <div className="flex items-center justify-end gap-3">
-            <a href="/tecnicos"      className="text-sm text-gray-600 hover:text-primary transition-colors">Técnicos</a>
+            {userInfo?.tipo === 'admin'
+              ? <a href="/tecnicos" className="text-sm text-gray-600 hover:text-primary transition-colors">Técnicos</a>
+              : <a href="/solicitud" className="text-sm text-gray-600 hover:text-primary transition-colors">Solicitar servicio</a>
+            }
             <a href="/como-funciona" className="text-sm text-gray-600 hover:text-primary transition-colors">Cómo funciona</a>
 
             {!loading && (
@@ -112,8 +116,11 @@ export default function Navbar() {
                     onClick={() => setDropdownOpen(o => !o)}
                     className="flex items-center gap-2 border border-cream-dark rounded-full pr-3 pl-1 py-1 bg-white hover:border-primary-pale transition-colors"
                   >
-                    <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-extrabold text-sm">
-                      {initials}
+                    <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-extrabold text-sm overflow-hidden shrink-0">
+                      {userInfo.foto_url
+                        ? <img src={userInfo.foto_url} alt={userInfo.nombre} className="w-full h-full object-cover" />
+                        : initials
+                      }
                     </div>
                     <span className="text-sm font-semibold text-gray-600 max-w-20 truncate">{firstName}</span>
                     <svg
@@ -199,13 +206,19 @@ export default function Navbar() {
         {/* Mobile menu */}
         {menuOpen && (
           <div className="md:hidden py-4 border-t border-cream-dark flex flex-col gap-1 px-4">
-            <a href="/tecnicos"      className="px-3 py-2 rounded-xl text-gray-600 hover:text-primary hover:bg-primary-soft font-medium transition-colors">Técnicos</a>
+            {userInfo?.tipo === 'admin'
+              ? <a href="/tecnicos" className="px-3 py-2 rounded-xl text-gray-600 hover:text-primary hover:bg-primary-soft font-medium transition-colors">Técnicos</a>
+              : <a href="/solicitud" className="px-3 py-2 rounded-xl text-gray-600 hover:text-primary hover:bg-primary-soft font-medium transition-colors">Solicitar servicio</a>
+            }
             <a href="/como-funciona" className="px-3 py-2 rounded-xl text-gray-600 hover:text-primary hover:bg-primary-soft font-medium transition-colors">Cómo funciona</a>
             {!loading && (userInfo ? (
               <>
                 <div className="px-3 py-2 flex items-center gap-2.5 border-t border-cream mt-1 pt-3">
-                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-extrabold text-sm shrink-0">
-                    {initials}
+                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-extrabold text-sm shrink-0 overflow-hidden">
+                    {userInfo.foto_url
+                      ? <img src={userInfo.foto_url} alt={userInfo.nombre} className="w-full h-full object-cover" />
+                      : initials
+                    }
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-gray-800">{userInfo.nombre}</p>

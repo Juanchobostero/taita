@@ -1,6 +1,8 @@
 ---
 import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
+import AvatarUpload from '../../components/AvatarUpload'
+import GestionEspecialidades from '../../components/GestionEspecialidades'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
 import type { TecnicoConUsuario, SolicitudParaTecnico } from '../../lib/types'
 
@@ -43,13 +45,19 @@ const { data: rawTecnico } = await supabase
     id, descripcion, zona_cobertura, tarifa_hora,
     calificacion_promedio, total_servicios, activo,
     usuarios!inner ( nombre_completo, telefono, foto_url ),
-    especialidades_tecnico ( categorias ( nombre, icono ) )
+    especialidades_tecnico ( categorias ( id, nombre, icono ) )
   `)
   .eq('usuario_id', userId)
   .single()
 
 if (!rawTecnico) return Astro.redirect('/dashboard/cliente')
 const tecnico = rawTecnico as TecnicoConUsuario
+
+const { data: todasCategorias } = await supabase
+  .from('categorias')
+  .select('id, nombre, icono')
+  .eq('activa', true)
+  .order('nombre')
 
 const { data: rawSolicitudes } = await supabase
   .from('solicitudes')
@@ -211,14 +219,29 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
             Ver perfil →
           </a>
         </div>
+        <div class="flex justify-center">
+          <AvatarUpload
+            client:load
+            userId={userId}
+            currentUrl={tecnico.usuarios.foto_url ?? null}
+            nombre={tecnico.usuarios.nombre_completo}
+          />
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div class="flex flex-col gap-1">
             <span class="text-gray-400">Nombre</span>
             <span class="font-medium text-gray-800">{tecnico.usuarios.nombre_completo}</span>
           </div>
-          <div class="flex flex-col gap-1">
-            <span class="text-gray-400">Especialidad</span>
-            <span class="font-medium text-gray-800">{especialidades[0] ?? 'Sin especialidad registrada'}</span>
+          <div class="flex flex-col gap-2 sm:col-span-2">
+            <span class="text-gray-400">Especialidades</span>
+            <GestionEspecialidades
+              client:load
+              tecnicoId={tecnico.id}
+              todas={todasCategorias ?? []}
+              actuales={tecnico.especialidades_tecnico
+                .map(e => e.categorias)
+                .filter((c): c is { id: string; nombre: string; icono: string | null } => Boolean(c))}
+            />
           </div>
           <div class="flex flex-col gap-1">
             <span class="text-gray-400">Calificación</span>

@@ -23,7 +23,7 @@ const clienteSchema = z.object({ ...base, barrio: z.string().min(2, 'Ingresá tu
 
 const tecnicoSchema = z.object({
   ...base,
-  especialidad: z.string().min(1, 'Seleccioná una especialidad'),
+  especialidades: z.array(z.string()).min(1, 'Seleccioná al menos una especialidad'),
   experiencia:  z.coerce.number({ invalid_type_error: 'Ingresá un número' }).min(0).max(60),
   zona:         z.string().min(2, 'Ingresá tu zona de trabajo'),
   descripcion:  z.string().min(20, 'Mínimo 20 caracteres'),
@@ -202,7 +202,7 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
           userId:      authData.user.id,
           descripcion: data.descripcion,
           zona:        data.zona,
-          especialidad: data.especialidad,
+          especialidades: data.especialidades,
           cvu:         data.cvu || null,
         }),
       })
@@ -237,12 +237,25 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
       <Field label="Teléfono / WhatsApp" error={err('telefono')}>
         <Input type="tel" placeholder="+54 9 379 ..." {...register('telefono')} className={ecls('telefono')} />
       </Field>
-      <Field label="Especialidad principal" error={err('especialidad')}>
-        <Select {...register('especialidad')} className={ecls('especialidad')}>
-          <option value="">Seleccioná una especialidad</option>
-          {especialidades.map(e => <option key={e} value={e}>{e}</option>)}
-        </Select>
-      </Field>
+      <div className="flex flex-col gap-1.5">
+        <Label>Especialidades <span className="text-gray-400 text-xs">(seleccioná todas las que apliquen)</span></Label>
+        <div className="grid grid-cols-2 gap-2">
+          {especialidades.map(e => (
+            <label key={e} className="flex items-center gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                value={e}
+                {...register('especialidades')}
+                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+              />
+              <span className="text-sm text-gray-700 group-hover:text-primary transition-colors">{e}</span>
+            </label>
+          ))}
+        </div>
+        {errors.especialidades && (
+          <p className="text-xs text-destructive mt-1">{errors.especialidades.message as string}</p>
+        )}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Años de experiencia" error={err('experiencia')}>
           <Input type="number" min="0" max="60" placeholder="Ej: 5" {...register('experiencia')} className={ecls('experiencia')} />

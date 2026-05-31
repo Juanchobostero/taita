@@ -56,8 +56,11 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
       <!-- Perfil -->
       <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-6">
         <div class="flex flex-col items-center sm:items-start gap-3">
-          <div class="w-24 h-24 rounded-2xl bg-primary-soft flex items-center justify-center text-primary font-bold text-2xl">
-            {iniciales}
+          <div class="w-24 h-24 rounded-2xl bg-primary-soft flex items-center justify-center text-primary font-bold text-2xl overflow-hidden">
+            {tecnico.usuarios.foto_url
+              ? <img src={tecnico.usuarios.foto_url} alt={tecnico.usuarios.nombre_completo} class="w-full h-full object-cover" />
+              : iniciales
+            }
           </div>
           {tecnico.activo
             ? <span class="text-sm bg-green-100 text-green-600 px-3 py-1 rounded-full font-medium">Disponible</span>
@@ -85,17 +88,9 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
         </div>
       </div>
 
-      <!-- Tarifa + CTA -->
-      <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-6 items-center">
-        <div class="flex-1">
-          <p class="text-gray-500 text-sm">El precio varía según el tipo de servicio solicitado.</p>
-        </div>
-        <a
-          href={`/solicitud?tecnico=${tecnico.id}`}
-          class="bg-primary hover:bg-primary-hover text-white font-bold px-8 py-4 rounded-full transition-colors text-center w-full sm:w-auto whitespace-nowrap"
-        >
-          Solicitar servicio
-        </a>
+      <!-- Info precio -->
+      <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100">
+        <p class="text-gray-500 text-sm">El precio varía según el tipo de servicio solicitado.</p>
       </div>
 
       <!-- Reseñas -->

@@ -4,68 +4,84 @@ import Navbar from '../components/Navbar'
 import FormSolicitud from '../components/FormSolicitud'
 import { createSupabaseAdmin } from '../lib/supabase-admin'
 
-const tecnicoId = Astro.url.searchParams.get('tecnico')
-if (!tecnicoId) return Astro.redirect('/tecnicos')
+type CategoriaOpt = { id: string; nombre: string; icono: string | null; imagen_url: string | null; porcentaje_tasa: number; precio_base: number | null }
 
-const supabase   = createSupabaseAdmin()
-const clienteId  = Astro.locals.user!.id
+const tecnicoParam   = Astro.url.searchParams.get('tecnico')
+const categoriaParam = Astro.url.searchParams.get('categoria')
+const supabase     = createSupabaseAdmin()
 
-const { data: raw } = await supabase
-  .from('tecnicos')
-  .select(`
-    id, activo,
-    usuarios!inner ( nombre_completo ),
-    especialidades_tecnico (
-      categorias ( id, nombre, icono, porcentaje_tasa, precio_base )
-    )
-  `)
-  .eq('id', tecnicoId)
-  .eq('activo', true)
-  .single()
+let tecnicoId:   string | null = null
+let tecnicoNombre: string | null = null
+let categorias:  CategoriaOpt[] = []
 
-if (!raw) return Astro.redirect('/tecnicos')
+if (tecnicoParam) {
+  // Flujo desde perfil del técnico
+  const { data: raw } = await supabase
+    .from('tecnicos')
+    .select(`
+      id, activo,
+      usuarios!inner ( nombre_completo ),
+      especialidades_tecnico (
+        categorias ( id, nombre, icono, imagen_url, porcentaje_tasa, precio_base )
+      )
+    `)
+    .eq('id', tecnicoParam)
+    .eq('activo', true)
+    .single()
 
-const categorias = raw.especialidades_tecnico
-  .map((e: any) => e.categorias)
-  .filter(Boolean) as { id: string; nombre: string; icono: string | null; porcentaje_tasa: number; precio_base: number | null }[]
+  if (!raw) return Astro.redirect('/tecnicos')
 
-const tecnicoNombre = (raw.usuarios as any).nombre_completo as string
+  tecnicoId     = tecnicoParam
+  tecnicoNombre = (raw.usuarios as any).nombre_completo as string
+  categorias    = raw.especialidades_tecnico
+    .map((e: any) => e.categorias)
+    .filter(Boolean) as CategoriaOpt[]
+} else {
+  // Flujo libre — sin técnico seleccionado
+  const { data: rawCats } = await supabase
+    .from('categorias')
+    .select('id, nombre, icono, imagen_url, porcentaje_tasa, precio_base')
+    .eq('activa', true)
+    .order('nombre')
+
+  categorias = (rawCats ?? []) as CategoriaOpt[]
+}
 ---
 
 <Layout
-  title={`Solicitar servicio a ${tecnicoNombre} — Taita Soluciones`}
-  description={`Completá el formulario para solicitar un servicio a ${tecnicoNombre}`}
+  title="Solicitar servicio — Taita Soluciones"
+  description="Pedí un servicio y te asignamos el técnico ideal"
 >
   <Navbar client:load />
 
   <div class="bg-gray-50 min-h-screen py-10 px-4">
     <div class="max-w-2xl mx-auto flex flex-col gap-6">
 
-      <a href={`/tecnicos/${tecnicoId}`} class="text-primary hover:text-primary-hover font-medium flex items-center gap-1 w-fit text-sm">
-        ← Volver al perfil
+      <a href={tecnicoId ? `/tecnicos/${tecnicoId}` : '/tecnicos'}
+         class="text-primary hover:text-primary-hover font-medium flex items-center gap-1 w-fit text-sm">
+        ← {tecnicoId ? 'Volver al perfil' : 'Ver técnicos'}
       </a>
 
       <!-- Encabezado -->
       <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100">
         <h1 class="text-2xl font-bold text-gray-900 mb-1">Solicitar servicio</h1>
-        <p class="text-gray-500 text-sm">
-          Enviándole una solicitud a
-          <span class="font-semibold text-gray-700">{tecnicoNombre}</span>
-        </p>
+        {tecnicoNombre
+          ? <p class="text-gray-500 text-sm">Enviándole una solicitud a <span class="font-semibold text-gray-700">{tecnicoNombre}</span></p>
+          : <p class="text-gray-500 text-sm">Describí lo que necesitás y te asignamos el técnico ideal.</p>
+        }
       </div>
 
       <!-- Formulario -->
       <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100">
         {categorias.length === 0 ? (
-          <p class="text-gray-400 text-sm text-center py-6">
-            Este técnico no tiene categorías configuradas todavía.
-          </p>
+          <p class="text-gray-400 text-sm text-center py-6">No hay categorías disponibles.</p>
         ) : (
           <FormSolicitud
             client:load
             tecnicoId={tecnicoId}
             tecnicoNombre={tecnicoNombre}
             categorias={categorias}
+            defaultCategoriaId={categoriaParam}
           />
         )}
       </div>

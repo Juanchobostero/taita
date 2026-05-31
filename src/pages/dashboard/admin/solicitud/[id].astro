@@ -14,10 +14,28 @@ if (self?.tipo !== 'admin') return Astro.redirect('/dashboard/cliente')
 
 if (Astro.request.method === 'POST') {
   const form   = await Astro.request.formData()
-  const estado = form.get('estado')?.toString()
-  const validos = ['pendiente', 'aceptada', 'en_curso', 'completada', 'cancelada']
-  if (estado && validos.includes(estado)) {
-    await supabase.from('solicitudes').update({ estado }).eq('id', id)
+  const accion = form.get('accion')?.toString()
+
+  if (accion === 'cambiar-estado') {
+    const estado  = form.get('estado')?.toString()
+    const validos = ['pendiente', 'aceptada', 'en_curso', 'completada', 'cancelada']
+    if (estado && validos.includes(estado)) {
+      await supabase.from('solicitudes').update({ estado }).eq('id', id)
+    }
+  } else if (accion === 'asignar-tecnico') {
+    const tecnicoId = form.get('tecnicoId')?.toString()
+    if (tecnicoId) {
+      await supabase.from('solicitudes')
+        .update({ tecnico_id: tecnicoId, estado: 'aceptada' })
+        .eq('id', id)
+    }
+  } else {
+    // backward compat: form sin accion = cambiar estado
+    const estado  = form.get('estado')?.toString()
+    const validos = ['pendiente', 'aceptada', 'en_curso', 'completada', 'cancelada']
+    if (estado && validos.includes(estado)) {
+      await supabase.from('solicitudes').update({ estado }).eq('id', id)
+    }
   }
   return Astro.redirect(`/dashboard/admin/solicitud/${id}`)
 }
@@ -36,6 +54,13 @@ const { data: sol } = await supabase
   .single()
 
 if (!sol) return Astro.redirect('/dashboard/admin')
+
+const { data: rawTecnicosActivos } = await supabase
+  .from('tecnicos')
+  .select('id, usuarios!inner ( nombre_completo )')
+  .eq('activo', true)
+
+const tecnicosActivos = (rawTecnicosActivos ?? []) as { id: string; usuarios: { nombre_completo: string } }[]
 
 const cliente  = sol.usuarios as any
 const tecnico  = sol.tecnicos as any
@@ -129,7 +154,24 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                     </div>
                   </div>
                 ) : (
-                  <p class="text-sm text-gray-400">Sin técnico asignado</p>
+                  <form method="POST" class="flex flex-col gap-2">
+                    <input type="hidden" name="accion" value="asignar-tecnico" />
+                    <select
+                      name="tecnicoId"
+                      class="w-full border border-cream-dark rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary bg-white"
+                    >
+                      <option value="">Elegir técnico…</option>
+                      {tecnicosActivos.map(t => (
+                        <option value={t.id}>{t.usuarios.nombre_completo}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="submit"
+                      class="bg-primary hover:bg-primary-hover text-white text-sm font-semibold py-2 rounded-xl transition-colors"
+                    >
+                      Asignar técnico
+                    </button>
+                  </form>
                 )}
               </div>
 

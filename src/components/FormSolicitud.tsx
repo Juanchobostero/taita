@@ -5,21 +5,22 @@ import { z } from 'zod'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 
 interface CategoriaOpt {
   id: string
   nombre: string
   icono: string | null
+  imagen_url: string | null
   porcentaje_tasa: number
   precio_base: number | null
 }
 
 interface Props {
-  tecnicoId: string
-  tecnicoNombre: string
-  categorias: CategoriaOpt[]
+  tecnicoId:           string | null
+  tecnicoNombre:       string | null
+  categorias:          CategoriaOpt[]
+  defaultCategoriaId?: string | null
 }
 
 const schema = z.object({
@@ -38,13 +39,17 @@ function FieldError({ msg }: { msg?: string }) {
   return <p className="text-xs text-destructive mt-1">{msg}</p>
 }
 
-export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias }: Props) {
+export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, defaultCategoriaId }: Props) {
   const [serverError, setServerError] = useState('')
   const [success, setSuccess]         = useState(false)
 
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { categoria_id: categorias[0]?.id ?? '' },
+    defaultValues: {
+      categoria_id: (defaultCategoriaId && categorias.find(c => c.id === defaultCategoriaId))
+        ? defaultCategoriaId
+        : categorias[0]?.id ?? '',
+    },
   })
 
   const categoriaId = watch('categoria_id')
@@ -88,7 +93,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias }: 
       <div className="bg-green-50 border border-green-200 text-green-700 rounded-2xl p-8 text-center flex flex-col gap-3">
         <p className="text-2xl">✅</p>
         <p className="font-bold text-lg">¡Solicitud enviada!</p>
-        <p className="text-sm">Le avisamos a {tecnicoNombre}. Podés ver el estado en tu panel.</p>
+        <p className="text-sm">{tecnicoNombre ? `Le avisamos a ${tecnicoNombre}.` : 'Te asignaremos el técnico ideal.'} Podés ver el estado en tu panel.</p>
         <a href="/dashboard/cliente" className="mt-2 text-primary hover:text-primary-hover font-medium text-sm">
           Ir a mi panel →
         </a>
@@ -104,13 +109,27 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias }: 
       {/* Categoría */}
       <div className="flex flex-col gap-1.5">
         <Label>Tipo de servicio</Label>
-        <Select {...register('categoria_id')} className={errors.categoria_id ? 'border-destructive' : ''}>
+        <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 ${errors.categoria_id ? 'ring-1 ring-destructive rounded-xl p-1' : ''}`}>
           {categorias.map(c => (
-            <option key={c.id} value={c.id}>
-              {c.icono ? `${c.icono} ` : ''}{c.nombre}
-            </option>
+            <label
+              key={c.id}
+              className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border cursor-pointer transition-all text-center ${
+                categoriaId === c.id
+                  ? 'border-primary bg-primary-soft text-primary'
+                  : 'border-cream-dark hover:border-primary-pale bg-white text-gray-600'
+              }`}
+            >
+              <input type="radio" value={c.id} {...register('categoria_id')} className="hidden" />
+              <div className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center bg-gray-100 shrink-0">
+                {c.imagen_url
+                  ? <img src={c.imagen_url} alt={c.nombre} className="w-full h-full object-cover" />
+                  : <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                }
+              </div>
+              <span className="text-xs font-medium leading-tight">{c.nombre}</span>
+            </label>
           ))}
-        </Select>
+        </div>
         <FieldError msg={errors.categoria_id?.message} />
       </div>
 

@@ -95,9 +95,10 @@ const EMOJIS: { e: string; k: string }[] = [
 interface Props {
   name: string
   value?: string
+  onChange?: (emoji: string) => void
 }
 
-export default function EmojiPicker({ name, value: initial = '' }: Props) {
+export default function EmojiPicker({ name, value: initial = '', onChange }: Props) {
   const [value, setValue]   = useState(initial)
   const [open, setOpen]     = useState(false)
   const [query, setQuery]   = useState('')
@@ -171,7 +172,7 @@ export default function EmojiPicker({ name, value: initial = '' }: Props) {
                 <button
                   key={e}
                   type="button"
-                  onClick={() => { setValue(e); setOpen(false) }}
+                  onClick={() => { setValue(e); onChange?.(e); setOpen(false) }}
                   className="w-7 h-7 text-base flex items-center justify-center rounded hover:bg-primary-soft transition-colors"
                 >
                   {e}
@@ -182,7 +183,7 @@ export default function EmojiPicker({ name, value: initial = '' }: Props) {
 
           <button
             type="button"
-            onClick={() => { setValue(''); setOpen(false) }}
+            onClick={() => { setValue(''); onChange?.(''); setOpen(false) }}
             className="w-full mt-1.5 text-xs text-gray-400 hover:text-gray-600 py-1 hover:bg-cream rounded transition-colors"
           >
             Quitar emoji

@@ -33,6 +33,15 @@ if (Astro.request.method === 'POST') {
     if (solicitudId && estado && validos.includes(estado)) {
       await supabase.from('solicitudes').update({ estado }).eq('id', solicitudId)
     }
+
+  } else if (accion === 'asignar-tecnico') {
+    const solicitudId = form.get('solicitudId')?.toString()
+    const tecnicoId   = form.get('tecnicoId')?.toString()
+    if (solicitudId && tecnicoId) {
+      await supabase.from('solicitudes')
+        .update({ tecnico_id: tecnicoId, estado: 'aceptada' })
+        .eq('id', solicitudId)
+    }
   }
 
   return Astro.redirect('/dashboard/admin')
@@ -49,9 +58,15 @@ interface SolicitudReciente {
   titulo: string
   estado: string
   creado_en: string
+  tecnico_id: string | null
   usuarios: { nombre_completo: string } | null
-  tecnicos: { usuarios: { nombre_completo: string } } | null
+  tecnicos: { id: string; usuarios: { nombre_completo: string } } | null
   categorias: { nombre: string } | null
+}
+
+interface TecnicoActivo {
+  id: string
+  usuarios: { nombre_completo: string }
 }
 
 const [
@@ -61,6 +76,7 @@ const [
   { data: rawPendientes },
   { data: rawRecientes },
   { data: completadas },
+  { data: rawTecnicosActivos },
 ] = await Promise.all([
   supabase.from('usuarios').select('*', { count: 'exact', head: true }),
   supabase.from('tecnicos').select('*', { count: 'exact', head: true }).eq('activo', true),
@@ -77,18 +93,24 @@ const [
   supabase
     .from('solicitudes')
     .select(`
-      id, titulo, estado, creado_en,
+      id, titulo, estado, creado_en, tecnico_id,
       usuarios!cliente_id ( nombre_completo ),
-      tecnicos ( usuarios ( nombre_completo ) ),
+      tecnicos ( id, usuarios ( nombre_completo ) ),
       categorias ( nombre )
     `)
     .order('creado_en', { ascending: false })
     .limit(20),
   supabase.from('solicitudes').select('total_estimado').eq('estado', 'completada'),
+  supabase
+    .from('tecnicos')
+    .select('id, usuarios!inner ( nombre_completo )')
+    .eq('activo', true)
+    .order('usuarios(nombre_completo)'),
 ])
 
-const pendientes = (rawPendientes ?? []) as TecnicoPendiente[]
-const recientes  = (rawRecientes  ?? []) as SolicitudReciente[]
+const pendientes      = (rawPendientes      ?? []) as TecnicoPendiente[]
+const recientes       = (rawRecientes       ?? []) as SolicitudReciente[]
+const tecnicosActivos = (rawTecnicosActivos ?? []) as TecnicoActivo[]
 
 const ingresos = (completadas ?? []).reduce((sum, s) => sum + ((s.total_estimado as number | null) ?? 0), 0)
 
@@ -209,6 +231,7 @@ const estadoColor: Record<string, string> = {
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Servicio</th>
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Cliente</th>
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Técnico</th>
+                  <th class="px-6 py-3 text-xs font-semibold text-gray-500">Asignar</th>
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Estado</th>
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Cambiar</th>
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Fecha</th>
@@ -220,7 +243,27 @@ const estadoColor: Record<string, string> = {
                   <tr class="hover:bg-cream transition-colors">
                     <td class="px-6 py-3 font-medium text-gray-800 max-w-45 truncate">{s.titulo}</td>
                     <td class="px-6 py-3 text-gray-600 whitespace-nowrap">{s.usuarios?.nombre_completo ?? '—'}</td>
-                    <td class="px-6 py-3 text-gray-600 whitespace-nowrap">{s.tecnicos?.usuarios?.nombre_completo ?? '—'}</td>
+                    <td class="px-6 py-3 text-gray-600 whitespace-nowrap">
+                      {s.tecnico_id
+                        ? s.tecnicos?.usuarios?.nombre_completo ?? '—'
+                        : <span class="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded-full">Sin asignar</span>
+                      }
+                    </td>
+                    <td class="px-4 py-3">
+                      {!s.tecnico_id && (
+                        <form method="POST" class="flex items-center gap-1.5">
+                          <input type="hidden" name="accion" value="asignar-tecnico" />
+                          <input type="hidden" name="solicitudId" value={s.id} />
+                          <select name="tecnicoId" class="text-xs border border-cream-dark rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary bg-white max-w-36">
+                            <option value="">Elegir técnico…</option>
+                            {tecnicosActivos.map(t => (
+                              <option value={t.id}>{(t.usuarios as any).nombre_completo}</option>
+                            ))}
+                          </select>
+                          <button type="submit" class="text-xs bg-primary hover:bg-primary-hover text-white font-bold px-2.5 py-1.5 rounded-lg transition-colors shrink-0">✓</button>
+                        </form>
+                      )}
+                    </td>
                     <td class="px-6 py-3">
                       <span class={`text-xs font-medium px-2.5 py-1 rounded-full ${estadoColor[s.estado] ?? 'bg-gray-100 text-gray-500'}`}>
                         {s.estado.replace('_', ' ')}

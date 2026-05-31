@@ -8,20 +8,28 @@ import type { TecnicoConUsuario } from '../../lib/types'
 
 const supabase = createSupabaseAdmin()
 
-const { data: rawTecnicos, error } = await supabase
-  .from('tecnicos')
-  .select(`
-    id, descripcion, zona_cobertura, tarifa_hora,
-    calificacion_promedio, total_servicios, activo,
-    usuarios!inner ( nombre_completo, telefono, foto_url ),
-    especialidades_tecnico (
-      categorias ( id, nombre, icono )
-    )
-  `)
-  .eq('activo', true)
-  .order('calificacion_promedio', { ascending: false })
+const [{ data: rawTecnicos, error }, { data: rawCategorias }] = await Promise.all([
+  supabase
+    .from('tecnicos')
+    .select(`
+      id, descripcion, zona_cobertura, tarifa_hora,
+      calificacion_promedio, total_servicios, activo,
+      usuarios!inner ( nombre_completo, telefono, foto_url ),
+      especialidades_tecnico (
+        categorias ( id, nombre, icono )
+      )
+    `)
+    .eq('activo', true)
+    .order('calificacion_promedio', { ascending: false }),
+  supabase
+    .from('categorias')
+    .select('id, nombre, icono, imagen_url')
+    .eq('activa', true)
+    .order('nombre'),
+])
 
-const tecnicos = (rawTecnicos as TecnicoConUsuario[] ?? []).map(tecnicoToDisplay)
+const tecnicos         = (rawTecnicos as TecnicoConUsuario[] ?? []).map(tecnicoToDisplay)
+const categoriasFiltro = rawCategorias ?? []
 ---
 
 <Layout title="Técnicos disponibles — Taita Soluciones" description="Encontrá al técnico ideal para tu hogar">
@@ -39,7 +47,7 @@ const tecnicos = (rawTecnicos as TecnicoConUsuario[] ?? []).map(tecnicoToDisplay
         </p>
       </div>
 
-      <FiltroTecnicos client:load tecnicos={tecnicos} />
+      <FiltroTecnicos client:load tecnicos={tecnicos} categoriasFiltro={categoriasFiltro} />
     </div>
   </div>
 

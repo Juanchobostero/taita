@@ -2,6 +2,7 @@
 import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
 import ResenaForm from '../../components/ResenaForm'
+import AvatarUpload from '../../components/AvatarUpload'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
 import type { SolicitudConRelaciones } from '../../lib/types'
 
@@ -11,7 +12,7 @@ const userId = Astro.locals.user!.id
 const [{ data: usuario }, { data: rawSolicitudes }] = await Promise.all([
   supabase
     .from('usuarios')
-    .select('nombre_completo, email, telefono')
+    .select('nombre_completo, email, telefono, foto_url')
     .eq('id', userId)
     .single(),
   supabase
@@ -136,17 +137,27 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
                   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
 
                     {/* Técnico */}
-                    {tec?.usuarios && (
-                      <div class="flex items-start gap-2.5">
-                        <div class="w-8 h-8 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-xs shrink-0 mt-0.5">
-                          {tec.usuarios.nombre_completo?.split(' ').slice(0,2).map((p: string) => p[0]).join('')}
-                        </div>
+                    <div class="flex items-start gap-2.5">
+                      {tec?.usuarios ? (
+                        <>
+                          <div class="w-8 h-8 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-xs shrink-0 mt-0.5 overflow-hidden">
+                            {(tec.usuarios as any).foto_url
+                              ? <img src={(tec.usuarios as any).foto_url} class="w-full h-full object-cover" />
+                              : tec.usuarios.nombre_completo?.split(' ').slice(0,2).map((p: string) => p[0]).join('')
+                            }
+                          </div>
+                          <div class="flex flex-col gap-0.5">
+                            <span class="text-xs text-gray-400">Técnico</span>
+                            <span class="font-medium text-gray-800 text-xs">{tec.usuarios.nombre_completo}</span>
+                          </div>
+                        </>
+                      ) : (
                         <div class="flex flex-col gap-0.5">
                           <span class="text-xs text-gray-400">Técnico</span>
-                          <span class="font-medium text-gray-800 text-xs">{tec.usuarios.nombre_completo}</span>
+                          <span class="text-xs text-amber-600 font-medium">Pendiente de asignación</span>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     {/* Dirección */}
                     {s.direccion && (
@@ -195,6 +206,14 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
       <!-- Perfil -->
       <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
         <h2 class="font-serif font-bold text-[#1B4D2E] text-lg">Mi perfil</h2>
+        <div class="flex justify-center">
+          <AvatarUpload
+            client:load
+            userId={userId}
+            currentUrl={usuario?.foto_url ?? null}
+            nombre={usuario?.nombre_completo ?? 'U'}
+          />
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div class="flex flex-col gap-1">
             <span class="text-gray-400">Nombre</span>
