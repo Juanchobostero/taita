@@ -22,6 +22,8 @@ export interface Tecnico {
   calificacion_promedio: number
   total_servicios:      number
   activo:               boolean
+  nick:                 string | null
+  mostrar_nombre:       boolean
 }
 
 export interface Categoria {
@@ -96,8 +98,11 @@ export interface TecnicoDisplay {
   zona:        string
   tarifa:      number
   disponible:  boolean
-  habilidades: string[]
-  foto_url:    string | null
+  habilidades:    string[]
+  foto_url:       string | null
+  nick:           string | null
+  mostrar_nombre: boolean
+  nombre_display: string
 }
 
 // ── Helper: slug de categoría ─────────────────────────────────────────────
@@ -112,19 +117,24 @@ export function toSlug(s: string): string {
 
 export function tecnicoToDisplay(t: TecnicoConUsuario): TecnicoDisplay {
   const primaria = t.especialidades_tecnico[0]?.categorias
+  const nick     = (t as any).nick as string | null
+  const mostrarNombre = (t as any).mostrar_nombre as boolean ?? true
   return {
-    id:          t.id,
-    nombre:      t.usuarios.nombre_completo,
-    especialidad: primaria?.nombre ?? 'Servicio general',
-    categoria:   toSlug(primaria?.nombre ?? ''),
-    calificacion: Number(t.calificacion_promedio),
-    resenas:     t.total_servicios,
-    descripcion: t.descripcion ?? 'Técnico especializado.',
-    zona:        t.zona_cobertura ?? '',
-    tarifa:      Number(t.tarifa_hora ?? 0),
-    disponible:  t.activo,
-    foto_url:    t.usuarios.foto_url ?? null,
-    habilidades: t.especialidades_tecnico
+    id:             t.id,
+    nombre:         t.usuarios.nombre_completo,
+    nick:           nick ?? null,
+    mostrar_nombre: mostrarNombre,
+    nombre_display: nick || t.usuarios.nombre_completo,
+    especialidad:   primaria?.nombre ?? 'Servicio general',
+    categoria:      toSlug(primaria?.nombre ?? ''),
+    calificacion:   Number(t.calificacion_promedio),
+    resenas:        t.total_servicios,
+    descripcion:    t.descripcion ?? 'Técnico especializado.',
+    zona:           t.zona_cobertura ?? '',
+    tarifa:         Number(t.tarifa_hora ?? 0),
+    disponible:     t.activo,
+    foto_url:       t.usuarios.foto_url ?? null,
+    habilidades:    t.especialidades_tecnico
       .map(e => e.categorias?.nombre)
       .filter((n): n is string => Boolean(n)),
   }

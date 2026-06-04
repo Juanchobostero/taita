@@ -1,0 +1,85 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Navbar from '../components/Navbar'
+import ResendVerification from '../components/ResendVerification'
+
+const email = Astro.url.searchParams.get('email') ?? ''
+---
+
+<Layout title="Verificá tu correo — Taita Soluciones" description="Te enviamos un enlace de verificación a tu correo electrónico.">
+  <Navbar client:load />
+
+  <div class="bg-cream min-h-screen py-12 px-4 flex flex-col items-center justify-center">
+    <div class="max-w-lg w-full flex flex-col items-center gap-8">
+
+      <!-- Hero -->
+      <div class="text-center flex flex-col items-center gap-3">
+        <img
+          src="/images/taita-avatar.webp"
+          alt="TAITA"
+          class="w-28 h-28 object-contain mix-blend-multiply"
+        />
+        <h1 class="font-serif font-bold text-primary text-4xl">¡Casi listo!</h1>
+        <p class="text-gray-500 text-sm leading-relaxed max-w-sm">
+          Para validar tu identidad, te enviamos un correo.
+        </p>
+      </div>
+
+      <!-- Card -->
+      <div class="bg-white rounded-2xl border border-cream-dark p-8 w-full flex flex-col items-center gap-6 text-center shadow-sm">
+
+        <!-- Ícono -->
+        <div class="w-20 h-20 rounded-full bg-primary-soft flex items-center justify-center relative">
+          <svg class="w-9 h-9 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          <div class="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-green-400 border-2 border-white flex items-center justify-center">
+            <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <h2 class="font-serif font-bold text-primary text-2xl">Revisá tu correo electrónico</h2>
+          <p class="text-gray-500 text-sm leading-relaxed">
+            Enviamos un enlace de verificación a la siguiente dirección
+          </p>
+          {email && (
+            <p class="font-bold text-gray-900 text-base">{decodeURIComponent(email)}</p>
+          )}
+        </div>
+
+        <!-- Info items -->
+        <div class="flex flex-col gap-3 text-left w-full">
+          <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-full bg-cream flex items-center justify-center shrink-0 mt-0.5">
+              <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p class="text-sm text-gray-600">El enlace de verificación es válido por <strong>24 horas</strong>.</p>
+          </div>
+          <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-full bg-cream flex items-center justify-center shrink-0 mt-0.5">
+              <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <p class="text-sm text-gray-600">Si no encontrás el correo, revisá tu carpeta de <strong>spam</strong> o correo no deseado.</p>
+          </div>
+        </div>
+
+        {email && (
+          <ResendVerification client:load email={decodeURIComponent(email)} />
+        )}
+
+        <a href="/" class="text-sm text-gray-400 hover:text-primary transition-colors">
+          Volver al inicio
+        </a>
+
+      </div>
+
+    </div>
+  </div>
+</Layout>

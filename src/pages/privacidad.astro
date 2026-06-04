@@ -1,0 +1,67 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Navbar from '../components/Navbar'
+---
+
+<Layout title="Política de privacidad — Taita Soluciones" description="Política de privacidad y tratamiento de datos de Taita Soluciones.">
+  <Navbar client:load />
+
+  <div class="bg-cream min-h-screen py-10 px-4">
+    <div class="max-w-3xl mx-auto flex flex-col gap-6">
+
+      <a href="/registro" class="text-primary hover:text-primary-hover font-medium flex items-center gap-1 w-fit text-sm">
+        ← Volver al registro
+      </a>
+
+      <div class="bg-white rounded-2xl border border-cream-dark p-8 flex flex-col gap-6">
+        <div>
+          <h1 class="font-serif font-bold text-primary text-3xl mb-1">Política de privacidad</h1>
+          <p class="text-gray-400 text-sm">Última actualización: junio 2026</p>
+        </div>
+
+        <div class="flex flex-col gap-5 text-sm text-gray-600 leading-relaxed">
+          <section class="flex flex-col gap-2">
+            <h2 class="font-semibold text-gray-900 text-base">1. Información que recopilamos</h2>
+            <p>Recopilamos información que proporcionás al registrarte: nombre, correo electrónico, teléfono y ubicación. También recopilamos datos de uso de la plataforma para mejorar el servicio.</p>
+          </section>
+
+          <section class="flex flex-col gap-2">
+            <h2 class="font-semibold text-gray-900 text-base">2. Uso de la información</h2>
+            <p>Utilizamos tus datos para gestionar tu cuenta, conectarte con técnicos o clientes según tu rol, y mejorar la experiencia en la plataforma. No vendemos ni compartimos tu información personal con terceros sin tu consentimiento.</p>
+          </section>
+
+          <section class="flex flex-col gap-2">
+            <h2 class="font-semibold text-gray-900 text-base">3. Almacenamiento y seguridad</h2>
+            <p>Tus datos son almacenados de forma segura mediante Supabase con cifrado en tránsito y en reposo. Implementamos medidas técnicas para proteger tu información contra accesos no autorizados.</p>
+          </section>
+
+          <section class="flex flex-col gap-2">
+            <h2 class="font-semibold text-gray-900 text-base">4. Cookies</h2>
+            <p>Utilizamos cookies de sesión necesarias para el funcionamiento de la plataforma. No utilizamos cookies de seguimiento de terceros ni publicidad comportamental.</p>
+          </section>
+
+          <section class="flex flex-col gap-2">
+            <h2 class="font-semibold text-gray-900 text-base">5. Tus derechos</h2>
+            <p>Tenés derecho a acceder, rectificar o eliminar tus datos personales en cualquier momento. Para ejercer estos derechos, contactanos a través de nuestra <a href="/contacto" class="text-primary hover:underline">página de contacto</a>.</p>
+          </section>
+
+          <section class="flex flex-col gap-2">
+            <h2 class="font-semibold text-gray-900 text-base">6. Retención de datos</h2>
+            <p>Conservamos tus datos mientras tengas una cuenta activa. Al eliminar tu cuenta, tus datos personales serán borrados en un plazo de 30 días, excepto aquellos que debamos conservar por obligaciones legales.</p>
+          </section>
+
+          <section class="flex flex-col gap-2">
+            <h2 class="font-semibold text-gray-900 text-base">7. Cambios en esta política</h2>
+            <p>Podemos actualizar esta política periódicamente. Te notificaremos por correo electrónico ante cambios significativos.</p>
+          </section>
+
+          <section class="flex flex-col gap-2">
+            <h2 class="font-semibold text-gray-900 text-base">8. Contacto</h2>
+            <p>Para consultas sobre privacidad contactanos en <a href="/contacto" class="text-primary hover:underline">nuestra página de contacto</a>.</p>
+          </section>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</Layout>

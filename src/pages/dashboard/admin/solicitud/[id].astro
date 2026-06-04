@@ -19,7 +19,14 @@ if (Astro.request.method === 'POST') {
   if (accion === 'cambiar-estado') {
     const estado  = form.get('estado')?.toString()
     const validos = ['pendiente', 'aceptada', 'en_curso', 'completada', 'cancelada']
+    const requiereTecnico = ['aceptada', 'en_curso', 'completada']
     if (estado && validos.includes(estado)) {
+      // No permitir avanzar si no hay técnico asignado
+      if (requiereTecnico.includes(estado)) {
+        const { data: check } = await supabase
+          .from('solicitudes').select('tecnico_id').eq('id', id).single()
+        if (!check?.tecnico_id) return Astro.redirect(`/dashboard/admin/solicitud/${id}`)
+      }
       await supabase.from('solicitudes').update({ estado }).eq('id', id)
     }
   } else if (accion === 'asignar-tecnico') {
@@ -44,6 +51,7 @@ const { data: sol } = await supabase
   .from('solicitudes')
   .select(`
     id, titulo, descripcion, estado, creado_en,
+    tecnico_id, categoria_id,
     horas_estimadas, precio_base, tasa_aplicada, total_estimado,
     fecha_solicitada, direccion,
     usuarios!cliente_id ( nombre_completo, telefono, email ),
@@ -55,12 +63,17 @@ const { data: sol } = await supabase
 
 if (!sol) return Astro.redirect('/dashboard/admin')
 
+// Técnicos activos con esa categoría como especialidad
 const { data: rawTecnicosActivos } = await supabase
   .from('tecnicos')
-  .select('id, usuarios!inner ( nombre_completo )')
+  .select('id, nick, mostrar_nombre, usuarios!inner ( nombre_completo ), especialidades_tecnico!inner ( categoria_id )')
   .eq('activo', true)
+  .eq('especialidades_tecnico.categoria_id', sol.categoria_id)
 
-const tecnicosActivos = (rawTecnicosActivos ?? []) as { id: string; usuarios: { nombre_completo: string } }[]
+const tecnicosActivos = (rawTecnicosActivos ?? []).map((t: any) => ({
+  id: t.id,
+  nombre: t.nick || t.usuarios.nombre_completo,
+})) as { id: string; nombre: string }[]
 
 const cliente  = sol.usuarios as any
 const tecnico  = sol.tecnicos as any
@@ -156,21 +169,30 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                 ) : (
                   <form method="POST" class="flex flex-col gap-2">
                     <input type="hidden" name="accion" value="asignar-tecnico" />
-                    <select
-                      name="tecnicoId"
-                      class="w-full border border-cream-dark rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary bg-white"
-                    >
-                      <option value="">Elegir técnico…</option>
-                      {tecnicosActivos.map(t => (
-                        <option value={t.id}>{t.usuarios.nombre_completo}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="submit"
-                      class="bg-primary hover:bg-primary-hover text-white text-sm font-semibold py-2 rounded-xl transition-colors"
-                    >
-                      Asignar técnico
-                    </button>
+                    {tecnicosActivos.length === 0 ? (
+                      <p class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                        No hay técnicos activos para la categoría de esta solicitud.
+                      </p>
+                    ) : (
+                      <>
+                        <select
+                          name="tecnicoId"
+                          required
+                          class="w-full border border-cream-dark rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary bg-white"
+                        >
+                          <option value="">Elegir técnico…</option>
+                          {tecnicosActivos.map(t => (
+                            <option value={t.id}>{t.nombre}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="submit"
+                          class="bg-primary hover:bg-primary-hover text-white text-sm font-semibold py-2 rounded-xl transition-colors"
+                        >
+                          Asignar técnico
+                        </button>
+                      </>
+                    )}
                   </form>
                 )}
               </div>
@@ -218,14 +240,24 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
           <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
             <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Estado del servicio</h2>
             <form method="POST" class="flex flex-col gap-3">
+              <input type="hidden" name="accion" value="cambiar-estado" />
               <select
                 name="estado"
                 class="w-full border border-cream-dark rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary bg-white"
               >
-                {(['pendiente','aceptada','en_curso','completada','cancelada'] as const).map(e => (
-                  <option value={e} selected={sol.estado === e}>{estadoLabel[e]}</option>
-                ))}
+                {(['pendiente','aceptada','en_curso','completada','cancelada'] as const).map(e => {
+                  const requiereTecnico = ['aceptada','en_curso','completada'].includes(e)
+                  const disabled = requiereTecnico && !sol.tecnico_id
+                  return (
+                    <option value={e} selected={sol.estado === e} disabled={disabled}>
+                      {estadoLabel[e]}{disabled ? ' (requiere técnico)' : ''}
+                    </option>
+                  )
+                })}
               </select>
+              {!sol.tecnico_id && (
+                <p class="text-xs text-amber-600">Asigná un técnico para poder avanzar el estado.</p>
+              )}
               <button type="submit" class="w-full bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
                 Actualizar estado
               </button>

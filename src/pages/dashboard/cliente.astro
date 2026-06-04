@@ -68,7 +68,7 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
           <p class="text-gray-500 text-sm mt-0.5">Panel del cliente</p>
         </div>
         <a
-          href="/tecnicos"
+          href="/solicitud"
           class="bg-[#1B4D2E] hover:bg-primary-hover text-white font-semibold px-5 py-2.5 rounded-full transition-colors text-sm w-fit"
         >
           + Nueva solicitud
@@ -101,8 +101,8 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
           <div class="px-6 py-12 text-center text-gray-400 text-sm flex flex-col items-center gap-3">
             <span class="text-3xl">🔍</span>
             <p>Todavía no hiciste ninguna solicitud.</p>
-            <a href="/tecnicos" class="text-[#1B4D2E] hover:text-primary-hover font-medium">
-              Buscá técnicos disponibles →
+            <a href="/solicitud" class="text-[#1B4D2E] hover:text-primary-hover font-medium">
+              Solicitá un servicio →
             </a>
           </div>
         ) : (

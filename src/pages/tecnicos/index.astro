@@ -12,7 +12,7 @@ const [{ data: rawTecnicos, error }, { data: rawCategorias }] = await Promise.al
   supabase
     .from('tecnicos')
     .select(`
-      id, descripcion, zona_cobertura, tarifa_hora,
+      id, descripcion, zona_cobertura, tarifa_hora, nick, mostrar_nombre,
       calificacion_promedio, total_servicios, activo,
       usuarios!inner ( nombre_completo, telefono, foto_url ),
       especialidades_tecnico (

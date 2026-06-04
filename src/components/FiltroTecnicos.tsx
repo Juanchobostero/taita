@@ -92,7 +92,7 @@ export default function FiltroTecnicos({ tecnicos, categoriasFiltro = [] }: { te
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">{t.nombre}</p>
+                  <p className="font-semibold text-gray-900 truncate">{t.nombre_display}</p>
                   <p className="text-sm text-primary font-medium truncate">{t.especialidad}</p>
                 </div>
                 <span

@@ -1,0 +1,111 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Navbar from '../components/Navbar'
+
+let enviado = false
+let errorMsg = ''
+
+if (Astro.request.method === 'POST') {
+  const form    = await Astro.request.formData()
+  const email   = form.get('email')?.toString().trim()
+  const mensaje  = form.get('mensaje')?.toString().trim()
+
+  if (!email || !mensaje) {
+    errorMsg = 'Completá los campos requeridos.'
+  } else {
+    // TODO: conectar con servicio de email cuando esté configurado
+    enviado = true
+  }
+}
+---
+
+<Layout title="Reclamos — Taita Soluciones" description="Completá el formulario y nuestro equipo se pondrá en contacto a la brevedad.">
+  <Navbar client:load />
+
+  <div class="bg-cream min-h-screen py-10 px-4">
+    <div class="max-w-2xl mx-auto flex flex-col gap-8">
+
+      <a href="/" class="text-primary hover:text-primary-hover font-medium flex items-center gap-1 w-fit text-sm">
+        ← Volver al inicio
+      </a>
+
+      <!-- Hero -->
+      <div class="flex items-center gap-6">
+        <img src="/images/taita-avatar.webp" alt="TAITA" class="w-24 h-24 object-contain mix-blend-multiply shrink-0 hidden sm:block" />
+        <div>
+          <h1 class="font-serif font-bold text-primary text-4xl mb-1">Reclamos</h1>
+          <p class="font-serif italic text-primary-light text-base">Estamos para ayudarte.</p>
+          <p class="text-gray-500 text-sm mt-2 leading-relaxed">
+            Si tenés algún reclamo, completá el formulario y nuestro equipo se pondrá en contacto a la brevedad.
+          </p>
+          <div class="flex items-center gap-2 mt-3 text-sm text-gray-600">
+            <div class="w-8 h-8 rounded-full bg-primary-soft flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <span class="font-medium text-primary">juancruzmart93@gmail.com</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulario -->
+      <div class="bg-white rounded-2xl border border-cream-dark p-6 sm:p-8 flex flex-col gap-6">
+        {enviado ? (
+          <div class="flex flex-col items-center gap-4 py-8 text-center">
+            <div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center text-3xl">✅</div>
+            <h2 class="font-serif font-bold text-primary text-2xl">¡Reclamo enviado!</h2>
+            <p class="text-gray-500 text-sm">Nuestro equipo revisará tu reclamo y te responderá a la brevedad.</p>
+            <a href="/" class="mt-2 bg-primary hover:bg-primary-hover text-white font-semibold px-6 py-2.5 rounded-full text-sm transition-colors">
+              Volver al inicio
+            </a>
+          </div>
+        ) : (
+          <>
+            <div>
+              <h2 class="font-serif font-bold text-primary text-xl mb-0.5">Contanos tu reclamo</h2>
+              <p class="text-gray-400 text-sm">Completá los datos para que podamos ayudarte.</p>
+            </div>
+
+            {errorMsg && (
+              <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{errorMsg}</div>
+            )}
+
+            <form method="POST" class="flex flex-col gap-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="flex flex-col gap-1.5">
+                  <label class="text-sm font-medium text-gray-700">Nombre</label>
+                  <input name="nombre" type="text" placeholder="Tu nombre" class="border border-cream-dark rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary" />
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <label class="text-sm font-medium text-gray-700">Correo electrónico <span class="text-red-400">*</span></label>
+                  <input name="email" type="email" required placeholder="ejemplo@correo.com" class="border border-cream-dark rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary" />
+                </div>
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label class="text-sm font-medium text-gray-700">Número de teléfono</label>
+                <input name="telefono" type="tel" placeholder="Ej: 11 2345-6789" class="border border-cream-dark rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary" />
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label class="text-sm font-medium text-gray-700">Describí tu reclamo <span class="text-red-400">*</span></label>
+                <textarea name="mensaje" required rows={5} maxlength={1000} placeholder="Contanos en detalle cuál es tu reclamo..." class="border border-cream-dark rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"></textarea>
+                <p class="text-xs text-gray-400 text-right">máx. 1000 caracteres</p>
+              </div>
+              <div class="bg-primary-soft border border-primary-pale rounded-xl px-4 py-3 flex items-start gap-2 text-sm text-primary">
+                <svg class="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
+                <span>Nuestro equipo revisará tu reclamo y te responderá a la brevedad.</span>
+              </div>
+              <div class="flex items-center justify-between gap-3 pt-2">
+                <a href="/" class="flex items-center gap-1 text-sm text-gray-500 hover:text-primary transition-colors">← Volver al inicio</a>
+                <button type="submit" class="bg-primary hover:bg-primary-hover text-white font-semibold px-8 py-2.5 rounded-full text-sm transition-colors">
+                  Enviar reclamo
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+      </div>
+
+    </div>
+  </div>
+</Layout>

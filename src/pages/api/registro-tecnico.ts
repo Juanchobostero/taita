@@ -2,13 +2,17 @@ import type { APIRoute } from 'astro'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 
 export const POST: APIRoute = async ({ request }) => {
-  const { userId, descripcion, zona, especialidades, cvu } = await request.json()
+  const { userId, telefono, descripcion, zona, especialidades, subcategorias, cvu, nick, mostrarNombre } = await request.json()
 
-  if (!userId || !descripcion || !zona) {
+  if (!userId || !descripcion || !zona || !cvu) {
     return new Response(JSON.stringify({ error: 'Datos incompletos' }), { status: 400 })
   }
 
   const supabase = createSupabaseAdmin()
+
+  if (telefono) {
+    await supabase.from('usuarios').update({ telefono }).eq('id', userId)
+  }
 
   const { data: tecnico, error } = await supabase
     .from('tecnicos')
@@ -18,6 +22,8 @@ export const POST: APIRoute = async ({ request }) => {
       zona_cobertura: zona,
       activo:         false,
       cvu:            cvu ?? null,
+      nick:           nick ?? null,
+      mostrar_nombre: mostrarNombre ?? true,
     })
     .select('id')
     .single()
@@ -33,7 +39,16 @@ export const POST: APIRoute = async ({ request }) => {
     if (categorias?.length) {
       await supabase
         .from('especialidades_tecnico')
-        .insert(categorias.map(c => ({ tecnico_id: tecnico.id, categoria_id: c.id })))
+        .insert(categorias.map(c => {
+          const subs = (subcategorias?.[c.nombre] ?? [])
+            .map((s: string) => s.trim())
+            .filter((s: string) => s.length > 0)
+          return {
+            tecnico_id:    tecnico.id,
+            categoria_id:  c.id,
+            subcategorias: subs.length ? subs : null,
+          }
+        }))
     }
   }
 

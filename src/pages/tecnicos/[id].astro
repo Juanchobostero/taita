@@ -12,10 +12,11 @@ const supabase = createSupabaseAdmin()
 const { data: raw } = await supabase
   .from('tecnicos')
   .select(`
-    id, descripcion, zona_cobertura, tarifa_hora,
+    id, descripcion, zona_cobertura, tarifa_hora, nick, mostrar_nombre,
     calificacion_promedio, total_servicios, activo,
     usuarios!inner ( nombre_completo, telefono, foto_url ),
     especialidades_tecnico (
+      subcategorias,
       categorias ( id, nombre, icono )
     )
   `)
@@ -38,8 +39,10 @@ const { data: rawResenas } = await supabase
 
 const resenas = (rawResenas ?? []) as ResenaConAutor[]
 
-const iniciales = tecnico.usuarios.nombre_completo
-  .split(' ').slice(0, 2).map(p => p[0]).join('')
+const nick           = (tecnico as any).nick as string | null
+const mostrarNombre  = (tecnico as any).mostrar_nombre as boolean ?? true
+const nombreDisplay  = nick || tecnico.usuarios.nombre_completo
+const iniciales      = nombreDisplay.split(' ').slice(0, 2).map((p: string) => p[0]).join('')
 const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nombre).filter(Boolean)
 ---
 
@@ -70,7 +73,10 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
 
         <div class="flex-1 flex flex-col gap-3">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">{tecnico.usuarios.nombre_completo}</h1>
+            <h1 class="text-2xl font-bold text-gray-900">{nombreDisplay}</h1>
+            {nick && mostrarNombre && (
+              <p class="text-sm text-gray-400">{tecnico.usuarios.nombre_completo}</p>
+            )}
             <p class="text-primary font-semibold">{especialidades[0] ?? 'Servicio general'}</p>
           </div>
           <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-500">
@@ -78,11 +84,25 @@ const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nom
             {tecnico.zona_cobertura && <span>📍 {tecnico.zona_cobertura}</span>}
           </div>
           {tecnico.descripcion && <p class="text-gray-600 leading-relaxed text-sm sm:text-base">{tecnico.descripcion}</p>}
-          {especialidades.length > 0 && (
-            <div class="flex flex-wrap gap-2 mt-1">
-              {especialidades.map(e => (
-                <span class="bg-primary-soft text-primary text-xs font-medium px-3 py-1 rounded-full">{e}</span>
-              ))}
+          {tecnico.especialidades_tecnico.length > 0 && (
+            <div class="flex flex-col gap-2 mt-1">
+              {tecnico.especialidades_tecnico.map(esp => {
+                const subs = (esp as any).subcategorias as string[] | null
+                return (
+                  <div class="flex flex-col gap-1">
+                    <span class="bg-primary-soft text-primary text-xs font-medium px-3 py-1 rounded-full w-fit">
+                      {esp.categorias?.nombre}
+                    </span>
+                    {subs?.length && (
+                      <div class="flex flex-wrap gap-1 pl-2">
+                        {subs.map(s => (
+                          <span class="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{s}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

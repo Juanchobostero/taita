@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -21,6 +21,15 @@ interface Props {
   tecnicoNombre:       string | null
   categorias:          CategoriaOpt[]
   defaultCategoriaId?: string | null
+}
+
+interface Candidato {
+  id:                    string
+  nombre_display:        string
+  foto_url:              string | null
+  calificacion_promedio: number
+  total_servicios:       number
+  zona:                  string
 }
 
 const schema = z.object({
@@ -53,6 +62,21 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
   })
 
   const categoriaId = watch('categoria_id')
+
+  const [candidatos, setCandidatos]         = useState<Candidato[]>([])
+  const [loadingCands, setLoadingCands]     = useState(false)
+  const [verTodos, setVerTodos]             = useState(false)
+
+  useEffect(() => {
+    if (tecnicoId || !categoriaId) { setCandidatos([]); return }
+    setLoadingCands(true)
+    setVerTodos(false)
+    fetch(`/api/tecnicos-por-categoria?categoria_id=${categoriaId}`)
+      .then(r => r.json())
+      .then(({ tecnicos }) => setCandidatos(tecnicos ?? []))
+      .catch(() => setCandidatos([]))
+      .finally(() => setLoadingCands(false))
+  }, [categoriaId, tecnicoId])
 
   const { tasa, precioBase, total } = useMemo(() => {
     const cat      = categorias.find(c => c.id === categoriaId)
@@ -132,6 +156,76 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
         </div>
         <FieldError msg={errors.categoria_id?.message} />
       </div>
+
+      {/* Técnicos candidatos — solo en flujo libre */}
+      {!tecnicoId && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-700">Técnicos disponibles</p>
+              <p className="text-xs text-gray-400">Solo informativo — nuestro equipo asignará el más adecuado</p>
+            </div>
+          </div>
+
+          {loadingCands && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="rounded-xl border border-cream-dark bg-white p-3 flex flex-col items-center gap-2 animate-pulse">
+                  <div className="w-12 h-12 rounded-full bg-gray-100" />
+                  <div className="w-20 h-3 bg-gray-100 rounded" />
+                  <div className="w-14 h-3 bg-gray-100 rounded" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!loadingCands && candidatos.length === 0 && categoriaId && (
+            <p className="text-xs text-gray-400 text-center py-3">No hay técnicos activos para esta categoría todavía.</p>
+          )}
+
+          {!loadingCands && candidatos.length > 0 && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(verTodos ? candidatos : candidatos.slice(0, 4)).map(c => (
+                  <div key={c.id} className="rounded-xl border border-cream-dark bg-white p-3 flex flex-col items-center gap-2 text-center">
+                    {c.foto_url
+                      ? <img src={c.foto_url} alt={c.nombre_display} className="w-12 h-12 rounded-full object-cover" />
+                      : (
+                        <div className="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-base">
+                          {c.nombre_display.charAt(0).toUpperCase()}
+                        </div>
+                      )
+                    }
+                    <p className="text-xs font-semibold text-gray-800 leading-tight line-clamp-1">{c.nombre_display}</p>
+                    <div className="flex items-center gap-0.5">
+                      <svg className="w-3 h-3 text-amber-400 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                      <span className="text-xs text-gray-600">{c.calificacion_promedio > 0 ? c.calificacion_promedio.toFixed(1) : '—'}</span>
+                      {c.total_servicios > 0 && <span className="text-xs text-gray-400">({c.total_servicios})</span>}
+                    </div>
+                    {c.zona && <p className="text-xs text-gray-400 leading-tight line-clamp-1">{c.zona}</p>}
+                    <a
+                      href={`/tecnicos/${c.id}`}
+                      target="_blank"
+                      className="text-xs text-primary hover:underline font-medium mt-0.5"
+                    >
+                      Ver perfil
+                    </a>
+                  </div>
+                ))}
+              </div>
+              {candidatos.length > 4 && (
+                <button
+                  type="button"
+                  onClick={() => setVerTodos(v => !v)}
+                  className="text-xs text-primary hover:underline font-medium w-fit mx-auto"
+                >
+                  {verTodos ? 'Ver menos' : `Ver más técnicos (${candidatos.length - 4} más)`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Título */}
       <div className="flex flex-col gap-1.5">

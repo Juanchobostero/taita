@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -19,15 +18,22 @@ const base = {
   password: z.string().min(8, 'Mínimo 8 caracteres'),
 }
 
-const clienteSchema = z.object({ ...base, barrio: z.string().min(2, 'Ingresá tu barrio') })
+const clienteSchema = z.object({
+  ...base,
+  barrio:     z.string().min(2, 'Ingresá tu barrio'),
+  terminos:   z.boolean().refine(v => v === true, 'Debés aceptar los términos y condiciones'),
+  privacidad: z.boolean().refine(v => v === true, 'Debés aceptar la política de privacidad'),
+})
 
 const tecnicoSchema = z.object({
   ...base,
+  nick:           z.string().max(30, 'Máximo 30 caracteres').optional(),
+  mostrar_nombre: z.boolean().optional(),
   especialidades: z.array(z.string()).min(1, 'Seleccioná al menos una especialidad'),
-  experiencia:  z.coerce.number({ invalid_type_error: 'Ingresá un número' }).min(0).max(60),
-  zona:         z.string().min(2, 'Ingresá tu zona de trabajo'),
-  descripcion:  z.string().min(20, 'Mínimo 20 caracteres'),
-  cvu:          z.string().regex(/^\d{22}$/, 'El CVU debe tener exactamente 22 dígitos').optional().or(z.literal('')),
+  experiencia:    z.coerce.number().min(0, 'Ingresá un número válido').max(60),
+  zona:           z.string().min(2, 'Ingresá tu zona de trabajo'),
+  descripcion:    z.string().min(20, 'Mínimo 20 caracteres'),
+  cvu:            z.string().regex(/^\d{22}$/, 'El CVU o CBU debe tener exactamente 22 dígitos'),
 })
 
 type ClienteData = z.infer<typeof clienteSchema>
@@ -59,18 +65,6 @@ function ServerError({ msg }: { msg: string }) {
   )
 }
 
-function SuccessMessage({ tipo }: { tipo: 'cliente' | 'tecnico' }) {
-  return (
-    <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl px-4 py-4 text-center flex flex-col gap-2">
-      <p className="font-semibold">¡Cuenta creada!</p>
-      {tipo === 'tecnico'
-        ? <p>Tu perfil está pendiente de aprobación. Te avisaremos cuando esté activo.</p>
-        : <p>Redirigiendo a tu panel...</p>
-      }
-    </div>
-  )
-}
-
 // ── Tabs ───────────────────────────────────────────────────────────────────
 function Tabs({ tipo, onChange }: { tipo: 'cliente' | 'tecnico'; onChange: (t: 'cliente' | 'tecnico') => void }) {
   return (
@@ -93,7 +87,6 @@ function Tabs({ tipo, onChange }: { tipo: 'cliente' | 'tecnico'; onChange: (t: '
 // ── Cliente form ───────────────────────────────────────────────────────────
 function ClienteForm() {
   const [serverError, setServerError] = useState('')
-  const [success, setSuccess]         = useState(false)
   const params     = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
   const redirectTo = params.get('redirect')
 
@@ -103,29 +96,21 @@ function ClienteForm() {
 
   const onSubmit = async (data: ClienteData) => {
     setServerError('')
-    const { data: authData, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
       options: {
+        emailRedirectTo: `${window.location.origin}/`,
         data: {
           nombre_completo: `${data.nombre} ${data.apellido}`,
           tipo: 'cliente',
+          telefono: data.telefono,
         },
       },
     })
     if (error) { setServerError(error.message); return }
-    if (authData.user) {
-      // Actualizar teléfono en usuarios (el trigger no lo incluye)
-      await supabase
-        .from('usuarios')
-        .update({ telefono: data.telefono })
-        .eq('id', authData.user.id)
-    }
-    setSuccess(true)
-    setTimeout(() => { window.location.href = redirectTo ?? '/dashboard/cliente' }, 1500)
+    window.location.href = `/verificar-email?email=${encodeURIComponent(data.email)}`
   }
-
-  if (success) return <SuccessMessage tipo="cliente" />
 
   const err = (f: keyof ClienteData) => errors[f]?.message
   const ecls = (f: keyof ClienteData) => err(f) ? 'border-destructive' : ''
@@ -152,6 +137,39 @@ function ClienteForm() {
       <Field label="Contraseña" error={err('password')}>
         <Input type="password" placeholder="Mínimo 8 caracteres" {...register('password')} className={ecls('password')} />
       </Field>
+      {/* Checkboxes legales */}
+      <div className="flex flex-col gap-2">
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            {...register('terminos')}
+            className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer shrink-0"
+          />
+          <span className="text-sm text-gray-600">
+            Acepto los{' '}
+            <a href="/terminos" target="_blank" className="text-primary hover:underline font-medium">
+              Términos y condiciones
+            </a>
+          </span>
+        </label>
+        {errors.terminos && <p className="text-xs text-destructive ml-6">{errors.terminos.message}</p>}
+
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            {...register('privacidad')}
+            className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer shrink-0"
+          />
+          <span className="text-sm text-gray-600">
+            He leído la{' '}
+            <a href="/privacidad" target="_blank" className="text-primary hover:underline font-medium">
+              Política de privacidad
+            </a>
+          </span>
+        </label>
+        {errors.privacidad && <p className="text-xs text-destructive ml-6">{errors.privacidad.message}</p>}
+      </div>
+
       <ServerError msg={serverError} />
       <Button type="submit" disabled={isSubmitting} className="w-full" size="lg">
         {isSubmitting ? 'Creando cuenta...' : 'Crear mi cuenta'}
@@ -167,11 +185,41 @@ function ClienteForm() {
 // ── Técnico form ───────────────────────────────────────────────────────────
 function TecnicoForm({ especialidades }: { especialidades: string[] }) {
   const [serverError, setServerError] = useState('')
-  const [success, setSuccess] = useState(false)
+  const [subcats, setSubcats]         = useState<Record<string, string[]>>({})
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<TecnicoData>({
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<TecnicoData>({
     resolver: zodResolver(tecnicoSchema),
   })
+
+  const raw = watch('especialidades')
+  const selectedEsps: string[] = Array.isArray(raw) ? raw : []
+
+  const toggleSubcat = (esp: string, checked: boolean) => {
+    setSubcats(prev => {
+      if (checked && !prev[esp]) return { ...prev, [esp]: [''] }
+      if (!checked) { const next = { ...prev }; delete next[esp]; return next }
+      return prev
+    })
+  }
+
+  const updateSubcat = (esp: string, idx: number, val: string) => {
+    setSubcats(prev => {
+      const arr = [...(prev[esp] ?? [])]
+      arr[idx] = val
+      return { ...prev, [esp]: arr }
+    })
+  }
+
+  const addSubcat = (esp: string) => {
+    setSubcats(prev => ({ ...prev, [esp]: [...(prev[esp] ?? []), ''] }))
+  }
+
+  const removeSubcat = (esp: string, idx: number) => {
+    setSubcats(prev => {
+      const arr = (prev[esp] ?? []).filter((_, i) => i !== idx)
+      return { ...prev, [esp]: arr.length ? arr : [''] }
+    })
+  }
 
   const onSubmit = async (data: TecnicoData) => {
     setServerError('')
@@ -179,6 +227,7 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
       email: data.email,
       password: data.password,
       options: {
+        emailRedirectTo: `${window.location.origin}/`,
         data: {
           nombre_completo: `${data.nombre} ${data.apellido}`,
           tipo: 'tecnico',
@@ -188,22 +237,19 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
     if (error) { setServerError(error.message); return }
 
     if (authData.user) {
-      // Actualizar teléfono
-      await supabase
-        .from('usuarios')
-        .update({ telefono: data.telefono })
-        .eq('id', authData.user.id)
-
-      // Crear fila en tecnicos via endpoint servidor (service_role bypasea RLS)
       const res = await fetch('/api/registro-tecnico', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId:      authData.user.id,
-          descripcion: data.descripcion,
-          zona:        data.zona,
+          userId:         authData.user.id,
+          telefono:       data.telefono,
+          descripcion:    data.descripcion,
+          zona:           data.zona,
           especialidades: data.especialidades,
-          cvu:         data.cvu || null,
+          subcategorias:  subcats,
+          cvu:            data.cvu || null,
+          nick:           data.nick?.trim() || null,
+          mostrarNombre:  data.mostrar_nombre ?? true,
         }),
       })
       if (!res.ok) {
@@ -213,10 +259,8 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
       }
     }
 
-    setSuccess(true)
+    window.location.href = `/verificar-email?email=${encodeURIComponent(data.email)}`
   }
-
-  if (success) return <SuccessMessage tipo="tecnico" />
 
   const err = (f: keyof TecnicoData) => errors[f]?.message
   const ecls = (f: keyof TecnicoData) => err(f) ? 'border-destructive' : ''
@@ -231,6 +275,19 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
           <Input placeholder="González" {...register('apellido')} className={ecls('apellido')} />
         </Field>
       </div>
+      <label className="flex items-center gap-2 cursor-pointer w-fit">
+        <input
+          type="checkbox"
+          defaultChecked
+          {...register('mostrar_nombre')}
+          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+        />
+        <span className="text-sm text-gray-600">Mostrar mi nombre completo en el perfil público</span>
+      </label>
+      <Field label="NickTaita (opcional)" error={err('nick')}>
+        <Input placeholder="Ej: JuanRepara" maxLength={30} {...register('nick')} className={ecls('nick')} />
+        <p className="text-xs text-gray-400">Será el nombre visible para los clientes. Si no lo completás, se usará tu nombre.</p>
+      </Field>
       <Field label="Correo electrónico" error={err('email')}>
         <Input type="email" placeholder="tu@email.com" {...register('email')} className={ecls('email')} />
       </Field>
@@ -239,18 +296,53 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
       </Field>
       <div className="flex flex-col gap-1.5">
         <Label>Especialidades <span className="text-gray-400 text-xs">(seleccioná todas las que apliquen)</span></Label>
-        <div className="grid grid-cols-2 gap-2">
-          {especialidades.map(e => (
-            <label key={e} className="flex items-center gap-2 cursor-pointer group">
-              <input
-                type="checkbox"
-                value={e}
-                {...register('especialidades')}
-                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-              />
-              <span className="text-sm text-gray-700 group-hover:text-primary transition-colors">{e}</span>
-            </label>
-          ))}
+        <div className="flex flex-col gap-2">
+          {especialidades.map(e => {
+            const checked = selectedEsps.includes(e)
+            const subs    = subcats[e] ?? []
+            return (
+              <div key={e} className={`border rounded-xl transition-colors ${checked ? 'border-primary-pale bg-primary-soft/30' : 'border-cream-dark'}`}>
+                <label className="flex items-center gap-2.5 cursor-pointer p-3">
+                  <input
+                    type="checkbox"
+                    value={e}
+                    {...register('especialidades', {
+                      onChange: (ev) => toggleSubcat(e, ev.target.checked)
+                    })}
+                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer shrink-0"
+                  />
+                  <span className={`text-sm font-medium transition-colors ${checked ? 'text-primary' : 'text-gray-700'}`}>{e}</span>
+                </label>
+
+                {checked && (
+                  <div className="px-3 pb-3 flex flex-col gap-2 border-t border-primary-pale pt-2.5">
+                    <p className="text-xs text-primary font-medium">Subcategorías <span className="text-gray-400 font-normal">(opcional — ej: Reparación, Instalación)</span></p>
+                    {subs.map((val, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 w-4 shrink-0">{idx + 1}.</span>
+                        <input
+                          type="text"
+                          value={val}
+                          maxLength={40}
+                          placeholder={`Subcategoría ${idx + 1}`}
+                          onChange={ev => updateSubcat(e, idx, ev.target.value)}
+                          className="flex-1 border border-cream-dark rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary bg-white"
+                        />
+                        {subs.length > 1 && (
+                          <button type="button" onClick={() => removeSubcat(e, idx)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+                        )}
+                      </div>
+                    ))}
+                    {subs.length < 5 && (
+                      <button type="button" onClick={() => addSubcat(e)} className="text-xs text-primary hover:underline w-fit mt-0.5">
+                        + Agregar subcategoría
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
         {errors.especialidades && (
           <p className="text-xs text-destructive mt-1">{errors.especialidades.message as string}</p>
@@ -264,7 +356,7 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
           <Input placeholder="Ej: Centro, toda la ciudad..." {...register('zona')} className={ecls('zona')} />
         </Field>
       </div>
-      <Field label="CVU (opcional)" error={err('cvu')}>
+      <Field label="CVU o CBU" error={err('cvu')}>
         <Input
           type="text"
           inputMode="numeric"
@@ -273,7 +365,7 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
           {...register('cvu')}
           className={ecls('cvu')}
         />
-        <p className="text-xs text-gray-400">Podés agregarlo después desde tu panel.</p>
+        <p className="text-xs text-gray-400">Necesario para recibir pagos por tus servicios.</p>
       </Field>
       <Field label="Descripción breve" error={err('descripcion')}>
         <Textarea rows={3} placeholder="Contanos sobre tu experiencia (mínimo 20 caracteres)..." {...register('descripcion')} className={ecls('descripcion')} />
@@ -285,6 +377,12 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
       <Button type="submit" disabled={isSubmitting} className="w-full" size="lg">
         {isSubmitting ? 'Registrando...' : 'Registrarme como técnico'}
       </Button>
+      <div className="bg-primary-soft border border-primary-pale rounded-xl px-4 py-3 flex items-start gap-2.5 text-sm text-primary">
+        <svg className="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </svg>
+        <span>Validaremos tu identidad para garantizar la seguridad de nuestros clientes. Te solicitaremos documentación después de completar tu registro.</span>
+      </div>
       <p className="text-center text-sm text-gray-500">
         ¿Ya tenés cuenta?{' '}
         <a href="/login" className="text-primary hover:text-primary-hover font-medium">Ingresá aquí</a>

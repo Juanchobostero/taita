@@ -26,14 +26,6 @@ if (Astro.request.method === 'POST') {
     const tecnicoId = form.get('tecnicoId')?.toString()
     if (tecnicoId) await supabase.from('tecnicos').delete().eq('id', tecnicoId)
 
-  } else if (accion === 'cambiar-estado') {
-    const solicitudId = form.get('solicitudId')?.toString()
-    const estado      = form.get('estado')?.toString()
-    const validos     = ['pendiente', 'aceptada', 'en_curso', 'completada', 'cancelada']
-    if (solicitudId && estado && validos.includes(estado)) {
-      await supabase.from('solicitudes').update({ estado }).eq('id', solicitudId)
-    }
-
   } else if (accion === 'asignar-tecnico') {
     const solicitudId = form.get('solicitudId')?.toString()
     const tecnicoId   = form.get('tecnicoId')?.toString()
@@ -233,7 +225,6 @@ const estadoColor: Record<string, string> = {
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Técnico</th>
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Asignar</th>
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Estado</th>
-                  <th class="px-6 py-3 text-xs font-semibold text-gray-500">Cambiar</th>
                   <th class="px-6 py-3 text-xs font-semibold text-gray-500">Fecha</th>
                   <th class="px-6 py-3"></th>
                 </tr>
@@ -268,18 +259,6 @@ const estadoColor: Record<string, string> = {
                       <span class={`text-xs font-medium px-2.5 py-1 rounded-full ${estadoColor[s.estado] ?? 'bg-gray-100 text-gray-500'}`}>
                         {s.estado.replace('_', ' ')}
                       </span>
-                    </td>
-                    <td class="px-4 py-3">
-                      <form method="POST" class="flex items-center gap-1.5">
-                        <input type="hidden" name="accion" value="cambiar-estado" />
-                        <input type="hidden" name="solicitudId" value={s.id} />
-                        <select name="estado" class="text-xs border border-cream-dark rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary bg-white">
-                          {(['pendiente','aceptada','en_curso','completada','cancelada'] as const).map(e => (
-                            <option value={e} selected={s.estado === e}>{e.replace('_',' ')}</option>
-                          ))}
-                        </select>
-                        <button type="submit" class="text-xs bg-primary hover:bg-primary-hover text-white font-bold px-2.5 py-1.5 rounded-lg transition-colors">✓</button>
-                      </form>
                     </td>
                     <td class="px-6 py-3 text-gray-400 whitespace-nowrap">
                       {new Date(s.creado_en).toLocaleDateString('es-AR')}
