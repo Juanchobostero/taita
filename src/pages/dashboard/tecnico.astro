@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
 import AvatarUpload from '../../components/AvatarUpload'
 import GestionEspecialidades from '../../components/GestionEspecialidades'
+import CompletarTrabajo from '../../components/CompletarTrabajo'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
 import type { TecnicoConUsuario, SolicitudParaTecnico } from '../../lib/types'
 
@@ -16,25 +17,21 @@ if (Astro.request.method === 'POST') {
   const { data: tec } = await supabase.from('tecnicos').select('id, total_servicios').eq('usuario_id', userId).single()
 
   if (solicitudId && tec && (accion === 'aceptar' || accion === 'rechazar')) {
-    await supabase
-      .from('solicitudes')
-      .update({ estado: accion === 'aceptar' ? 'aceptada' : 'cancelada' })
-      .eq('id', solicitudId)
-      .eq('tecnico_id', tec.id)
-
-  } else if (accion === 'completar' && solicitudId && tec) {
-    const { data: sol } = await supabase
-      .from('solicitudes')
-      .select('estado')
-      .eq('id', solicitudId)
-      .eq('tecnico_id', tec.id)
-      .single()
-    if (sol && ['aceptada', 'en_curso'].includes(sol.estado)) {
-      await Promise.all([
-        supabase.from('solicitudes').update({ estado: 'completada' }).eq('id', solicitudId),
-        supabase.from('tecnicos').update({ total_servicios: (tec.total_servicios ?? 0) + 1 }).eq('id', tec.id),
-      ])
+    if (accion === 'aceptar') {
+      await supabase
+        .from('solicitudes')
+        .update({ estado: 'aceptada' })
+        .eq('id', solicitudId)
+        .eq('tecnico_id', tec.id)
+    } else {
+      // Rechazar: volver a pendiente y desasignar técnico
+      await supabase
+        .from('solicitudes')
+        .update({ estado: 'pendiente', tecnico_id: null })
+        .eq('id', solicitudId)
+        .eq('tecnico_id', tec.id)
     }
+
   }
   return Astro.redirect('/dashboard/tecnico')
 }
@@ -62,7 +59,9 @@ const { data: todasCategorias } = await supabase
 const { data: rawSolicitudes } = await supabase
   .from('solicitudes')
   .select(`
-    id, titulo, estado, total_estimado, fecha_solicitada, creado_en, direccion,
+    id, titulo, estado, total_estimado, precio_base, tasa_aplicada,
+    gastos_extra, descripcion_gastos, imagenes_trabajo,
+    fecha_solicitada, creado_en, direccion,
     usuarios!cliente_id ( nombre_completo, telefono ),
     categorias ( nombre, icono )
   `)
@@ -177,32 +176,14 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
                       ${Number(s.total_estimado).toLocaleString('es-AR')}
                     </span>
                   )}
-                  {s.estado === 'pendiente' && (
-                    <div class="flex gap-2">
-                      <form method="POST">
-                        <input type="hidden" name="solicitudId" value={s.id} />
-                        <input type="hidden" name="accion" value="aceptar" />
-                        <button type="submit" class="text-xs bg-[#1B4D2E] hover:bg-primary-hover text-white font-medium px-3 py-1.5 rounded-full transition-colors">
-                          Aceptar
-                        </button>
-                      </form>
-                      <form method="POST">
-                        <input type="hidden" name="solicitudId" value={s.id} />
-                        <input type="hidden" name="accion" value="rechazar" />
-                        <button type="submit" class="text-xs border border-cream-dark hover:border-red-300 hover:text-red-500 text-gray-500 font-medium px-3 py-1.5 rounded-full transition-colors">
-                          Rechazar
-                        </button>
-                      </form>
-                    </div>
-                  )}
                   {(s.estado === 'aceptada' || s.estado === 'en_curso') && (
-                    <form method="POST">
-                      <input type="hidden" name="solicitudId" value={s.id} />
-                      <input type="hidden" name="accion" value="completar" />
-                      <button type="submit" class="text-xs bg-primary-soft hover:bg-primary text-primary hover:text-white border border-primary-pale font-medium px-3 py-1.5 rounded-full transition-colors">
-                        ✓ Marcar completado
-                      </button>
-                    </form>
+                    <CompletarTrabajo
+                      client:load
+                      solicitudId={s.id}
+                      tecnicoId={tecnico.id}
+                      precioBase={(s as any).precio_base ?? null}
+                      tasa={(s as any).tasa_aplicada ?? null}
+                    />
                   )}
                 </div>
               </div>

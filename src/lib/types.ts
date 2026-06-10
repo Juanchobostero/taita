@@ -36,20 +36,23 @@ export interface Categoria {
 }
 
 export interface Solicitud {
-  id:               string
-  cliente_id:       string
-  tecnico_id:       string | null
-  categoria_id:     string
-  titulo:           string
-  descripcion:      string | null
-  horas_estimadas:  number | null
-  precio_base:      number | null
-  tasa_aplicada:    number | null
-  total_estimado:   number | null
-  fecha_solicitada: string | null
-  direccion:        string | null
-  estado:           SolicitudEstado
-  creado_en:        string
+  id:                  string
+  cliente_id:          string
+  tecnico_id:          string | null
+  categoria_id:        string
+  titulo:              string
+  descripcion:         string | null
+  horas_estimadas:     number | null
+  precio_base:         number | null
+  tasa_aplicada:       number | null
+  total_estimado:      number | null
+  fecha_solicitada:    string | null
+  direccion:           string | null
+  estado:              SolicitudEstado
+  creado_en:           string
+  gastos_extra:        number | null
+  descripcion_gastos:  string | null
+  imagenes_trabajo:    string[] | null
 }
 
 export interface Resena {

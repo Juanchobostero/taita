@@ -20,9 +20,8 @@ const base = {
 
 const clienteSchema = z.object({
   ...base,
-  barrio:     z.string().min(2, 'Ingresá tu barrio'),
-  terminos:   z.boolean().refine(v => v === true, 'Debés aceptar los términos y condiciones'),
-  privacidad: z.boolean().refine(v => v === true, 'Debés aceptar la política de privacidad'),
+  barrio:   z.string().min(2, 'Ingresá tu barrio'),
+  terminos: z.boolean().refine(v => v === true, 'Debés aceptar los términos y condiciones'),
 })
 
 const tecnicoSchema = z.object({
@@ -34,6 +33,7 @@ const tecnicoSchema = z.object({
   zona:           z.string().min(2, 'Ingresá tu zona de trabajo'),
   descripcion:    z.string().min(20, 'Mínimo 20 caracteres'),
   cvu:            z.string().regex(/^\d{22}$/, 'El CVU o CBU debe tener exactamente 22 dígitos'),
+  terminos:       z.boolean().refine(v => v === true, 'Debés aceptar los términos y condiciones'),
 })
 
 type ClienteData = z.infer<typeof clienteSchema>
@@ -137,7 +137,7 @@ function ClienteForm() {
       <Field label="Contraseña" error={err('password')}>
         <Input type="password" placeholder="Mínimo 8 caracteres" {...register('password')} className={ecls('password')} />
       </Field>
-      {/* Checkboxes legales */}
+      {/* Checkbox T&C */}
       <div className="flex flex-col gap-2">
         <label className="flex items-start gap-2.5 cursor-pointer">
           <input
@@ -153,21 +153,6 @@ function ClienteForm() {
           </span>
         </label>
         {errors.terminos && <p className="text-xs text-destructive ml-6">{errors.terminos.message}</p>}
-
-        <label className="flex items-start gap-2.5 cursor-pointer">
-          <input
-            type="checkbox"
-            {...register('privacidad')}
-            className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer shrink-0"
-          />
-          <span className="text-sm text-gray-600">
-            He leído la{' '}
-            <a href="/privacidad" target="_blank" className="text-primary hover:underline font-medium">
-              Política de privacidad
-            </a>
-          </span>
-        </label>
-        {errors.privacidad && <p className="text-xs text-destructive ml-6">{errors.privacidad.message}</p>}
       </div>
 
       <ServerError msg={serverError} />
@@ -259,7 +244,7 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
       }
     }
 
-    window.location.href = `/verificar-email?email=${encodeURIComponent(data.email)}`
+    window.location.href = '/dashboard/tecnico'
   }
 
   const err = (f: keyof TecnicoData) => errors[f]?.message
@@ -373,6 +358,23 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
       <Field label="Contraseña" error={err('password')}>
         <Input type="password" placeholder="Mínimo 8 caracteres" {...register('password')} className={ecls('password')} />
       </Field>
+      {/* Checkbox T&C */}
+      <div className="flex flex-col gap-2">
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            {...register('terminos')}
+            className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer shrink-0"
+          />
+          <span className="text-sm text-gray-600">
+            Acepto los{' '}
+            <a href="/terminos" target="_blank" className="text-primary hover:underline font-medium">
+              Términos y condiciones
+            </a>
+          </span>
+        </label>
+        {errors.terminos && <p className="text-xs text-destructive ml-6">{errors.terminos.message}</p>}
+      </div>
       <ServerError msg={serverError} />
       <Button type="submit" disabled={isSubmitting} className="w-full" size="lg">
         {isSubmitting ? 'Registrando...' : 'Registrarme como técnico'}

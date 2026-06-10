@@ -1,6 +1,7 @@
 ---
 import Layout from '../../../../layouts/Layout.astro'
 import Navbar from '../../../../components/Navbar'
+import GaleriaFotos from '../../../../components/GaleriaFotos'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
 
 const { id } = Astro.params
@@ -32,16 +33,10 @@ if (Astro.request.method === 'POST') {
   } else if (accion === 'asignar-tecnico') {
     const tecnicoId = form.get('tecnicoId')?.toString()
     if (tecnicoId) {
-      await supabase.from('solicitudes')
+      const { error } = await supabase.from('solicitudes')
         .update({ tecnico_id: tecnicoId, estado: 'aceptada' })
         .eq('id', id)
-    }
-  } else {
-    // backward compat: form sin accion = cambiar estado
-    const estado  = form.get('estado')?.toString()
-    const validos = ['pendiente', 'aceptada', 'en_curso', 'completada', 'cancelada']
-    if (estado && validos.includes(estado)) {
-      await supabase.from('solicitudes').update({ estado }).eq('id', id)
+      if (error) console.error('[asignar-tecnico]', error.message)
     }
   }
   return Astro.redirect(`/dashboard/admin/solicitud/${id}`)
@@ -53,6 +48,7 @@ const { data: sol } = await supabase
     id, titulo, descripcion, estado, creado_en,
     tecnico_id, categoria_id,
     horas_estimadas, precio_base, tasa_aplicada, total_estimado,
+    gastos_extra, descripcion_gastos, imagenes_trabajo,
     fecha_solicitada, direccion,
     usuarios!cliente_id ( nombre_completo, telefono, email ),
     tecnicos ( tarifa_hora, usuarios ( nombre_completo, telefono ) ),
@@ -84,6 +80,9 @@ const tasa               = sol.tasa_aplicada        as number | null
 const total              = sol.total_estimado       as number | null
 const gananciaPlataforma = (precioBase != null && total != null) ? total - precioBase : null
 const cobrarAlTecnico    = precioBase
+const gastosExtra        = sol.gastos_extra         as number | null
+const descGastos         = sol.descripcion_gastos   as string | null
+const imagenesTrabajo    = (sol.imagenes_trabajo    as string[] | null) ?? []
 
 const estadoLabel: Record<string, string> = {
   pendiente:  'Pendiente',
@@ -230,6 +229,30 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
               )}
             </div>
           </div>
+
+          <!-- Cierre del trabajo (fotos + gastos) -->
+          {sol.estado === 'completada' && (imagenesTrabajo.length > 0 || gastosExtra != null) && (
+            <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
+              <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Cierre del trabajo</h2>
+
+              {imagenesTrabajo.length > 0 && (
+                <div class="flex flex-col gap-2">
+                  <span class="text-xs text-gray-400 uppercase tracking-wide">Fotos del trabajo</span>
+                  <GaleriaFotos urls={imagenesTrabajo} client:load />
+                </div>
+              )}
+
+              {gastosExtra != null && gastosExtra > 0 && (
+                <div class="flex flex-col gap-2">
+                  <span class="text-xs text-gray-400 uppercase tracking-wide">Gastos extras declarados</span>
+                  <div class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 flex flex-col gap-1">
+                    <p class="font-semibold text-amber-800 text-sm">${gastosExtra.toLocaleString('es-AR')}</p>
+                    {descGastos && <p class="text-xs text-amber-700">{descGastos}</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
 

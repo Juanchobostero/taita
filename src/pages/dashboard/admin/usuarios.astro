@@ -1,0 +1,62 @@
+---
+import Layout from '../../../layouts/Layout.astro'
+import Navbar from '../../../components/Navbar'
+import GestionUsuarios from '../../../components/GestionUsuarios'
+import { createSupabaseAdmin } from '../../../lib/supabase-admin'
+
+const supabase = createSupabaseAdmin()
+const userId   = Astro.locals.user!.id
+
+const { data: self } = await supabase.from('usuarios').select('tipo').eq('id', userId).single()
+if (self?.tipo !== 'admin') return Astro.redirect('/dashboard/cliente')
+
+const [{ data: rawClientes }, { data: rawTecnicos }] = await Promise.all([
+  supabase
+    .from('usuarios')
+    .select('id, nombre_completo, email, telefono, creado_en')
+    .eq('tipo', 'cliente')
+    .order('creado_en', { ascending: false })
+    .limit(50),
+  supabase
+    .from('tecnicos')
+    .select(`
+      id, activo, zona_cobertura, tarifa_hora, nick, mostrar_nombre, descripcion,
+      usuarios!inner ( id, nombre_completo, email, telefono, creado_en )
+    `)
+    .order('usuarios(nombre_completo)')
+    .limit(50),
+])
+
+const clientes = rawClientes ?? []
+const tecnicos = (rawTecnicos ?? []).map((t: any) => ({
+  tecnicoId:       t.id,
+  activo:          t.activo,
+  zona_cobertura:  t.zona_cobertura,
+  tarifa_hora:     t.tarifa_hora,
+  nick:            t.nick,
+  mostrar_nombre:  t.mostrar_nombre,
+  descripcion:     t.descripcion,
+  usuarioId:       t.usuarios.id,
+  nombre_completo: t.usuarios.nombre_completo,
+  email:           t.usuarios.email,
+  telefono:        t.usuarios.telefono,
+  creado_en:       t.usuarios.creado_en,
+}))
+---
+
+<Layout title="Usuarios — Admin Taita">
+  <Navbar client:load />
+
+  <div class="bg-cream min-h-screen py-8 px-4">
+    <div class="max-w-5xl mx-auto flex flex-col gap-6">
+
+      <div>
+        <a href="/dashboard/admin" class="text-xs text-gray-400 hover:text-primary transition-colors">← Panel admin</a>
+        <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl mt-1">Gestión de usuarios</h1>
+      </div>
+
+      <GestionUsuarios client:load clientes={clientes} tecnicos={tecnicos} />
+
+    </div>
+  </div>
+</Layout>

@@ -1,6 +1,16 @@
 ---
 import Layout from '../layouts/Layout.astro'
 import Navbar from '../components/Navbar'
+import { createSupabaseAdmin } from '../lib/supabase-admin'
+
+const supabase = createSupabaseAdmin()
+const { data: row } = await supabase
+  .from('configuracion')
+  .select('valor')
+  .eq('clave', 'terminos_y_condiciones')
+  .single()
+
+const contenidoDb: string | null = row?.valor ?? null
 ---
 
 <Layout title="Términos y condiciones — Taita Soluciones" description="Términos y condiciones de uso de Taita Soluciones.">
@@ -19,47 +29,46 @@ import Navbar from '../components/Navbar'
           <p class="text-gray-400 text-sm">Última actualización: junio 2026</p>
         </div>
 
-        <div class="flex flex-col gap-5 text-sm text-gray-600 leading-relaxed">
-          <section class="flex flex-col gap-2">
-            <h2 class="font-semibold text-gray-900 text-base">1. Aceptación de los términos</h2>
-            <p>Al registrarte y utilizar Taita Soluciones, aceptás cumplir con estos términos y condiciones. Si no estás de acuerdo, no debés utilizar el servicio.</p>
-          </section>
-
-          <section class="flex flex-col gap-2">
-            <h2 class="font-semibold text-gray-900 text-base">2. Descripción del servicio</h2>
-            <p>Taita Soluciones es una plataforma que conecta personas que necesitan servicios técnicos a domicilio con profesionales verificados. La plataforma actúa como intermediaria y no es responsable directa de la ejecución de los servicios contratados.</p>
-          </section>
-
-          <section class="flex flex-col gap-2">
-            <h2 class="font-semibold text-gray-900 text-base">3. Registro de usuarios</h2>
-            <p>Para utilizar el servicio debés registrarte con información veraz y actualizada. Sos responsable de mantener la confidencialidad de tu contraseña y de todas las actividades realizadas con tu cuenta.</p>
-          </section>
-
-          <section class="flex flex-col gap-2">
-            <h2 class="font-semibold text-gray-900 text-base">4. Conducta del usuario</h2>
-            <p>Te comprometés a utilizar la plataforma de manera responsable, sin publicar contenido falso, ofensivo o ilegal. Cualquier abuso puede resultar en la suspensión de tu cuenta.</p>
-          </section>
-
-          <section class="flex flex-col gap-2">
-            <h2 class="font-semibold text-gray-900 text-base">5. Pagos y tarifas</h2>
-            <p>Los precios de los servicios son acordados entre el cliente y el técnico, con una tasa de plataforma aplicada según la categoría del servicio. Taita Soluciones se reserva el derecho de modificar sus tarifas con previo aviso.</p>
-          </section>
-
-          <section class="flex flex-col gap-2">
-            <h2 class="font-semibold text-gray-900 text-base">6. Limitación de responsabilidad</h2>
-            <p>Taita Soluciones no garantiza la disponibilidad ininterrumpida del servicio y no se hace responsable por daños indirectos derivados del uso de la plataforma.</p>
-          </section>
-
-          <section class="flex flex-col gap-2">
-            <h2 class="font-semibold text-gray-900 text-base">7. Modificaciones</h2>
-            <p>Nos reservamos el derecho de modificar estos términos en cualquier momento. Los cambios serán notificados a través de la plataforma y entrarán en vigencia a partir de su publicación.</p>
-          </section>
-
-          <section class="flex flex-col gap-2">
-            <h2 class="font-semibold text-gray-900 text-base">8. Contacto</h2>
-            <p>Para consultas sobre estos términos podés contactarnos en <a href="/contacto" class="text-primary hover:underline">nuestra página de contacto</a>.</p>
-          </section>
-        </div>
+        {contenidoDb ? (
+          <div class="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
+            {contenidoDb}
+          </div>
+        ) : (
+          <div class="flex flex-col gap-5 text-sm text-gray-600 leading-relaxed">
+            <section class="flex flex-col gap-2">
+              <h2 class="font-semibold text-gray-900 text-base">1. Aceptación de los términos</h2>
+              <p>Al registrarte y utilizar Taita Soluciones, aceptás cumplir con estos términos y condiciones. Si no estás de acuerdo, no debés utilizar el servicio.</p>
+            </section>
+            <section class="flex flex-col gap-2">
+              <h2 class="font-semibold text-gray-900 text-base">2. Descripción del servicio</h2>
+              <p>Taita Soluciones es una plataforma que conecta personas que necesitan servicios técnicos a domicilio con profesionales verificados. La plataforma actúa como intermediaria y no es responsable directa de la ejecución de los servicios contratados.</p>
+            </section>
+            <section class="flex flex-col gap-2">
+              <h2 class="font-semibold text-gray-900 text-base">3. Registro de usuarios</h2>
+              <p>Para utilizar el servicio debés registrarte con información veraz y actualizada. Sos responsable de mantener la confidencialidad de tu contraseña y de todas las actividades realizadas con tu cuenta.</p>
+            </section>
+            <section class="flex flex-col gap-2">
+              <h2 class="font-semibold text-gray-900 text-base">4. Conducta del usuario</h2>
+              <p>Te comprometés a utilizar la plataforma de manera responsable, sin publicar contenido falso, ofensivo o ilegal. Cualquier abuso puede resultar en la suspensión de tu cuenta.</p>
+            </section>
+            <section class="flex flex-col gap-2">
+              <h2 class="font-semibold text-gray-900 text-base">5. Pagos y tarifas</h2>
+              <p>Los precios de los servicios son acordados entre el cliente y el técnico, con una tasa de plataforma aplicada según la categoría del servicio. Taita Soluciones se reserva el derecho de modificar sus tarifas con previo aviso.</p>
+            </section>
+            <section class="flex flex-col gap-2">
+              <h2 class="font-semibold text-gray-900 text-base">6. Limitación de responsabilidad</h2>
+              <p>Taita Soluciones no garantiza la disponibilidad ininterrumpida del servicio y no se hace responsable por daños indirectos derivados del uso de la plataforma.</p>
+            </section>
+            <section class="flex flex-col gap-2">
+              <h2 class="font-semibold text-gray-900 text-base">7. Modificaciones</h2>
+              <p>Nos reservamos el derecho de modificar estos términos en cualquier momento. Los cambios serán notificados a través de la plataforma y entrarán en vigencia a partir de su publicación.</p>
+            </section>
+            <section class="flex flex-col gap-2">
+              <h2 class="font-semibold text-gray-900 text-base">8. Contacto</h2>
+              <p>Para consultas sobre estos términos podés contactarnos en <a href="/contacto" class="text-primary hover:underline">nuestra página de contacto</a>.</p>
+            </section>
+          </div>
+        )}
       </div>
 
     </div>

@@ -1,0 +1,62 @@
+import type { APIRoute } from 'astro'
+import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseAdmin }  from '@/lib/supabase-admin'
+
+export const POST: APIRoute = async ({ request, cookies }) => {
+  try {
+    const supabaseUser = createSupabaseServer({ request, cookies })
+    const { data: { user } } = await supabaseUser.auth.getUser()
+    if (!user) return new Response(JSON.stringify({ error: 'No autenticado' }), { status: 401 })
+
+    const supabase = createSupabaseAdmin()
+
+    const { data: tec } = await supabase
+      .from('tecnicos')
+      .select('id, total_servicios')
+      .eq('usuario_id', user.id)
+      .single()
+    if (!tec) return new Response(JSON.stringify({ error: 'No sos técnico' }), { status: 403 })
+
+    const { solicitudId, imagenes, gastosExtra, descripcionGastos } = await request.json()
+    if (!solicitudId) return new Response(JSON.stringify({ error: 'solicitudId requerido' }), { status: 400 })
+
+    const { data: sol } = await supabase
+      .from('solicitudes')
+      .select('id, estado, precio_base, tasa_aplicada, total_estimado, tecnico_id')
+      .eq('id', solicitudId)
+      .single()
+
+    if (!sol || sol.tecnico_id !== tec.id) {
+      return new Response(JSON.stringify({ error: 'Solicitud no encontrada o no asignada a vos' }), { status: 403 })
+    }
+    if (!['aceptada', 'en_curso'].includes(sol.estado)) {
+      return new Response(JSON.stringify({ error: 'Solo podés completar solicitudes aceptadas o en curso' }), { status: 400 })
+    }
+
+    // Recalcular total si hay gastos extras
+    const gastosNum   = parseFloat(gastosExtra) || 0
+    const tasa        = (sol.tasa_aplicada ?? 0) / 100
+    const precioBase  = (sol.precio_base ?? 0) + gastosNum
+    const nuevoTotal  = gastosNum > 0
+      ? precioBase + Math.round(precioBase * tasa)
+      : sol.total_estimado
+
+    const updates: Record<string, unknown> = {
+      estado:              'completada',
+      gastos_extra:        gastosNum > 0 ? gastosNum : null,
+      descripcion_gastos:  descripcionGastos?.trim() || null,
+      imagenes_trabajo:    Array.isArray(imagenes) && imagenes.length > 0 ? imagenes : null,
+      total_estimado:      nuevoTotal,
+    }
+
+    await Promise.all([
+      supabase.from('solicitudes').update(updates).eq('id', solicitudId),
+      supabase.from('tecnicos').update({ total_servicios: (tec.total_servicios ?? 0) + 1 }).eq('id', tec.id),
+    ])
+
+    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+  } catch (err) {
+    console.error('[api/tecnico/completar]', err)
+    return new Response(JSON.stringify({ error: 'Error interno' }), { status: 500 })
+  }
+}

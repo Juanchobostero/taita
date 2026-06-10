@@ -1,0 +1,38 @@
+---
+import Layout from '../../../layouts/Layout.astro'
+import Navbar from '../../../components/Navbar'
+import EditorTerminos from '../../../components/EditorTerminos'
+import { createSupabaseAdmin } from '../../../lib/supabase-admin'
+
+const supabase = createSupabaseAdmin()
+const userId   = Astro.locals.user!.id
+
+const { data: self } = await supabase.from('usuarios').select('tipo').eq('id', userId).single()
+if (self?.tipo !== 'admin') return Astro.redirect('/dashboard/cliente')
+
+const { data: row } = await supabase
+  .from('configuracion')
+  .select('valor')
+  .eq('clave', 'terminos_y_condiciones')
+  .single()
+
+const contenidoActual: string = row?.valor ?? ''
+---
+
+<Layout title="Editor T&C — Admin Taita">
+  <Navbar client:load />
+
+  <div class="bg-cream min-h-screen py-8 px-4">
+    <div class="max-w-3xl mx-auto flex flex-col gap-6">
+
+      <div>
+        <a href="/dashboard/admin" class="text-xs text-gray-400 hover:text-primary transition-colors">← Panel admin</a>
+        <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl mt-1">Términos y condiciones</h1>
+        <p class="text-sm text-gray-400 mt-0.5">Editá el contenido que verán los usuarios en <a href="/terminos" target="_blank" class="underline">/terminos</a></p>
+      </div>
+
+      <EditorTerminos client:load contenido={contenidoActual} />
+
+    </div>
+  </div>
+</Layout>
