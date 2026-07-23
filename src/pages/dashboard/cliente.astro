@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
 import ResenaForm from '../../components/ResenaForm'
 import AvatarUpload from '../../components/AvatarUpload'
+import CancelarSolicitud from '../../components/CancelarSolicitud'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
 import type { SolicitudConRelaciones } from '../../lib/types'
 
@@ -19,7 +20,7 @@ const [{ data: usuario }, { data: rawSolicitudes }] = await Promise.all([
     .from('solicitudes')
     .select(`
       id, titulo, descripcion, estado, direccion, horas_estimadas, tecnico_id,
-      precio_base, tasa_aplicada, total_estimado, fecha_solicitada, creado_en,
+      precio_base, tasa_aplicada, total_estimado, fecha_solicitada, hora_solicitada, creado_en,
       tecnicos ( usuarios ( nombre_completo ) ),
       categorias ( nombre, icono ),
       resenas ( id )
@@ -115,8 +116,13 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
               const tasa     = s.tasa_aplicada as number | null
               const ganancia = (total != null && base != null) ? total - base : null
               const fmt      = (n: number) => `$${n.toLocaleString('es-AR')}`
-              const fecha    = new Date(s.fecha_solicitada ?? s.creado_en)
-                .toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+              // fecha_solicitada es una fecha "pura" guardada a medianoche UTC — se formatea en
+              // UTC para no correrla un día por el huso horario local. creado_en sí es un
+              // instante real, se muestra en hora local normalmente.
+              const fecha    = s.fecha_solicitada
+                ? new Date(s.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
+                : new Date(s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+              const hora     = (s as any).hora_solicitada ? (s as any).hora_solicitada.slice(0, 5) : null
               return (
                 <div class="px-6 py-5 flex flex-col gap-4">
 
@@ -125,7 +131,7 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
                     <div class="flex flex-col gap-1">
                       <p class="font-semibold text-gray-900">{s.titulo}</p>
                       <p class="text-xs text-gray-400">
-                        {cat?.icono} {cat?.nombre} · 📅 {fecha}
+                        {cat?.icono} {cat?.nombre} · 📅 {fecha}{hora && ` ${hora} hs`}
                       </p>
                     </div>
                     <span class={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 w-fit ${estadoColor[s.estado]}`}>
@@ -184,6 +190,11 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
                       )}
                       <span class="font-bold text-gray-900 ml-auto">Total: {fmt(total)}</span>
                     </div>
+                  )}
+
+                  {/* Cancelar — solo en solicitudes que todavía no terminaron */}
+                  {['pendiente', 'aceptada', 'en_curso'].includes(s.estado) && (
+                    <CancelarSolicitud client:load solicitudId={s.id} titulo={s.titulo} />
                   )}
 
                   {/* Reseña — solo en solicitudes completadas sin reseña previa */}

@@ -57,16 +57,29 @@ Crear un archivo `.env` en la raíz con:
 ```env
 PUBLIC_SUPABASE_URL=tu_url_de_supabase
 PUBLIC_SUPABASE_ANON_KEY=tu_anon_key
+# Service role key (Supabase → Project Settings → API). Nunca exponer al cliente ni commitear.
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+
+# Resend (notificaciones por email). Si se deja vacío, el envío se omite sin romper la app.
+RESEND_API_KEY=tu_resend_api_key
+RESEND_FROM_EMAIL=Taita Soluciones <onboarding@resend.dev>
+PUBLIC_SITE_URL=http://localhost:4321
+
+# Protege /api/cron/actualizar-estados. Si se deja vacío, el endpoint queda sin proteger.
+CRON_SECRET=un_secreto_random
 ```
 
 ## Comandos
 
-| Comando           | Acción                                      |
+Este proyecto usa **pnpm** exclusivamente (hay `pnpm-lock.yaml` y `pnpm-workspace.yaml` en la
+raíz) — no usar `npm install` ni `npm run ...`, se puede desincronizar el lockfile.
+
+| Comando          | Acción                                      |
 | :---------------- | :------------------------------------------ |
-| `npm install`     | Instala dependencias                        |
-| `npm run dev`     | Servidor de desarrollo en `localhost:4321`  |
-| `npm run build`   | Build de producción en `./dist/`            |
-| `npm run preview` | Preview del build local                     |
+| `pnpm install`     | Instala dependencias                        |
+| `pnpm run dev`     | Servidor de desarrollo en `localhost:4321`  |
+| `pnpm run build`   | Build de producción en `./dist/`            |
+| `pnpm run preview` | Preview del build local                     |
 
 ## Roles de usuario
 

@@ -1,11 +1,15 @@
 # build output
 dist/
+.vercel/
 
 # generated types
 .astro/
 
 # dependencies
 node_modules/
+
+# este proyecto usa pnpm exclusivamente — no commitear el lockfile de npm
+package-lock.json
 
 # logs
 npm-debug.log*

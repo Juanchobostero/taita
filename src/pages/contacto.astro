@@ -1,6 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro'
 import Navbar from '../components/Navbar'
+import { enviarEmail } from '../lib/email'
 
 const tipo     = Astro.url.searchParams.get('tipo') === 'reclamo' ? 'reclamo' : 'contacto'
 const esReclamo = tipo === 'reclamo'
@@ -18,8 +19,17 @@ if (Astro.request.method === 'POST') {
   if (!email || !mensaje) {
     errorMsg = 'Completá los campos requeridos.'
   } else {
-    // Envío via Resend / fetch a una futura API — por ahora marcamos como enviado
-    // TODO: conectar con servicio de email cuando esté configurado
+    await enviarEmail({
+      to:      'taitasoluciones@gmail.com',
+      subject: `${esReclamo ? 'Reclamo' : 'Contacto'} de ${nombre || email}`,
+      html: `
+        <p><strong>Nombre:</strong> ${nombre || '—'}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Teléfono:</strong> ${telefono || '—'}</p>
+        <p><strong>Mensaje:</strong></p>
+        <p>${mensaje.replace(/\n/g, '<br />')}</p>
+      `,
+    })
     enviado = true
   }
 }
@@ -61,7 +71,7 @@ if (Astro.request.method === 'POST') {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
-            <span class="font-medium text-primary">juancruzmart93@gmail.com</span>
+            <span class="font-medium text-primary">taitasoluciones@gmail.com</span>
           </div>
         </div>
       </div>

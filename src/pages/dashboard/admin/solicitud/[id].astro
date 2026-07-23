@@ -3,6 +3,8 @@ import Layout from '../../../../layouts/Layout.astro'
 import Navbar from '../../../../components/Navbar'
 import GaleriaFotos from '../../../../components/GaleriaFotos'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
+import { notificarCambioEstado } from '../../../../lib/notificaciones'
+import { chequearDisponibilidad } from '../../../../lib/disponibilidad'
 
 const { id } = Astro.params
 if (!id) return Astro.redirect('/dashboard/admin')
@@ -28,19 +30,82 @@ if (Astro.request.method === 'POST') {
           .from('solicitudes').select('tecnico_id').eq('id', id).single()
         if (!check?.tecnico_id) return Astro.redirect(`/dashboard/admin/solicitud/${id}`)
       }
-      await supabase.from('solicitudes').update({ estado }).eq('id', id)
+      // "Pendiente" siempre significa "sin técnico" — si se vuelve a este estado, desasignar
+      // también, para no dejar la agenda del técnico con una reserva fantasma.
+      if (estado === 'pendiente') {
+        await supabase.from('solicitudes').update({ tecnico_id: null }).eq('id', id)
+      }
+      try {
+        await notificarCambioEstado(supabase, id, estado, userId)
+      } catch (err) {
+        console.error('[cambiar-estado]', err)
+      }
     }
   } else if (accion === 'asignar-tecnico') {
-    const tecnicoId = form.get('tecnicoId')?.toString()
+    const tecnicoId  = form.get('tecnicoId')?.toString()
+    const forzar     = form.get('forzar')?.toString() === '1'
+    const nuevaFecha = form.get('nuevaFecha')?.toString()
+    const nuevaHora  = form.get('nuevaHora')?.toString()
+
     if (tecnicoId) {
+      if (!forzar) {
+        const { data: actual } = await supabase
+          .from('solicitudes').select('fecha_solicitada, hora_solicitada, horas_estimadas').eq('id', id).single()
+        if (actual?.fecha_solicitada && actual?.hora_solicitada) {
+          const disponibilidad = await chequearDisponibilidad(supabase, {
+            tecnicoId,
+            fecha:              actual.fecha_solicitada,
+            hora:               actual.hora_solicitada,
+            horasEstimadas:     actual.horas_estimadas ?? 1,
+            excluirSolicitudId: id,
+          })
+          if (!disponibilidad.disponible) {
+            const params = new URLSearchParams({ conflicto: '1', tecnicoId })
+            if (disponibilidad.sugerido) {
+              params.set('sugFecha', disponibilidad.sugerido.fecha)
+              params.set('sugHora', disponibilidad.sugerido.hora)
+            }
+            return Astro.redirect(`/dashboard/admin/solicitud/${id}?${params.toString()}`)
+          }
+        }
+      }
+
+      // Si se forzó la asignación reagendando al horario sugerido, mover la solicitud a ese
+      // horario antes de asignar — así admin y cliente ven la fecha/hora real y consistente.
+      if (forzar && nuevaFecha && nuevaHora) {
+        const { error: reagendarError } = await supabase.from('solicitudes')
+          .update({ fecha_solicitada: nuevaFecha, hora_solicitada: nuevaHora })
+          .eq('id', id)
+        if (reagendarError) console.error('[asignar-tecnico] error reagendando:', reagendarError.message)
+      }
+
       const { error } = await supabase.from('solicitudes')
-        .update({ tecnico_id: tecnicoId, estado: 'aceptada' })
+        .update({ tecnico_id: tecnicoId })
         .eq('id', id)
-      if (error) console.error('[asignar-tecnico]', error.message)
+      if (error) {
+        console.error('[asignar-tecnico]', error.message)
+      } else {
+        try {
+          await notificarCambioEstado(supabase, id, 'aceptada', userId)
+        } catch (err) {
+          console.error('[asignar-tecnico] error notificando:', err)
+        }
+        if (forzar && nuevaFecha && nuevaHora) {
+          const params = new URLSearchParams({ reagendado: '1', fecha: nuevaFecha, hora: nuevaHora })
+          return Astro.redirect(`/dashboard/admin/solicitud/${id}?${params.toString()}`)
+        }
+      }
     }
   }
   return Astro.redirect(`/dashboard/admin/solicitud/${id}`)
 }
+
+const conflictoTecnicoId = Astro.url.searchParams.get('conflicto') === '1' ? Astro.url.searchParams.get('tecnicoId') : null
+const conflictoSugFecha  = Astro.url.searchParams.get('sugFecha')
+const conflictoSugHora   = Astro.url.searchParams.get('sugHora')
+
+const reagendadoFecha = Astro.url.searchParams.get('reagendado') === '1' ? Astro.url.searchParams.get('fecha') : null
+const reagendadoHora  = Astro.url.searchParams.get('reagendado') === '1' ? Astro.url.searchParams.get('hora')  : null
 
 const { data: sol } = await supabase
   .from('solicitudes')
@@ -49,7 +114,7 @@ const { data: sol } = await supabase
     tecnico_id, categoria_id,
     horas_estimadas, precio_base, tasa_aplicada, total_estimado,
     gastos_extra, descripcion_gastos, imagenes_trabajo,
-    fecha_solicitada, direccion,
+    fecha_solicitada, hora_solicitada, direccion,
     usuarios!cliente_id ( nombre_completo, telefono, email ),
     tecnicos ( tarifa_hora, usuarios ( nombre_completo, telefono ) ),
     categorias ( nombre, icono, porcentaje_tasa )
@@ -155,6 +220,12 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
               <!-- Técnico -->
               <div class="flex flex-col gap-3">
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Técnico asignado</p>
+                {reagendadoFecha && reagendadoHora && (
+                  <div class="bg-primary-soft border border-primary-pale text-[#1B4D2E] text-xs rounded-xl px-3 py-2.5">
+                    ✅ La solicitud se reagendó al {new Date(`${reagendadoFecha}T00:00:00`).toLocaleDateString('es-AR')} a
+                    las {reagendadoHora} y se asignó el técnico. El cliente fue notificado con el nuevo horario.
+                  </div>
+                )}
                 {tecnico ? (
                   <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-sm shrink-0">
@@ -168,6 +239,35 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                 ) : (
                   <form method="POST" class="flex flex-col gap-2">
                     <input type="hidden" name="accion" value="asignar-tecnico" />
+                    {conflictoTecnicoId && (
+                      <div class="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl px-3 py-2.5 flex flex-col gap-2">
+                        <p>
+                          {tecnicosActivos.find(t => t.id === conflictoTecnicoId)?.nombre ?? 'Este técnico'} ya
+                          tiene otro trabajo agendado en el horario de esta solicitud.
+                          {conflictoSugFecha && conflictoSugHora
+                            ? ` Horario libre más cercano: ${new Date(`${conflictoSugFecha}T00:00:00`).toLocaleDateString('es-AR')} a las ${conflictoSugHora}.`
+                            : ' No encontramos un horario libre cercano en los próximos 14 días.'}
+                        </p>
+                        <form method="POST">
+                          <input type="hidden" name="accion" value="asignar-tecnico" />
+                          <input type="hidden" name="tecnicoId" value={conflictoTecnicoId} />
+                          <input type="hidden" name="forzar" value="1" />
+                          {conflictoSugFecha && conflictoSugHora ? (
+                            <>
+                              <input type="hidden" name="nuevaFecha" value={conflictoSugFecha} />
+                              <input type="hidden" name="nuevaHora" value={conflictoSugHora} />
+                              <button type="submit" class="text-xs font-semibold text-amber-900 underline">
+                                Reagendar a ese horario y asignar
+                              </button>
+                            </>
+                          ) : (
+                            <button type="submit" class="text-xs font-semibold text-amber-900 underline">
+                              Asignar igual en el horario original (el admin decide)
+                            </button>
+                          )}
+                        </form>
+                      </div>
+                    )}
                     {tecnicosActivos.length === 0 ? (
                       <p class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                         No hay técnicos activos para la categoría de esta solicitud.
@@ -214,11 +314,12 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                 <p class="text-gray-800 font-medium">📍 {sol.direccion ?? '—'}</p>
               </div>
               <div class="flex flex-col gap-1">
-                <span class="text-gray-400 text-xs uppercase tracking-wide">Fecha preferida</span>
+                <span class="text-gray-400 text-xs uppercase tracking-wide">Fecha y hora preferida</span>
                 <p class="text-gray-800 font-medium">
                   📅 {sol.fecha_solicitada
-                    ? new Date(sol.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+                    ? new Date(sol.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
                     : '—'}
+                  {sol.hora_solicitada && ` · ${(sol.hora_solicitada as string).slice(0, 5)} hs`}
                 </p>
               </div>
               {sol.horas_estimadas && (

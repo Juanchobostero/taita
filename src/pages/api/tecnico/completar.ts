@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro'
 import { createSupabaseServer } from '@/lib/supabase-server'
 import { createSupabaseAdmin }  from '@/lib/supabase-admin'
+import { notificarCambioEstado } from '@/lib/notificaciones'
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   try {
@@ -22,15 +23,22 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const { data: sol } = await supabase
       .from('solicitudes')
-      .select('id, estado, precio_base, tasa_aplicada, total_estimado, tecnico_id')
+      .select('id, estado, precio_base, tasa_aplicada, total_estimado, tecnico_id, imagenes_trabajo, gastos_extra')
       .eq('id', solicitudId)
       .single()
 
     if (!sol || sol.tecnico_id !== tec.id) {
       return new Response(JSON.stringify({ error: 'Solicitud no encontrada o no asignada a vos' }), { status: 403 })
     }
-    if (!['aceptada', 'en_curso'].includes(sol.estado)) {
+    // "completada" también es válida: el cron pudo haberla auto-completado por horario antes de
+    // que el técnico cargara fotos/gastos extra — se lo dejamos hacer una sola vez después.
+    if (!['aceptada', 'en_curso', 'completada'].includes(sol.estado)) {
       return new Response(JSON.stringify({ error: 'Solo podés completar solicitudes aceptadas o en curso' }), { status: 400 })
+    }
+    const yaTieneCierre = sol.estado === 'completada'
+      && ((sol.imagenes_trabajo?.length ?? 0) > 0 || sol.gastos_extra != null)
+    if (yaTieneCierre) {
+      return new Response(JSON.stringify({ error: 'Esta solicitud ya tiene el cierre cargado.' }), { status: 400 })
     }
 
     // Recalcular total si hay gastos extras
@@ -42,7 +50,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       : sol.total_estimado
 
     const updates: Record<string, unknown> = {
-      estado:              'completada',
       gastos_extra:        gastosNum > 0 ? gastosNum : null,
       descripcion_gastos:  descripcionGastos?.trim() || null,
       imagenes_trabajo:    Array.isArray(imagenes) && imagenes.length > 0 ? imagenes : null,
@@ -53,6 +60,16 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       supabase.from('solicitudes').update(updates).eq('id', solicitudId),
       supabase.from('tecnicos').update({ total_servicios: (tec.total_servicios ?? 0) + 1 }).eq('id', tec.id),
     ])
+
+    // Si ya estaba "completada" (auto-completada por el cron), no volver a notificar/loguear
+    // el mismo cambio de estado — solo se está completando el cierre con fotos/gastos.
+    if (sol.estado !== 'completada') {
+      try {
+        await notificarCambioEstado(supabase, solicitudId, 'completada', user.id)
+      } catch (err) {
+        console.error('[api/tecnico/completar] error notificando:', err)
+      }
+    }
 
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   } catch (err) {

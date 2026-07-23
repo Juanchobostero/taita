@@ -5,6 +5,7 @@ import AvatarUpload from '../../components/AvatarUpload'
 import GestionEspecialidades from '../../components/GestionEspecialidades'
 import CompletarTrabajo from '../../components/CompletarTrabajo'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
+import { notificarCambioEstado } from '../../lib/notificaciones'
 import type { TecnicoConUsuario, SolicitudParaTecnico } from '../../lib/types'
 
 const supabase = createSupabaseAdmin()
@@ -17,21 +18,21 @@ if (Astro.request.method === 'POST') {
   const { data: tec } = await supabase.from('tecnicos').select('id, total_servicios').eq('usuario_id', userId).single()
 
   if (solicitudId && tec && (accion === 'aceptar' || accion === 'rechazar')) {
-    if (accion === 'aceptar') {
-      await supabase
-        .from('solicitudes')
-        .update({ estado: 'aceptada' })
-        .eq('id', solicitudId)
-        .eq('tecnico_id', tec.id)
-    } else {
-      // Rechazar: volver a pendiente y desasignar técnico
-      await supabase
-        .from('solicitudes')
-        .update({ estado: 'pendiente', tecnico_id: null })
-        .eq('id', solicitudId)
-        .eq('tecnico_id', tec.id)
+    // Verificar que la solicitud sigue siendo del técnico antes de tocarla
+    const { data: check } = await supabase.from('solicitudes').select('tecnico_id').eq('id', solicitudId).single()
+    if (check?.tecnico_id === tec.id) {
+      try {
+        if (accion === 'aceptar') {
+          await notificarCambioEstado(supabase, solicitudId, 'aceptada', userId)
+        } else {
+          // Rechazar: volver a pendiente y desasignar técnico
+          await notificarCambioEstado(supabase, solicitudId, 'pendiente', userId)
+          await supabase.from('solicitudes').update({ tecnico_id: null }).eq('id', solicitudId)
+        }
+      } catch (err) {
+        console.error('[tecnico aceptar/rechazar]', err)
+      }
     }
-
   }
   return Astro.redirect('/dashboard/tecnico')
 }
@@ -61,7 +62,7 @@ const { data: rawSolicitudes } = await supabase
   .select(`
     id, titulo, estado, total_estimado, precio_base, tasa_aplicada,
     gastos_extra, descripcion_gastos, imagenes_trabajo,
-    fecha_solicitada, creado_en, direccion,
+    fecha_solicitada, hora_solicitada, creado_en, direccion,
     usuarios!cliente_id ( nombre_completo, telefono ),
     categorias ( nombre, icono )
   `)
@@ -164,7 +165,10 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
                   </p>
                   {s.direccion && <p class="text-xs text-gray-400">📍 {s.direccion}</p>}
                   <p class="text-xs text-gray-400">
-                    📅 {new Date(s.fecha_solicitada ?? s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    📅 {s.fecha_solicitada
+                      ? new Date(s.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
+                      : new Date(s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {(s as any).hora_solicitada && ` ${(s as any).hora_solicitada.slice(0, 5)} hs`}
                   </p>
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
@@ -176,7 +180,8 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
                       ${Number(s.total_estimado).toLocaleString('es-AR')}
                     </span>
                   )}
-                  {(s.estado === 'aceptada' || s.estado === 'en_curso') && (
+                  {(s.estado === 'aceptada' || s.estado === 'en_curso' ||
+                    (s.estado === 'completada' && !(s.imagenes_trabajo?.length) && s.gastos_extra == null)) && (
                     <CompletarTrabajo
                       client:load
                       solicitudId={s.id}

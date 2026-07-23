@@ -1,0 +1,70 @@
+import { useState } from 'react'
+
+interface Props {
+  solicitudId: string
+  titulo:      string
+}
+
+export default function CancelarSolicitud({ solicitudId, titulo }: Props) {
+  const [abierto,   setAbierto]   = useState(false)
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+
+  const confirmar = async () => {
+    setLoading(true)
+    setError('')
+    const res = await fetch('/api/cliente/cancelar-solicitud', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ solicitudId }),
+    })
+    if (res.ok) {
+      window.location.reload()
+      return
+    }
+    const json = await res.json().catch(() => ({}))
+    setError(json.error ?? 'No se pudo cancelar la solicitud')
+    setLoading(false)
+  }
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        className="text-xs text-red-500 hover:text-red-600 hover:underline font-medium w-fit"
+      >
+        Cancelar solicitud
+      </button>
+    )
+  }
+
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex flex-col gap-2 text-xs text-red-700">
+      <p>
+        ¿Seguro que querés cancelar <strong>{titulo}</strong>? Según nuestros{' '}
+        <a href="/terminos" target="_blank" className="underline font-medium">Términos y condiciones</a>,
+        la cancelación es definitiva y, si ya hay un técnico asignado, va a ser notificado.
+      </p>
+      {error && <p className="text-red-600 font-semibold">{error}</p>}
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          disabled={loading}
+          onClick={confirmar}
+          className="font-semibold underline disabled:opacity-50"
+        >
+          {loading ? 'Cancelando...' : 'Sí, cancelar'}
+        </button>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => setAbierto(false)}
+          className="text-gray-500 hover:text-gray-700"
+        >
+          Volver
+        </button>
+      </div>
+    </div>
+  )
+}

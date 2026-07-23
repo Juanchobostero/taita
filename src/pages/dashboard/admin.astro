@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
 import TablaSolicitudesAdmin from '../../components/TablaSolicitudesAdmin'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
+import { notificarCambioEstado } from '../../lib/notificaciones'
 
 const supabase = createSupabaseAdmin()
 const userId = Astro.locals.user!.id
@@ -32,8 +33,13 @@ if (Astro.request.method === 'POST') {
     const tecnicoId   = form.get('tecnicoId')?.toString()
     if (solicitudId && tecnicoId) {
       await supabase.from('solicitudes')
-        .update({ tecnico_id: tecnicoId, estado: 'aceptada' })
+        .update({ tecnico_id: tecnicoId })
         .eq('id', solicitudId)
+      try {
+        await notificarCambioEstado(supabase, solicitudId, 'aceptada', userId)
+      } catch (err) {
+        console.error('[asignar-tecnico] error notificando:', err)
+      }
     }
   }
 

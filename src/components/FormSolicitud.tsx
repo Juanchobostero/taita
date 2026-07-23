@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { franjasHorarias } from '@/lib/disponibilidad'
 
 interface CategoriaOpt {
   id: string
@@ -38,10 +39,18 @@ const schema = z.object({
   descripcion:      z.string().optional(),
   horas_estimadas:  z.coerce.number({ invalid_type_error: 'Ingresá un número' }).min(0.5, 'Mínimo 0.5 horas').max(100),
   fecha_solicitada: z.string().min(1, 'Ingresá una fecha'),
+  hora_solicitada:  z.string().min(1, 'Elegí un horario'),
   direccion:        z.string().min(5, 'Ingresá la dirección del trabajo'),
 })
 
 type FormData = z.infer<typeof schema>
+
+interface Conflicto {
+  disponible: boolean
+  sugerido?: { fecha: string; hora: string }
+}
+
+const FRANJAS = franjasHorarias()
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null
@@ -52,7 +61,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
   const [serverError, setServerError] = useState('')
   const [success, setSuccess]         = useState(false)
 
-  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       categoria_id: (defaultCategoriaId && categorias.find(c => c.id === defaultCategoriaId))
@@ -66,6 +75,8 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
   const [candidatos, setCandidatos]         = useState<Candidato[]>([])
   const [loadingCands, setLoadingCands]     = useState(false)
   const [verTodos, setVerTodos]             = useState(false)
+  const [conflicto, setConflicto]           = useState<Conflicto | null>(null)
+  const [chequeando, setChequeando]         = useState(false)
 
   useEffect(() => {
     if (tecnicoId || !categoriaId) { setCandidatos([]); return }
@@ -88,6 +99,25 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
 
   const onSubmit = async (data: FormData) => {
     setServerError('')
+    setConflicto(null)
+
+    if (tecnicoId) {
+      setChequeando(true)
+      try {
+        const r = await fetch(
+          `/api/disponibilidad-tecnico?tecnicoId=${tecnicoId}&fecha=${data.fecha_solicitada}` +
+          `&hora=${data.hora_solicitada}&horasEstimadas=${data.horas_estimadas}`
+        )
+        const disp: Conflicto = await r.json()
+        if (!disp.disponible) {
+          setConflicto(disp)
+          return
+        }
+      } finally {
+        setChequeando(false)
+      }
+    }
+
     const res = await fetch('/api/crear-solicitud', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -101,15 +131,24 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
         tasaAplicada:    tasa,
         totalEstimado:   total,
         fechaSolicitada: data.fecha_solicitada,
+        horaSolicitada:  data.hora_solicitada,
         direccion:       data.direccion,
       }),
     })
     if (!res.ok) {
-      const { error } = await res.json()
+      const { error, sugerido } = await res.json()
       setServerError(error ?? 'Error al enviar la solicitud')
+      if (sugerido) setConflicto({ disponible: false, sugerido })
       return
     }
     setSuccess(true)
+  }
+
+  const usarSugerido = () => {
+    if (!conflicto?.sugerido) return
+    setValue('fecha_solicitada', conflicto.sugerido.fecha)
+    setValue('hora_solicitada', conflicto.sugerido.hora)
+    setConflicto(null)
   }
 
   if (success) {
@@ -205,7 +244,6 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
                     {c.zona && <p className="text-xs text-gray-400 leading-tight line-clamp-1">{c.zona}</p>}
                     <a
                       href={`/tecnicos/${c.id}`}
-                      target="_blank"
                       className="text-xs text-primary hover:underline font-medium mt-0.5"
                     >
                       Ver perfil
@@ -248,7 +286,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Horas estimadas */}
         <div className="flex flex-col gap-1.5">
           <Label>Horas estimadas</Label>
@@ -275,7 +313,45 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
           />
           <FieldError msg={errors.fecha_solicitada?.message} />
         </div>
+
+        {/* Hora */}
+        <div className="flex flex-col gap-1.5">
+          <Label>Horario preferido</Label>
+          <select
+            {...register('hora_solicitada')}
+            className={`border rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-primary ${
+              errors.hora_solicitada ? 'border-destructive' : 'border-cream-dark'
+            }`}
+            defaultValue=""
+          >
+            <option value="" disabled>Elegí un horario</option>
+            {FRANJAS.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+          <FieldError msg={errors.hora_solicitada?.message} />
+        </div>
       </div>
+
+      {/* Aviso de conflicto de horario (solo cuando ya hay un técnico fijo) */}
+      {conflicto && !conflicto.disponible && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3 flex flex-col gap-2">
+          <p>
+            {tecnicoNombre} ya tiene otro trabajo agendado en ese horario.
+            {conflicto.sugerido
+              ? ` El horario libre más cercano es el ${new Date(`${conflicto.sugerido.fecha}T00:00:00`).toLocaleDateString('es-AR')} a las ${conflicto.sugerido.hora}.`
+              : ' No encontramos un horario libre cercano — probá con otra fecha.'}
+          </p>
+          <div className="flex gap-3">
+            {conflicto.sugerido && (
+              <button type="button" onClick={usarSugerido} className="text-xs font-semibold text-amber-900 underline w-fit">
+                Usar ese horario
+              </button>
+            )}
+            <button type="button" onClick={() => setConflicto(null)} className="text-xs font-medium text-amber-700 w-fit">
+              Elegir otra fecha/hora
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Dirección */}
       <div className="flex flex-col gap-1.5">
@@ -324,8 +400,8 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
         </div>
       )}
 
-      <Button type="submit" disabled={isSubmitting} className="w-full" size="lg">
-        {isSubmitting ? 'Enviando solicitud...' : 'Enviar solicitud'}
+      <Button type="submit" disabled={isSubmitting || chequeando} className="w-full" size="lg">
+        {chequeando ? 'Verificando horario...' : isSubmitting ? 'Enviando solicitud...' : 'Enviar solicitud'}
       </Button>
     </form>
   )

@@ -237,3 +237,41 @@ CREATE POLICY "resenas: admin crud"
       SELECT 1 FROM usuarios u WHERE u.id = auth.uid() AND u.tipo = 'admin'
     )
   );
+
+-- ============================================================
+-- SOLICITUD_HISTORIAL_ESTADOS (tanda de notificaciones/timeline)
+-- ============================================================
+
+ALTER TABLE solicitud_historial_estados ENABLE ROW LEVEL SECURITY;
+
+-- El cliente ve el historial de sus propias solicitudes
+CREATE POLICY "historial: cliente ve el de sus solicitudes"
+  ON solicitud_historial_estados FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM solicitudes s WHERE s.id = solicitud_id AND s.cliente_id = auth.uid()
+    )
+  );
+
+-- El técnico ve el historial de las solicitudes asignadas a él
+CREATE POLICY "historial: tecnico ve el de las suyas"
+  ON solicitud_historial_estados FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM solicitudes s
+      JOIN tecnicos t ON t.id = s.tecnico_id
+      WHERE s.id = solicitud_id AND t.usuario_id = auth.uid()
+    )
+  );
+
+-- Admin ve todo el historial
+CREATE POLICY "historial: admin ve todo"
+  ON solicitud_historial_estados FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM usuarios u WHERE u.id = auth.uid() AND u.tipo = 'admin'
+    )
+  );
+
+-- Los inserts siempre se hacen desde el backend con service_role (notificarCambioEstado),
+-- que no depende de RLS — no hace falta policy de INSERT para usuarios normales.

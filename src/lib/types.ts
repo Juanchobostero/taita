@@ -47,6 +47,7 @@ export interface Solicitud {
   tasa_aplicada:       number | null
   total_estimado:      number | null
   fecha_solicitada:    string | null
+  hora_solicitada:     string | null
   direccion:           string | null
   estado:              SolicitudEstado
   creado_en:           string
