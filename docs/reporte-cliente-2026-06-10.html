@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reporte de avances — Taita Soluciones — 9 y 10 de junio 2026</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f9f6f1;
+      color: #1a1a1a;
+      padding: 40px 20px;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .page {
+      max-width: 780px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.08);
+    }
+
+    /* Header */
+    .header {
+      background: #1B4D2E;
+      color: white;
+      padding: 40px 48px 36px;
+    }
+    .header-brand {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: #86c99a;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .header h1 {
+      font-family: 'Lora', serif;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+    .header-meta {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    /* Body */
+    .body {
+      padding: 40px 48px;
+    }
+
+    .intro {
+      background: #f0f7f3;
+      border-left: 3px solid #1B4D2E;
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin-bottom: 36px;
+      font-size: 13.5px;
+      color: #2d5a3d;
+    }
+
+    /* Section */
+    h2 {
+      font-family: 'Lora', serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #1B4D2E;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1.5px solid #e8e2d9;
+    }
+
+    .section { margin-bottom: 36px; }
+
+    /* Feature cards */
+    .features { display: flex; flex-direction: column; gap: 12px; }
+
+    .feature-card {
+      border: 1.5px solid #e8e2d9;
+      border-radius: 10px;
+      padding: 14px 18px;
+    }
+    .feature-card-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .feature-tag {
+      background: #1B4D2E;
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      margin-top: 2px;
+    }
+    .feature-tag.fix {
+      background: #b45309;
+    }
+    .feature-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: #1a1a1a;
+    }
+    .feature-desc {
+      font-size: 13px;
+      color: #555;
+      padding-left: 0;
+    }
+    .feature-desc ul {
+      padding-left: 16px;
+      margin-top: 4px;
+    }
+    .feature-desc li {
+      margin-bottom: 2px;
+    }
+
+    /* Status table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      background: #f0f7f3;
+      color: #1B4D2E;
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 2px solid #c8e6d0;
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid #f0ede8;
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafaf8; }
+
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 10px;
+      border-radius: 20px;
+    }
+    .badge.done {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .badge.pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    /* Pending section */
+    .pending-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pending-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: #fffbeb;
+      border: 1.5px solid #fde68a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #78350f;
+    }
+    .pending-item::before {
+      content: '⏳';
+      font-size: 14px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* Footer */
+    .footer {
+      background: #f9f6f1;
+      border-top: 1.5px solid #e8e2d9;
+      padding: 20px 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #999;
+    }
+    .footer a {
+      color: #1B4D2E;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    @media print {
+      body { background: white; padding: 0; }
+      .page { box-shadow: none; border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="header-brand">Taita Soluciones — Reporte de desarrollo</div>
+    <h1>Avances del 9 y 10 de junio de 2026</h1>
+    <div class="header-meta">Sesión de desarrollo · Preparado por JOTADEV</div>
+  </div>
+
+  <div class="body">
+
+    <div class="intro">
+      Este reporte resume todas las funcionalidades implementadas y mejoras realizadas en las últimas dos sesiones de trabajo, listas para ser probadas en el entorno de desarrollo antes de pasar a producción.
+    </div>
+
+    <!-- NUEVAS FUNCIONALIDADES -->
+    <div class="section">
+      <h2>Nuevas funcionalidades</h2>
+      <div class="features">
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag">Nuevo</span>
+            <span class="feature-title">Flujo de aceptación del técnico</span>
+          </div>
+          <div class="feature-desc">
+            Cuando el admin asigna un técnico a una solicitud, el técnico recibe la tarea en estado <em>"Asignada"</em> y puede confirmarla o rechazarla desde su panel. Si rechaza, la solicitud vuelve a estar disponible para reasignar.
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag">Nuevo</span>
+            <span class="feature-title">Cierre del trabajo: fotos y gastos extras</span>
+          </div>
+          <div class="feature-desc">
+            Al completar un trabajo, el técnico puede subir hasta 5 fotos del trabajo realizado y declarar gastos extras (con descripción). El sistema recalcula automáticamente el total del servicio incluyendo los extras.
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag">Nuevo</span>
+            <span class="feature-title">Visualización de imágenes en el panel admin</span>
+          </div>
+          <div class="feature-desc">
+            Las fotos cargadas por el técnico ahora se visualizan directamente en el detalle de la solicitud. Al hacer click en una miniatura se abre un visor ampliado sin salir de la página.
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag">Nuevo</span>
+            <span class="feature-title">Editor de Términos y Condiciones (admin)</span>
+          </div>
+          <div class="feature-desc">
+            El admin puede editar el texto de los Términos y Condiciones directamente desde el panel, sin necesidad de modificar código. Los cambios se reflejan de inmediato en la página pública de T&C.
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag">Nuevo</span>
+            <span class="feature-title">Sub-items por categoría</span>
+          </div>
+          <div class="feature-desc">
+            Cada categoría de servicio puede tener sub-items con precio y porcentaje propios. Se pueden agregar, editar, activar/desactivar y eliminar individualmente. El panel muestra la sumatoria de precios de los sub-items activos.
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag">Nuevo</span>
+            <span class="feature-title">Gestión de técnicos y clientes desde el admin</span>
+          </div>
+          <div class="feature-desc">
+            Nueva sección en el panel de administración para ver, editar y activar/desactivar técnicos y clientes. Incluye datos de contacto, zona de trabajo, tarifa y descripción del técnico.
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag">Nuevo</span>
+            <span class="feature-title">Términos y Condiciones en la botonera del inicio</span>
+          </div>
+          <div class="feature-desc">
+            Se agregó un botón "Términos y Condiciones" en la sección de acciones rápidas de la página de inicio, junto a Contacto y Reclamos. Se unificaron Términos y Política de Privacidad en un solo documento.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- MEJORAS Y CORRECCIONES -->
+    <div class="section">
+      <h2>Mejoras y correcciones</h2>
+      <div class="features">
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag fix">Fix</span>
+            <span class="feature-title">Error al desactivar o eliminar categorías</span>
+          </div>
+          <div class="feature-desc">
+            Se corrigió un error que impedía desactivar o eliminar categorías. Ahora, si una categoría tiene solicitudes o especialidades asociadas, el sistema muestra un aviso claro inline (sin pop-up del navegador) y no permite eliminarla.
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag fix">Mejora</span>
+            <span class="feature-title">Registro simplificado</span>
+          </div>
+          <div class="feature-desc">
+            Se unificó el checkbox de aceptación de condiciones: ahora solo se muestra "Términos y Condiciones" (se eliminó el de Política de Privacidad). Los técnicos son redirigidos directamente a su panel al registrarse, sin necesidad de verificar el email.
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag fix">Mejora</span>
+            <span class="feature-title">Footer y navegación del sitio</span>
+          </div>
+          <div class="feature-desc">
+            Se actualizó el footer con links útiles (Solicitar servicio, Contacto, Reclamos). Se eliminaron los links obsoletos de Términos y Privacidad por separado.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ESTADO GENERAL -->
+    <div class="section">
+      <h2>Estado general del proyecto</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Funcionalidad</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Flujo completo de solicitud de servicio</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Flujo de aceptación del técnico</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Cierre del trabajo con fotos y gastos extras</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Visualizador de imágenes en panel admin</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Desglose financiero (precio base + tasa + extras)</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Editor de Términos y Condiciones</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Categorías con sub-items (precio y tasa por sub-item)</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Gestión de usuarios y técnicos desde admin</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Registro simplificado (cliente y técnico)</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Página de Términos y Condiciones pública</td><td><span class="badge done">Completado</span></td></tr>
+          <tr><td>Notificaciones por email al cambiar estado</td><td><span class="badge pending">Pendiente</span></td></tr>
+          <tr><td>Notificaciones por WhatsApp</td><td><span class="badge pending">Pendiente</span></td></tr>
+          <tr><td>Deploy en producción (Vercel)</td><td><span class="badge pending">Pendiente</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PRÓXIMOS PASOS -->
+    <div class="section">
+      <h2>Próximos pasos</h2>
+      <div class="pending-list">
+        <div class="pending-item">Notificaciones por email al cliente y técnico cuando cambia el estado de una solicitud (ej. "Tu solicitud fue aceptada", "Tu técnico está en camino")</div>
+        <div class="pending-item">Notificaciones por WhatsApp al cambiar el estado de la solicitud</div>
+        <div class="pending-item">Deploy final en producción (Vercel + configuración de Supabase en producción) y prueba completa end-to-end</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <span>Taita Soluciones &mdash; Reporte interno de desarrollo &mdash; Junio 2026</span>
+    <a href="https://www.jotadev.com.ar" target="_blank">JOTADEV</a>
+  </div>
+
+</div>
+</body>
+</html>
