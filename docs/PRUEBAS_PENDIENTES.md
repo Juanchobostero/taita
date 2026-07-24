@@ -108,6 +108,42 @@ botón "Completar trabajo" ya no aparece más en el panel técnico para esa soli
 
 ---
 
+## ✅ Tanda 6 — probada y confirmada 2026-07-24
+
+**Antes de arrancar:** correr el SQL nuevo en Supabase (columnas de conformidad + tabla `pagos` +
+sus políticas RLS) — está en `ESTADO_PROYECTO.md`, sección "Tanda 6". Sin eso, dar conformidad va
+a tirar error.
+
+### Dar conformidad (cliente)
+
+1. Entrar al detalle de una solicitud en estado **Completada** (como cliente) → tiene que aparecer
+   un botón "✓ Dar conformidad" (donde antes, en Tanda 4/5, no había nada para solicitudes
+   completadas).
+2. Click → se despliega un aviso inline con el monto a confirmar (no un popup nativo) y los botones
+   "Sí, confirmar" / "Volver".
+3. "Volver" → se cierra sin confirmar nada.
+4. "Sí, confirmar" → la página se recarga y en vez del botón aparece un cartel verde "✅ Diste
+   conformidad el [fecha]" con el monto y el aviso de "pago registrado, pendiente de acreditación".
+5. Recargar la página de nuevo → el cartel de conformidad tiene que seguir ahí (no se pierde ni
+   vuelve a mostrar el botón).
+6. Revisar la terminal (`pnpm run dev`) → debería haber quedado logueado el email a
+   `taitasoluciones@gmail.com` y, si la solicitud tenía técnico asignado, otro email a su casilla.
+7. Confirmar que en una solicitud que **no** está Completada no aparece ni el botón ni el cartel.
+
+### Aviso en panel técnico
+
+8. Como técnico, entrar a esa misma solicitud en el panel → debería verse el texto "✅ El cliente
+   dio conformidad — el pago se va a reflejar próximamente en tu cuenta".
+
+### Indicador en panel admin
+
+9. Como admin, entrar al detalle de esa solicitud → debería verse un cartel verde de conformidad
+   con la fecha (y no el amarillo de "todavía no dio conformidad").
+10. Entrar al detalle de otra solicitud Completada que el cliente **no** confirmó todavía → tiene
+    que verse el cartel amarillo "⏳ Todavía no dio conformidad el cliente."
+
+---
+
 ## Notas rápidas
 
 - `CRON_SECRET` está vacío en el `.env` a propósito — así en local no hace falta mandar ningún

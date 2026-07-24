@@ -110,7 +110,7 @@ Para que se note el conflicto hace falta que el técnico ya tenga **una solicitu
 | Cambio automático de estado por fecha/hora | ✅ Operativo (Tanda 4) — falta configurar el cron externo (ver abajo) |
 | Cancelación con confirmación inline | ✅ Operativo (Tanda 4) |
 | Timeline de estados para el cliente | ✅ Operativo y probado (Tanda 5) |
-| Conformidad del cliente + registro de pago (sin cobro real) | ⏳ Pendiente (Tanda 6) |
+| Conformidad del cliente + registro de pago (sin cobro real) | ✅ Operativo y probado (Tanda 6) |
 | Integración Mercado Pago | ⏳ Pendiente (Tanda 7, al final) |
 
 ---
@@ -193,7 +193,20 @@ Agustín pueda probar y dar feedback antes de seguir.
         coincide, redirige a `/dashboard/cliente` (evita que un cliente vea la solicitud de otro
         cambiando el id en la URL).
       - El título de cada card en "Mis solicitudes" ahora es un link a esta vista nueva.
-- [ ] **Tanda 6** — Desglose + conformidad del cliente + registro de pago (mockeado)
+- [x] **Tanda 6** — Conformidad del cliente + registro de pago (mockeado). Implementada y probada
+      por Jota 2026-07-24 (botón → confirmación inline → cartel de conformidad persistente, los 2
+      emails logueados, aviso en panel técnico e indicador en panel admin, todo verificado).
+      - El desglose completo (precio base, gastos extra, total) ya se mostraba desde la Tanda 5 en
+        la vista de detalle del cliente — no se duplicó ahí, la conformidad se agrega debajo.
+      - Botón "Dar conformidad" (`DarConformidad.tsx`, mismo patrón de confirmación inline que
+        `CancelarSolicitud`) visible solo cuando `estado = 'completada'` y todavía no se confirmó.
+      - Al confirmar: nuevas columnas `solicitudes.conformidad_cliente` / `conformidad_en`, se
+        inserta un registro en la tabla nueva `pagos` (monto = total, estado `registrado` — mock,
+        sin cobro real) y se notifica por email a admin y técnico (`notificarConformidad()`).
+      - El link/checkout real de Mercado Pago queda pendiente para la Tanda 7; por ahora el cliente
+        ve un aviso de "pago registrado, pendiente de acreditación".
+      - Panel técnico: aviso en la solicitud cuando el cliente ya dio conformidad.
+      - Panel admin: indicador de conformidad (dado/pendiente) en el detalle, además del email.
 - [ ] **Tanda 7** — Integración Mercado Pago (al final, requiere credenciales de Agustín)
 
 WhatsApp (parte del Paso 2 del backlog) se encara después de validar el email con Agustín —
@@ -293,6 +306,41 @@ No hay cambios de esquema en esta tanda. Lo que sí hace falta:
 Mientras no se configure el `CRON_SECRET`, el endpoint queda sin proteger (cualquiera podría
 llamarlo) — no rompe nada porque solo mueve estados según fecha/hora real, pero conviene cargarlo
 antes de ir a producción.
+
+### Tanda 6 — conformidad del cliente + registro de pago (mock)
+
+Ejecutar en el SQL Editor de Supabase (aditivo, no rompe nada existente):
+
+```sql
+ALTER TABLE solicitudes ADD COLUMN IF NOT EXISTS conformidad_cliente boolean DEFAULT false;
+ALTER TABLE solicitudes ADD COLUMN IF NOT EXISTS conformidad_en timestamptz;
+
+CREATE TABLE IF NOT EXISTS pagos (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  solicitud_id  uuid NOT NULL REFERENCES solicitudes(id) ON DELETE CASCADE,
+  monto         numeric NOT NULL,
+  estado        text NOT NULL DEFAULT 'registrado', -- registrado (mock) | pagado (con MP, Tanda 7)
+  creado_en     timestamptz DEFAULT now()
+);
+```
+
+Las políticas RLS de `pagos` ya están agregadas a `supabase/rls_policies.sql` (sección `PAGOS`) —
+correr ese bloque también (o el archivo completo; si ya corrieron el resto antes, correr solo el
+bloque nuevo del final para no chocar con policies existentes).
+
+**Cómo funciona:**
+- En la vista de detalle del cliente, cuando la solicitud está en estado **Completada** y todavía no
+  se dio conformidad, aparece un botón "Dar conformidad" con el desglose (precio base, gastos extra,
+  total) ya visible arriba, y una confirmación inline antes de mandar (mismo patrón que cancelar).
+- Al confirmar: se marca `conformidad_cliente = true` con su timestamp, se inserta una fila en
+  `pagos` (monto = total de la solicitud, estado `registrado`) y se avisa por email a admin y al
+  técnico asignado (`notificarConformidad()` en `src/lib/notificaciones.ts`).
+- El link/checkout real de Mercado Pago **no existe todavía** — queda mockeado como un aviso de
+  "pago registrado, pendiente de acreditación". Eso se conecta en la Tanda 7.
+- El panel del técnico muestra un aviso cuando el cliente ya dio conformidad en una de sus
+  solicitudes completadas.
+- El panel del admin muestra un indicador de conformidad en el detalle de la solicitud (además del
+  email que ya recibe).
 
 ---
 

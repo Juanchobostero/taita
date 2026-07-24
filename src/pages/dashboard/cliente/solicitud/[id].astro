@@ -3,6 +3,7 @@ import Layout from '../../../../layouts/Layout.astro'
 import Navbar from '../../../../components/Navbar'
 import GaleriaFotos from '../../../../components/GaleriaFotos'
 import CancelarSolicitud from '../../../../components/CancelarSolicitud'
+import DarConformidad from '../../../../components/DarConformidad'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
 
 const { id } = Astro.params
@@ -17,6 +18,7 @@ const { data: sol } = await supabase
     id, titulo, descripcion, estado, creado_en, cliente_id,
     tecnico_id, horas_estimadas, precio_base, tasa_aplicada, total_estimado,
     gastos_extra, descripcion_gastos, imagenes_trabajo,
+    conformidad_cliente, conformidad_en,
     fecha_solicitada, hora_solicitada, direccion,
     tecnicos ( usuarios ( nombre_completo, telefono ) ),
     categorias ( nombre, icono )
@@ -234,6 +236,20 @@ const fmtFechaHora = (iso: string) =>
               </div>
             )}
           </div>
+
+          <!-- Conformidad + pago — solo cuando el servicio ya está completado -->
+          {sol.estado === 'completada' && (
+            <div class="bg-white rounded-2xl border border-cream-dark p-6">
+              <DarConformidad
+                client:load
+                solicitudId={sol.id}
+                titulo={sol.titulo}
+                total={total}
+                yaConfirmado={sol.conformidad_cliente ?? false}
+                conformidadEn={sol.conformidad_en}
+              />
+            </div>
+          )}
 
           <!-- Cancelar — solo en solicitudes que todavía no terminaron -->
           {['pendiente', 'aceptada', 'en_curso'].includes(sol.estado) && (

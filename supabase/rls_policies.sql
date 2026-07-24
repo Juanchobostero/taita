@@ -275,3 +275,41 @@ CREATE POLICY "historial: admin ve todo"
 
 -- Los inserts siempre se hacen desde el backend con service_role (notificarCambioEstado),
 -- que no depende de RLS — no hace falta policy de INSERT para usuarios normales.
+
+-- ============================================================
+-- PAGOS (tanda de conformidad — registro mock, sin cobro real)
+-- ============================================================
+
+ALTER TABLE pagos ENABLE ROW LEVEL SECURITY;
+
+-- El cliente ve los pagos de sus propias solicitudes
+CREATE POLICY "pagos: cliente ve los de sus solicitudes"
+  ON pagos FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM solicitudes s WHERE s.id = solicitud_id AND s.cliente_id = auth.uid()
+    )
+  );
+
+-- El técnico ve los pagos de las solicitudes asignadas a él
+CREATE POLICY "pagos: tecnico ve los de las suyas"
+  ON pagos FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM solicitudes s
+      JOIN tecnicos t ON t.id = s.tecnico_id
+      WHERE s.id = solicitud_id AND t.usuario_id = auth.uid()
+    )
+  );
+
+-- Admin ve todos los pagos
+CREATE POLICY "pagos: admin ve todos"
+  ON pagos FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM usuarios u WHERE u.id = auth.uid() AND u.tipo = 'admin'
+    )
+  );
+
+-- Los inserts se hacen desde el backend con service_role (dar-conformidad.ts) — no hace falta
+-- policy de INSERT para usuarios normales.

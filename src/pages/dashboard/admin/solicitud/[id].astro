@@ -119,6 +119,7 @@ const { data: sol } = await supabase
     tecnico_id, categoria_id,
     horas_estimadas, precio_base, tasa_aplicada, total_estimado,
     gastos_extra, descripcion_gastos, imagenes_trabajo,
+    conformidad_cliente, conformidad_en,
     fecha_solicitada, hora_solicitada, direccion,
     usuarios!cliente_id ( nombre_completo, telefono, email ),
     tecnicos ( tarifa_hora, usuarios ( nombre_completo, telefono ) ),
@@ -488,6 +489,21 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
               </div>
             )}
           </div>
+
+          <!-- Conformidad del cliente -->
+          {sol.estado === 'completada' && (
+            <div class={`rounded-2xl border p-4 text-sm ${sol.conformidad_cliente ? 'bg-primary-soft border-primary-pale text-[#1B4D2E]' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+              {sol.conformidad_cliente ? (
+                <p>
+                  ✅ El cliente dio conformidad
+                  {sol.conformidad_en && ` el ${new Date(sol.conformidad_en).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`}.
+                  Pago registrado.
+                </p>
+              ) : (
+                <p>⏳ Todavía no dio conformidad el cliente.</p>
+              )}
+            </div>
+          )}
 
         </div>
       </div>

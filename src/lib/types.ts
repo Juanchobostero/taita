@@ -54,6 +54,16 @@ export interface Solicitud {
   gastos_extra:        number | null
   descripcion_gastos:  string | null
   imagenes_trabajo:    string[] | null
+  conformidad_cliente: boolean
+  conformidad_en:      string | null
+}
+
+export interface Pago {
+  id:           string
+  solicitud_id: string
+  monto:        number
+  estado:       string
+  creado_en:    string
 }
 
 export interface Resena {

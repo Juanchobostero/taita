@@ -23,6 +23,7 @@ interface SolicitudNotif {
   titulo:           string
   fecha_solicitada: string | null
   hora_solicitada:  string | null
+  total_estimado:   number | null
   usuarios:         { nombre_completo: string; email: string | null } | null
   tecnicos:         { usuarios: { nombre_completo: string; email: string | null } | null } | null
   categorias:       { nombre: string } | null
@@ -32,7 +33,7 @@ async function fetchSolicitudNotif(supabase: SupabaseClient, solicitudId: string
   const { data } = await supabase
     .from('solicitudes')
     .select(`
-      id, titulo, fecha_solicitada, hora_solicitada,
+      id, titulo, fecha_solicitada, hora_solicitada, total_estimado,
       usuarios!cliente_id ( nombre_completo, email ),
       tecnicos ( usuarios ( nombre_completo, email ) ),
       categorias ( nombre )
@@ -156,4 +157,36 @@ export async function notificarNuevaSolicitud(supabase: SupabaseClient, solicitu
       ${detalle}
     `,
   })
+}
+
+/** Email a admin y técnico cuando el cliente da conformidad final (Paso 5 del backlog). */
+export async function notificarConformidad(supabase: SupabaseClient, solicitudId: string): Promise<void> {
+  const sol = await fetchSolicitudNotif(supabase, solicitudId)
+  if (!sol) return
+
+  const cliente = sol.usuarios
+  const tecnico = sol.tecnicos?.usuarios ?? null
+  const monto   = sol.total_estimado != null ? `$${sol.total_estimado.toLocaleString('es-AR')}` : 'a confirmar'
+
+  await enviarEmail({
+    to:      ADMIN_EMAIL,
+    subject: `Conformidad recibida: ${sol.titulo}`,
+    html: `
+      <p>El cliente <strong>${cliente?.nombre_completo ?? '—'}</strong> dio conformidad sobre la
+      solicitud <strong>${sol.titulo}</strong>.</p>
+      <p>Monto a registrar: <strong>${monto}</strong>.</p>
+    `,
+  })
+
+  if (tecnico?.email) {
+    await enviarEmail({
+      to:      tecnico.email,
+      subject: `Conformidad recibida: ${sol.titulo}`,
+      html: `
+        <p>Hola ${tecnico.nombre_completo},</p>
+        <p>El cliente dio conformidad sobre <strong>${sol.titulo}</strong>. El pago se va a reflejar
+        próximamente en la cuenta que declaraste.</p>
+      `,
+    })
+  }
 }

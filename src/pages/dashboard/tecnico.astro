@@ -62,6 +62,7 @@ const { data: rawSolicitudes } = await supabase
   .select(`
     id, titulo, estado, total_estimado, precio_base, tasa_aplicada,
     gastos_extra, descripcion_gastos, imagenes_trabajo,
+    conformidad_cliente,
     fecha_solicitada, hora_solicitada, creado_en, direccion,
     usuarios!cliente_id ( nombre_completo, telefono ),
     categorias ( nombre, icono )
@@ -164,6 +165,11 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
                     {s.usuarios?.nombre_completo && ` · 👤 ${s.usuarios.nombre_completo}`}
                   </p>
                   {s.direccion && <p class="text-xs text-gray-400">📍 {s.direccion}</p>}
+                  {s.estado === 'completada' && (s as any).conformidad_cliente && (
+                    <p class="text-xs text-primary font-medium">
+                      ✅ El cliente dio conformidad — el pago se va a reflejar próximamente en tu cuenta.
+                    </p>
+                  )}
                   <p class="text-xs text-gray-400">
                     📅 {s.fecha_solicitada
                       ? new Date(s.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
