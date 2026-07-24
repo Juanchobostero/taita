@@ -20,7 +20,16 @@ el `.env` tiene `SUPABASE_SERVICE_ROLE_KEY` cargada (sin eso, todas las páginas
 
 ## ⏳ Falta probar — Tanda 4
 
-### 1. Cancelación de solicitud (cliente)
+### 1. Cancelación de solicitud (cliente) ✅ probado 2026-07-23
+
+Funcionó del lado cliente y del lado admin (dropdown "Cambiar estado" → Cancelada). De paso se
+agregaron mejoras de feedback visual que no estaban en el plan original:
+- Cliente: card + badge rojo para solicitudes canceladas (antes quedaban en gris, poco visibles).
+- Admin: badge rojo también; se agregó confirmación inline antes de cancelar (antes cambiaba de
+  estado sin preguntar nada, a diferencia del lado cliente) y un banner de confirmación después de
+  cancelar.
+- Confirmado por código que el admin puede cancelar sin que la solicitud tenga técnico asignado
+  (no estaba en la lista `requiereTecnico`).
 
 1. Loguearse como cliente, ir a "Mis solicitudes".
 2. En una solicitud en estado **Pendiente**, **Aceptada** o **En curso**, buscar el link
@@ -34,7 +43,15 @@ el `.env` tiene `SUPABASE_SERVICE_ROLE_KEY` cargada (sin eso, todas las páginas
    pero el log tiene que estar).
 7. Confirmar que una solicitud ya **Completada** o ya **Cancelada** NO muestra el link de cancelar.
 
-### 2. Cron — cambio automático Aceptada → En curso
+### 2 y 3. Cron — Aceptada → En curso → Completada ✅ probado 2026-07-23
+
+Se probaron juntas sin querer: la solicitud de prueba tenía tanto el inicio como el fin (hora +
+horas estimadas) ya pasados, así que el mismo llamado al cron la hizo saltar Aceptada → En curso →
+Completada de una sola vez — `{"aEnCurso":1,"aCompletada":1}`. Confirmado con badge verde
+"Completada" en el panel del cliente y los 2 emails logueados en la terminal en el orden correcto
+(En curso, después Completada).
+
+Pasos originales (para repetir cada una por separado si hace falta):
 
 El selector de fecha del formulario no deja elegir fechas pasadas, así que para probar esto hay
 que "adelantar el reloj" editando la fila directo en Supabase (Table Editor):
@@ -50,8 +67,6 @@ que "adelantar el reloj" editando la fila directo en Supabase (Table Editor):
 5. Refrescar el panel del cliente/admin de esa solicitud → estado tiene que decir **En curso**.
 6. Revisar la terminal → tiene que haber logueado el email de aviso al cliente.
 
-### 3. Cron — cambio automático En curso → Completada
-
 1. Tomar esa misma solicitud (ya en "En curso") o una distinta.
 2. Editar en Supabase `fecha_solicitada`/`hora_solicitada` de manera que "fecha+hora+horas
    estimadas" ya haya pasado (ej. si horas_estimadas = 2 y son las 15:00, poner la solicitud a
@@ -60,19 +75,36 @@ que "adelantar el reloj" editando la fila directo en Supabase (Table Editor):
 4. Respuesta esperada: `aCompletada: 1`.
 5. Refrescar → estado **Completada**.
 
-### 4. Técnico completa el cierre DESPUÉS del auto-completado
+### 4. Técnico completa el cierre DESPUÉS del auto-completado — bug encontrado y arreglado 2026-07-23
 
-Este es el caso importante que pediste cuidar: que no se pierda la carga de fotos/gastos si el
-sistema ya marcó "Completada" solo.
+**Bug real (no de config):** en `CompletarTrabajo.tsx`, si una foto no era imagen válida o pesaba
+más de 5MB, el código la descartaba en el loop de subida **sin avisar nada** — no llegaba ni a
+intentar la subida a Storage, por eso no se veía ningún request ni error, parecía que el botón "+"
+no hacía nada. Pasó justo con una foto de celular (`IMG_0323.jpg`, > 5MB). Se agregó mensaje de
+error visible para ambos casos (no-imagen / > 5MB). De paso también se corrigió que un error real
+de subida (ej. falla de Storage) quedaba silenciado de la misma forma — ahora también se muestra.
 
-1. Con la solicitud del punto 3 (recién auto-completada, sin fotos ni gastos cargados todavía),
-   entrar al panel del técnico.
-2. El botón "✓ Completar trabajo" tiene que seguir apareciendo (aunque el estado ya diga
-   "Completada").
-3. Cargar una foto y/o un gasto extra, confirmar.
-4. Refrescar → las fotos/gastos tienen que verse en el panel admin (sección "Cierre del
-   trabajo"), y el botón "Completar trabajo" ya NO debería aparecer más en el panel técnico para
-   esa solicitud (para evitar que la carguen dos veces).
+✅ Probado de punta a punta: foto liviana + gasto extra ($10.000) subidos por el técnico, visibles
+en el panel admin (sección "Cierre del trabajo", desglose financiero recalculado a $121.550), y el
+botón "Completar trabajo" ya no aparece más en el panel técnico para esa solicitud.
+
+---
+
+## ✅ Tanda 5 — probada y confirmada 2026-07-24
+
+### Vista de detalle + timeline para el cliente
+
+1. Como cliente, entrar a "Mis solicitudes" y hacer click en el **título** de una solicitud
+   (ahora es un link) → tiene que navegar a `/dashboard/cliente/solicitud/[id]`.
+2. Verificar que se ve: timeline de "Seguimiento" (cada estado con fecha/hora), técnico asignado,
+   detalles del trabajo, desglose financiero (sin el detalle de cuánto retiene la plataforma) y,
+   si ya está completada, fotos/gastos del cierre.
+3. Probar con una solicitud vieja (de antes de la Tanda 2, sin historial registrado) → el timeline
+   igual tiene que arrancar con "Pendiente" en la fecha de creación, sin romperse.
+4. Si la solicitud está en Pendiente/Aceptada/En curso, el botón de cancelar tiene que aparecer acá
+   también.
+5. Copiar el id de una solicitud de **otro cliente** y entrar por URL → tiene que redirigir a
+   `/dashboard/cliente` sin mostrar nada.
 
 ---
 

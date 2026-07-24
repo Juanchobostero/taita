@@ -40,6 +40,9 @@ if (Astro.request.method === 'POST') {
       } catch (err) {
         console.error('[cambiar-estado]', err)
       }
+      if (estado === 'cancelada') {
+        return Astro.redirect(`/dashboard/admin/solicitud/${id}?cancelada=1`)
+      }
     }
   } else if (accion === 'asignar-tecnico') {
     const tecnicoId  = form.get('tecnicoId')?.toString()
@@ -107,6 +110,8 @@ const conflictoSugHora   = Astro.url.searchParams.get('sugHora')
 const reagendadoFecha = Astro.url.searchParams.get('reagendado') === '1' ? Astro.url.searchParams.get('fecha') : null
 const reagendadoHora  = Astro.url.searchParams.get('reagendado') === '1' ? Astro.url.searchParams.get('hora')  : null
 
+const canceladaOk = Astro.url.searchParams.get('cancelada') === '1'
+
 const { data: sol } = await supabase
   .from('solicitudes')
   .select(`
@@ -161,7 +166,7 @@ const estadoColor: Record<string, string> = {
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-primary-soft text-[#1B4D2E]',
-  cancelada:  'bg-gray-100 text-gray-500',
+  cancelada:  'bg-red-100 text-red-700',
 }
 
 const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0 })}`
@@ -363,9 +368,15 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
           <!-- Cambiar estado -->
           <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
             <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Estado del servicio</h2>
-            <form method="POST" class="flex flex-col gap-3">
+            {canceladaOk && (
+              <div class="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2.5">
+                ✅ La solicitud fue cancelada. {sol.tecnico_id ? 'El cliente y el técnico fueron notificados.' : 'El cliente fue notificado.'}
+              </div>
+            )}
+            <form method="POST" id="form-cambiar-estado" class="flex flex-col gap-3">
               <input type="hidden" name="accion" value="cambiar-estado" />
               <select
+                id="select-estado"
                 name="estado"
                 class="w-full border border-cream-dark rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary bg-white"
               >
@@ -382,11 +393,51 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
               {!sol.tecnico_id && (
                 <p class="text-xs text-amber-600">Asigná un técnico para poder avanzar el estado.</p>
               )}
-              <button type="submit" class="w-full bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
+              <div id="confirmar-cancelar" class="hidden bg-red-50 border border-red-200 rounded-xl p-3 flex-col gap-2 text-xs text-red-700">
+                <p>
+                  ¿Seguro que querés cancelar esta solicitud? Es definitivo y, si ya hay un técnico
+                  asignado, va a ser notificado.
+                </p>
+                <div class="flex items-center gap-4">
+                  <button type="submit" class="font-semibold underline">Sí, cancelar</button>
+                  <button type="button" id="btn-volver-cancelar" class="text-gray-500 hover:text-gray-700">Volver</button>
+                </div>
+              </div>
+              <button type="submit" id="btn-actualizar-estado" class="w-full bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
                 Actualizar estado
               </button>
             </form>
           </div>
+
+          <script>
+            const form         = document.getElementById('form-cambiar-estado')
+            const select       = document.getElementById('select-estado')
+            const confirmBox   = document.getElementById('confirmar-cancelar')
+            const btnActualizar = document.getElementById('btn-actualizar-estado')
+
+            form?.addEventListener('submit', (e) => {
+              if (select instanceof HTMLSelectElement && select.value === 'cancelada' && confirmBox?.classList.contains('hidden')) {
+                e.preventDefault()
+                confirmBox.classList.remove('hidden')
+                confirmBox.classList.add('flex')
+                btnActualizar?.classList.add('hidden')
+              }
+            })
+
+            select?.addEventListener('change', () => {
+              if (select instanceof HTMLSelectElement && select.value !== 'cancelada') {
+                confirmBox?.classList.add('hidden')
+                confirmBox?.classList.remove('flex')
+                btnActualizar?.classList.remove('hidden')
+              }
+            })
+
+            document.getElementById('btn-volver-cancelar')?.addEventListener('click', () => {
+              confirmBox?.classList.add('hidden')
+              confirmBox?.classList.remove('flex')
+              btnActualizar?.classList.remove('hidden')
+            })
+          </script>
 
           <!-- Desglose financiero -->
           <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">

@@ -3,7 +3,7 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-07-23
+**Última actualización:** 2026-07-24
 
 ---
 
@@ -70,6 +70,21 @@ Para que se note el conflicto hace falta que el técnico ya tenga **una solicitu
    quedó ocupado en el paso 2, en el mismo horario → debería aparecer el mismo aviso con el botón
    "Asignar igual" (por si el admin quiere forzarlo a propósito).
 
+### Tanda 5 — Vista de detalle + timeline para el cliente
+1. Como cliente, entrar a "Mis solicitudes" y hacer click en el **título** de cualquier solicitud
+   (ahora es un link) → tiene que navegar a `/dashboard/cliente/solicitud/[id]`.
+2. Verificar que se ve: timeline de "Seguimiento" con cada cambio de estado y su fecha/hora, técnico
+   asignado, detalles del trabajo, desglose financiero (sin el detalle interno de cuánto retiene la
+   plataforma — eso queda solo para el admin) y, si la solicitud ya está completada, las fotos y
+   gastos extras del cierre.
+3. Probar con una solicitud vieja (creada antes de la Tanda 2, sin historial de estados registrado)
+   → el timeline igual tiene que mostrar al menos el paso "Pendiente" con la fecha de creación,
+   sin romperse.
+4. Si la solicitud está en Pendiente/Aceptada/En curso, tiene que aparecer el botón de cancelar acá
+   también (mismo componente ya probado en la Tanda 4).
+5. Entrar a una solicitud **de otro cliente** manualmente por URL (copiar un id de otra cuenta) →
+   tiene que redirigir a `/dashboard/cliente`, no mostrar los datos.
+
 ---
 
 ## Estado por módulo
@@ -94,7 +109,7 @@ Para que se note el conflicto hace falta que el técnico ya tenga **una solicitu
 | Campo de hora + validación de solapamiento de horarios | ✅ Operativo y probado (Tanda 3) |
 | Cambio automático de estado por fecha/hora | ✅ Operativo (Tanda 4) — falta configurar el cron externo (ver abajo) |
 | Cancelación con confirmación inline | ✅ Operativo (Tanda 4) |
-| Timeline de estados para el cliente | ⏳ Pendiente (Tanda 5) |
+| Timeline de estados para el cliente | ✅ Operativo y probado (Tanda 5) |
 | Conformidad del cliente + registro de pago (sin cobro real) | ⏳ Pendiente (Tanda 6) |
 | Integración Mercado Pago | ⏳ Pendiente (Tanda 7, al final) |
 
@@ -137,7 +152,18 @@ Agustín pueda probar y dar feedback antes de seguir.
         `dashboard/admin/solicitud/[id].astro` y el email de nueva solicitud
         (`src/lib/notificaciones.ts`).
 - [x] **Tanda 4** — Cambio automático de estado por fecha/hora (cron) + cancelación con confirmación inline.
-      **Falta:** configurar el cron externo (ver abajo) y decidir/cargar `CRON_SECRET`.
+      Probada y confirmada en local por Jota 2026-07-23/24 (cron Aceptada→En curso→Completada,
+      cancelación cliente y admin, cierre de trabajo post-auto-completado). **Falta:** configurar
+      el cron externo (ver abajo) y decidir/cargar `CRON_SECRET`.
+      - De paso se corrigieron 2 bugs encontrados en la prueba:
+        - **Cancelación desde el admin** no tenía confirmación inline (a diferencia del cliente) ni
+          feedback posterior — se agregó el mismo patrón de aviso "¿seguro?" + banner de
+          confirmación al cancelar. También se pusieron en rojo los badges de "Cancelada" (cliente
+          y admin), antes en gris y poco visibles; en el panel cliente además se tiñe la card
+          completa.
+        - **`CompletarTrabajo.tsx`** descartaba fotos en silencio (sin avisar nada) cuando no eran
+          imagen válida, pesaban más de 5MB, o fallaba la subida a Storage — parecía que el botón
+          "+" no hacía nada. Ahora muestra el error correspondiente en cada caso.
       - Nuevo endpoint `GET /api/cron/actualizar-estados`: pasa `Aceptada → En curso` cuando ya
         llegó la fecha/hora, y `En curso → Completada` cuando ya pasó fecha/hora + horas
         estimadas. Usa `notificarCambioEstado` (mismo historial/emails que los cambios manuales).
@@ -151,7 +177,22 @@ Agustín pueda probar y dar feedback antes de seguir.
         (`CancelarSolicitud.tsx`), con confirmación inline (sin `confirm()` nativo) y link a
         `/terminos`. Disponible mientras la solicitud esté Pendiente/Aceptada/En curso. Notifica
         por email al técnico si ya estaba asignado.
-- [ ] **Tanda 5** — Vista de detalle + timeline de estados para el cliente
+- [x] **Tanda 5** — Vista de detalle + timeline de estados para el cliente. Probada y confirmada
+      por Jota 2026-07-24 (timeline con las 4 fechas reales, técnico, detalle, cierre del trabajo,
+      solicitud vieja sin historial, botón cancelar, y redirección al intentar ver la de otro
+      cliente por URL).
+      - Nueva página `src/pages/dashboard/cliente/solicitud/[id].astro`, de solo lectura (sin
+        dropdown de cambio de estado manual como tiene el admin).
+      - Timeline armado a partir de `solicitud_historial_estados` (Tanda 2); como la creación de la
+        solicitud no queda registrada ahí (nace directo en "pendiente"), se agrega ese primer paso
+        a mano con `creado_en` para que el timeline arranque siempre desde el principio.
+      - Reusa `GaleriaFotos` y `CancelarSolicitud` tal cual están, sin duplicar lógica.
+      - Desglose financiero del cliente **no** muestra la distribución técnico/plataforma que sí ve
+        el admin (decisión propia, a confirmar con Jota/Agustín: esa info es de margen interno).
+      - Seguridad: la página valida `solicitud.cliente_id === userId` antes de mostrar nada; si no
+        coincide, redirige a `/dashboard/cliente` (evita que un cliente vea la solicitud de otro
+        cambiando el id en la URL).
+      - El título de cada card en "Mis solicitudes" ahora es un link a esta vista nueva.
 - [ ] **Tanda 6** — Desglose + conformidad del cliente + registro de pago (mockeado)
 - [ ] **Tanda 7** — Integración Mercado Pago (al final, requiere credenciales de Agustín)
 

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reporte de avances — Taita Soluciones — 24 de julio 2026</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f9f6f1;
+      color: #1a1a1a;
+      padding: 40px 20px;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .page {
+      max-width: 780px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.08);
+    }
+
+    /* Header */
+    .header {
+      background: #1B4D2E;
+      color: white;
+      padding: 40px 48px 36px;
+    }
+    .header-brand {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: #86c99a;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .header h1 {
+      font-family: 'Lora', serif;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+    .header-meta {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    /* Body */
+    .body {
+      padding: 40px 48px;
+    }
+
+    .intro {
+      background: #f0f7f3;
+      border-left: 3px solid #1B4D2E;
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin-bottom: 36px;
+      font-size: 13.5px;
+      color: #2d5a3d;
+    }
+
+    /* Section */
+    h2 {
+      font-family: 'Lora', serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #1B4D2E;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1.5px solid #e8e2d9;
+    }
+
+    .section { margin-bottom: 36px; }
+
+    /* Feature cards */
+    .features { display: flex; flex-direction: column; gap: 12px; }
+
+    .feature-card {
+      border: 1.5px solid #e8e2d9;
+      border-radius: 10px;
+      padding: 14px 18px;
+    }
+    .feature-card-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .feature-tag {
+      background: #1B4D2E;
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      margin-top: 2px;
+    }
+    .feature-tag.fix {
+      background: #b45309;
+    }
+    .feature-tag.test {
+      background: #2563a8;
+    }
+    .feature-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: #1a1a1a;
+    }
+    .feature-desc {
+      font-size: 13px;
+      color: #555;
+      padding-left: 0;
+    }
+    .feature-desc ul {
+      padding-left: 16px;
+      margin-top: 4px;
+    }
+    .feature-desc li {
+      margin-bottom: 2px;
+    }
+
+    /* Status table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      background: #f0f7f3;
+      color: #1B4D2E;
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 2px solid #c8e6d0;
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid #f0ede8;
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafaf8; }
+
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 10px;
+      border-radius: 20px;
+    }
+    .badge.done {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .badge.pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .badge.external {
+      background: #e0e7ff;
+      color: #3730a3;
+    }
+
+    /* Pending section */
+    .pending-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pending-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: #fffbeb;
+      border: 1.5px solid #fde68a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #78350f;
+    }
+    .pending-item::before {
+      content: '⏳';
+      font-size: 14px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* Footer */
+    .footer {
+      background: #f9f6f1;
+      border-top: 1.5px solid #e8e2d9;
+      padding: 20px 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #999;
+    }
+    .footer a {
+      color: #1B4D2E;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    @media print {
+      body { background: white; padding: 0; }
+      .page { box-shadow: none; border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="header-brand">Taita Soluciones — Reporte de desarrollo</div>
+    <h1>Avances del 24 de julio de 2026</h1>
+    <div class="header-meta">Sesión de desarrollo · Preparado por JOTADEV</div>
+  </div>
+
+  <div class="body">
+
+    <div class="intro">
+      Este reporte resume lo probado y lo corregido en la sesión de hoy sobre las Tandas 4 y 5 del
+      backlog. Todo lo listado como "Probado" ya fue verificado a mano en el entorno local, listo
+      para que Agustín lo pruebe también en el preview de Vercel.
+    </div>
+
+    <!-- NUEVAS FUNCIONALIDADES -->
+    <div class="section">
+      <h2>Nuevas funcionalidades</h2>
+      <div class="features">
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag">Nuevo</span>
+            <span class="feature-title">Vista de detalle + timeline para el cliente</span>
+          </div>
+          <div class="feature-desc">
+            Desde "Mis solicitudes", el cliente ahora puede entrar a una solicitud puntual (click en
+            el título) y ver una vista completa: un timeline con cada cambio de estado y su fecha/hora
+            (Pendiente → Aceptada → En curso → Completada), el técnico asignado, el detalle del
+            trabajo, el desglose de precio y — si ya está completada — las fotos y gastos extras que
+            cargó el técnico al cerrar el servicio.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- MEJORAS Y CORRECCIONES -->
+    <div class="section">
+      <h2>Mejoras y correcciones</h2>
+      <div class="features">
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag fix">Fix</span>
+            <span class="feature-title">Fotos de cierre de trabajo descartadas en silencio</span>
+          </div>
+          <div class="feature-desc">
+            Al cargar el cierre de un trabajo, si una foto pesaba más de 5MB (común en fotos de
+            celular) o no era una imagen válida, el sistema la descartaba sin avisar nada — parecía
+            que el botón no funcionaba. Ahora muestra el motivo exacto para que el técnico pueda
+            corregirlo (achicar la foto, u otro archivo).
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag fix">Mejora</span>
+            <span class="feature-title">Cancelación desde el panel admin</span>
+          </div>
+          <div class="feature-desc">
+            El admin ya podía cancelar una solicitud desde el detalle, pero sin pedir confirmación
+            (a diferencia del cliente, que sí la tiene). Se agregó el mismo aviso "¿Seguro que
+            querés cancelar?" antes de confirmar, y un mensaje de confirmación después de cancelar.
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag fix">Mejora</span>
+            <span class="feature-title">Solicitudes canceladas, más visibles</span>
+          </div>
+          <div class="feature-desc">
+            El estado "Cancelada" se mostraba en gris, poco visible entre el resto. Ahora se ve en
+            rojo tanto en el panel del cliente como en el del admin; en el panel del cliente además
+            se tiñe la card completa de la solicitud cancelada.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PROBADO HOY -->
+    <div class="section">
+      <h2>Probado hoy en el entorno local</h2>
+      <div class="features">
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag test">Probado</span>
+            <span class="feature-title">Tanda 4 — completa</span>
+          </div>
+          <div class="feature-desc">
+            <ul>
+              <li>Cancelación de solicitud, desde el cliente y desde el admin.</li>
+              <li>Cambio automático de estado por fecha/hora (cron): Aceptada → En curso → Completada,
+                  con los emails correspondientes.</li>
+              <li>El técnico puede cargar fotos/gastos del cierre aunque el cron ya haya marcado la
+                  solicitud como Completada sola, sin perder esa carga.</li>
+              <li>Confirmado que el admin puede cancelar una solicitud aunque no tenga técnico asignado.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-tag test">Probado</span>
+            <span class="feature-title">Tanda 5 — completa</span>
+          </div>
+          <div class="feature-desc">
+            <ul>
+              <li>Timeline con las fechas reales de cada cambio de estado.</li>
+              <li>Funciona también con solicitudes viejas, de antes de que existiera el historial.</li>
+              <li>El botón de cancelar aparece correctamente según el estado.</li>
+              <li>Un cliente no puede ver el detalle de una solicitud de otro cliente cambiando el id
+                  en la URL — redirige a su panel.</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PROGRESO DEL BACKLOG -->
+    <div class="section">
+      <h2>Progreso general del backlog</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Tanda</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Tanda 1 — Link de técnico + mail de contacto</td><td><span class="badge done">Probada</span></td></tr>
+          <tr><td>Tanda 2 — Notificaciones por email + historial de estados</td><td><span class="badge done">Probada</span></td></tr>
+          <tr><td>Tanda 3 — Horarios y validación de solapamiento</td><td><span class="badge done">Probada</span></td></tr>
+          <tr><td>Tanda 4 — Estados automáticos por cron + cancelación</td><td><span class="badge done">Probada</span></td></tr>
+          <tr><td>Tanda 5 — Timeline y detalle para el cliente</td><td><span class="badge done">Probada</span></td></tr>
+          <tr><td>Tanda 6 — Conformidad del cliente + registro de pago (mock)</td><td><span class="badge pending">Pendiente</span></td></tr>
+          <tr><td>Tanda 7 — Integración Mercado Pago</td><td><span class="badge pending">Pendiente</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PRÓXIMOS PASOS -->
+    <div class="section">
+      <h2>Próximos pasos</h2>
+      <div class="pending-list">
+        <div class="pending-item">Mañana: seguir con la Tanda 6 (conformidad del cliente y registro de pago mockeado).</div>
+        <div class="pending-item">Configurar el cron externo (cron-job.org) y cargar <code>CRON_SECRET</code> para que el cambio automático de estado funcione también en producción, no solo en local.</div>
+        <div class="pending-item">Verificar el dominio en Resend y cargar <code>RESEND_API_KEY</code> real para que los emails empiecen a llegar de verdad (hoy quedan solo logueados en consola).</div>
+        <div class="pending-item">Tanda 7 — Integración de Mercado Pago (al final, requiere credenciales de Agustín).</div>
+        <div class="pending-item">Notificaciones por WhatsApp (después de validar el email en producción).</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <span>Taita Soluciones &mdash; Reporte interno de desarrollo &mdash; Julio 2026</span>
+    <a href="https://www.jotadev.com.ar" target="_blank">JOTADEV</a>
+  </div>
+
+</div>
+</body>
+</html>

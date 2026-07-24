@@ -22,14 +22,24 @@ export default function CompletarTrabajo({ solicitudId, tecnicoId, precioBase, t
     const files = Array.from(e.target.files ?? [])
     if (!files.length) return
     setUploading(true)
+    setError('')
     const urls: string[] = []
     for (const file of files) {
-      if (!file.type.startsWith('image/')) continue
-      if (file.size > 5 * 1024 * 1024) continue
+      if (!file.type.startsWith('image/')) {
+        setError(`"${file.name}" no es una imagen válida.`)
+        continue
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError(`"${file.name}" pesa más de 5MB — subí una versión más liviana.`)
+        continue
+      }
       const ext  = file.name.split('.').pop()
       const path = `${tecnicoId}/${solicitudId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const { error: upErr } = await supabase.storage.from('trabajos').upload(path, file, { upsert: false })
-      if (upErr) continue
+      if (upErr) {
+        setError(`No se pudo subir "${file.name}": ${upErr.message}`)
+        continue
+      }
       const { data: { publicUrl } } = supabase.storage.from('trabajos').getPublicUrl(path)
       urls.push(publicUrl)
     }
