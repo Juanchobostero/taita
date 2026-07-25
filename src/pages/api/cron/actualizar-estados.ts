@@ -47,25 +47,30 @@ export const GET: APIRoute = async ({ request, url }) => {
     }
   }
 
-  // En curso -> Completada: ya pasó fecha/hora de inicio + horas estimadas.
-  const { data: enCurso } = await supabase
-    .from('solicitudes')
-    .select('id, fecha_solicitada, hora_solicitada, horas_estimadas')
-    .eq('estado', 'en_curso')
-    .not('fecha_solicitada', 'is', null)
-    .not('hora_solicitada', 'is', null)
-
-  for (const s of enCurso ?? []) {
-    const inicio = inicioSolicitud(s.fecha_solicitada as string, s.hora_solicitada as string)
-    const fin    = new Date(inicio.getTime() + (s.horas_estimadas ?? 1) * 60 * 60 * 1000)
-    if (ahora < fin) continue
-    try {
-      await notificarCambioEstado(supabase, s.id, 'completada', null)
-      aCompletada++
-    } catch (err) {
-      errores.push(`completada ${s.id}: ${err}`)
-    }
-  }
+  // En curso -> Completada: PAUSADO a pedido de Agustín (2026-07-24). Dependía de
+  // "horas_estimadas", campo que se sacó porque los trabajos ya no se van a medir por horas (van
+  // a usar m² u otra métrica a definir). Hasta que se defina un criterio nuevo, el paso a
+  // "Completada" queda 100% manual: el técnico lo hace vía "Completar trabajo"
+  // (src/pages/api/tecnico/completar.ts) o el admin lo cambia a mano. No borramos esta lógica,
+  // solo la desactivamos, para retomarla cuando haya una métrica definida.
+  // const { data: enCurso } = await supabase
+  //   .from('solicitudes')
+  //   .select('id, fecha_solicitada, hora_solicitada, horas_estimadas')
+  //   .eq('estado', 'en_curso')
+  //   .not('fecha_solicitada', 'is', null)
+  //   .not('hora_solicitada', 'is', null)
+  //
+  // for (const s of enCurso ?? []) {
+  //   const inicio = inicioSolicitud(s.fecha_solicitada as string, s.hora_solicitada as string)
+  //   const fin    = new Date(inicio.getTime() + (s.horas_estimadas ?? 1) * 60 * 60 * 1000)
+  //   if (ahora < fin) continue
+  //   try {
+  //     await notificarCambioEstado(supabase, s.id, 'completada', null)
+  //     aCompletada++
+  //   } catch (err) {
+  //     errores.push(`completada ${s.id}: ${err}`)
+  //   }
+  // }
 
   if (errores.length) console.error('[cron/actualizar-estados]', errores)
 

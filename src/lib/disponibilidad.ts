@@ -30,7 +30,6 @@ interface ChequeoParams {
   tecnicoId:           string
   fecha:               string  // 'YYYY-MM-DD'
   hora:                string  // 'HH:MM'
-  horasEstimadas:      number
   excluirSolicitudId?: string  // para no chocar contra sí misma al reasignar
 }
 
@@ -39,10 +38,19 @@ export interface ResultadoDisponibilidad {
   sugerido?: { fecha: string; hora: string }
 }
 
-async function ocupadosDelDia(supabase: SupabaseClient, tecnicoId: string, fecha: string, excluirSolicitudId?: string) {
+// Sin una duración de trabajo conocida (se sacó el campo "horas estimadas" a pedido del cliente —
+// los trabajos se van a medir por m² u otra métrica, no por horas), el choque de agenda pasa a ser
+// simple: mismo técnico + misma fecha + misma hora exacta. Dos horarios distintos (aunque sean
+// consecutivos, ej. 10:00 y 10:30) no se consideran conflicto.
+async function horasOcupadasDelDia(
+  supabase: SupabaseClient,
+  tecnicoId: string,
+  fecha: string,
+  excluirSolicitudId?: string,
+): Promise<Set<string>> {
   let query = supabase
     .from('solicitudes')
-    .select('id, hora_solicitada, horas_estimadas')
+    .select('id, hora_solicitada')
     .eq('tecnico_id', tecnicoId)
     .eq('fecha_solicitada', fecha)
     .in('estado', ESTADOS_OCUPAN)
@@ -51,15 +59,7 @@ async function ocupadosDelDia(supabase: SupabaseClient, tecnicoId: string, fecha
   if (excluirSolicitudId) query = query.neq('id', excluirSolicitudId)
 
   const { data } = await query
-  return (data ?? []).map(s => {
-    const inicio = minutosDesdeHora((s.hora_solicitada as string).slice(0, 5))
-    const fin    = inicio + Math.round((s.horas_estimadas ?? 1) * 60)
-    return { inicio, fin }
-  })
-}
-
-function seSuperponen(aIni: number, aFin: number, bIni: number, bFin: number): boolean {
-  return aIni < bFin && aFin > bIni
+  return new Set((data ?? []).map(s => (s.hora_solicitada as string).slice(0, 5)))
 }
 
 /** Chequea si el técnico está libre en esa fecha/hora; si no, sugiere el próximo horario libre. */
@@ -67,30 +67,27 @@ export async function chequearDisponibilidad(
   supabase: SupabaseClient,
   params: ChequeoParams,
 ): Promise<ResultadoDisponibilidad> {
-  const { tecnicoId, hora, horasEstimadas, excluirSolicitudId } = params
+  const { tecnicoId, hora, excluirSolicitudId } = params
   // fecha_solicitada es timestamptz en la base — puede llegar como "2026-07-28" (de un <input
   // type="date">) o como "2026-07-28T00:00:00+00:00" (leído directo de Supabase). Nos quedamos
   // siempre con la parte de fecha, sea cual sea el formato de entrada.
-  const fecha = params.fecha.slice(0, 10)
-  const duracionMin = Math.max(30, Math.round(horasEstimadas * 60))
-  const inicioMin   = minutosDesdeHora(hora)
-  const finMin      = inicioMin + duracionMin
+  const fecha    = params.fecha.slice(0, 10)
+  const horaBusc = hora.slice(0, 5)
 
-  const ocupados = await ocupadosDelDia(supabase, tecnicoId, fecha, excluirSolicitudId)
-  const choca = ocupados.some(o => seSuperponen(inicioMin, finMin, o.inicio, o.fin))
-
-  if (!choca) return { disponible: true }
+  const ocupadas = await horasOcupadasDelDia(supabase, tecnicoId, fecha, excluirSolicitudId)
+  if (!ocupadas.has(horaBusc)) return { disponible: true }
 
   // Buscar el próximo horario libre: mismo día desde la hora pedida, después cualquier hora
   // dentro del horario laboral en los próximos días.
+  const inicioMin = minutosDesdeHora(horaBusc)
   for (let dia = 0; dia < DIAS_A_BUSCAR; dia++) {
     const fechaProbar = dia === 0 ? fecha : sumarDias(fecha, dia)
-    const ocupadosDia = dia === 0 ? ocupados : await ocupadosDelDia(supabase, tecnicoId, fechaProbar, excluirSolicitudId)
+    const ocupadasDia = dia === 0 ? ocupadas : await horasOcupadasDelDia(supabase, tecnicoId, fechaProbar, excluirSolicitudId)
     const desdeMin    = dia === 0 ? inicioMin + PASO_MIN : HORA_INICIO_MIN
 
-    for (let min = desdeMin; min + duracionMin <= HORA_FIN_MIN; min += PASO_MIN) {
-      const libre = !ocupadosDia.some(o => seSuperponen(min, min + duracionMin, o.inicio, o.fin))
-      if (libre) return { disponible: false, sugerido: { fecha: fechaProbar, hora: horaDesdeMinutos(min) } }
+    for (let min = desdeMin; min < HORA_FIN_MIN; min += PASO_MIN) {
+      const horaProbar = horaDesdeMinutos(min)
+      if (!ocupadasDia.has(horaProbar)) return { disponible: false, sugerido: { fecha: fechaProbar, hora: horaProbar } }
     }
   }
 

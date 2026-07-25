@@ -1,16 +1,22 @@
 ---
 import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
-import ResenaForm from '../../components/ResenaForm'
 import AvatarUpload from '../../components/AvatarUpload'
-import CancelarSolicitud from '../../components/CancelarSolicitud'
+import MisSolicitudes from '../../components/MisSolicitudes'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
-import type { SolicitudConRelaciones } from '../../lib/types'
+
+const PAGE_SIZE = 5
 
 const supabase = createSupabaseAdmin()
 const userId = Astro.locals.user!.id
 
-const [{ data: usuario }, { data: rawSolicitudes }] = await Promise.all([
+const [
+  { data: usuario },
+  { data: rawSolicitudes, count: totalSolicitudes },
+  { count: pendientesCount },
+  { count: enCursoCount },
+  { count: completadasCount },
+] = await Promise.all([
   supabase
     .from('usuarios')
     .select('nombre_completo, email, telefono, foto_url')
@@ -19,38 +25,29 @@ const [{ data: usuario }, { data: rawSolicitudes }] = await Promise.all([
   supabase
     .from('solicitudes')
     .select(`
-      id, titulo, descripcion, estado, direccion, horas_estimadas, tecnico_id,
+      id, titulo, descripcion, estado, direccion, tecnico_id,
       precio_base, tasa_aplicada, total_estimado, fecha_solicitada, hora_solicitada, creado_en,
       tecnicos ( usuarios ( nombre_completo ) ),
       categorias ( nombre, icono ),
       resenas ( id )
-    `)
+    `, { count: 'exact' })
     .eq('cliente_id', userId)
     .order('creado_en', { ascending: false })
-    .limit(20),
+    .range(0, PAGE_SIZE - 1),
+  supabase.from('solicitudes').select('*', { count: 'exact', head: true })
+    .eq('cliente_id', userId).eq('estado', 'pendiente'),
+  supabase.from('solicitudes').select('*', { count: 'exact', head: true })
+    .eq('cliente_id', userId).in('estado', ['aceptada', 'en_curso']),
+  supabase.from('solicitudes').select('*', { count: 'exact', head: true })
+    .eq('cliente_id', userId).eq('estado', 'completada'),
 ])
 
-const solicitudes = (rawSolicitudes ?? []) as SolicitudConRelaciones[]
-
-const estadoLabel: Record<string, string> = {
-  pendiente:  'Pendiente',
-  aceptada:   'Aceptada',
-  en_curso:   'En curso',
-  completada: 'Completada',
-  cancelada:  'Cancelada',
-}
-const estadoColor: Record<string, string> = {
-  pendiente:  'bg-amber-100 text-amber-800',
-  aceptada:   'bg-blue-100 text-blue-800',
-  en_curso:   'bg-blue-100 text-blue-800',
-  completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
-  cancelada:  'bg-red-100 text-red-700',
-}
+const solicitudes = rawSolicitudes ?? []
 
 const stats = {
-  pendientes:  solicitudes.filter(s => s.estado === 'pendiente').length,
-  en_curso:    solicitudes.filter(s => ['aceptada', 'en_curso'].includes(s.estado)).length,
-  completadas: solicitudes.filter(s => s.estado === 'completada').length,
+  pendientes:  pendientesCount ?? 0,
+  en_curso:    enCursoCount ?? 0,
+  completadas: completadasCount ?? 0,
 }
 
 const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
@@ -98,122 +95,7 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
           <h2 class="font-serif font-bold text-[#1B4D2E] text-lg">Mis solicitudes</h2>
         </div>
 
-        {solicitudes.length === 0 ? (
-          <div class="px-6 py-12 text-center text-gray-400 text-sm flex flex-col items-center gap-3">
-            <span class="text-3xl">🔍</span>
-            <p>Todavía no hiciste ninguna solicitud.</p>
-            <a href="/solicitud" class="text-[#1B4D2E] hover:text-primary-hover font-medium">
-              Solicitá un servicio →
-            </a>
-          </div>
-        ) : (
-          <div class="divide-y divide-cream">
-            {solicitudes.map(s => {
-              const tec      = s.tecnicos as any
-              const cat      = s.categorias as any
-              const total    = s.total_estimado as number | null
-              const base     = s.precio_base   as number | null
-              const tasa     = s.tasa_aplicada as number | null
-              const ganancia = (total != null && base != null) ? total - base : null
-              const fmt      = (n: number) => `$${n.toLocaleString('es-AR')}`
-              // fecha_solicitada es una fecha "pura" guardada a medianoche UTC — se formatea en
-              // UTC para no correrla un día por el huso horario local. creado_en sí es un
-              // instante real, se muestra en hora local normalmente.
-              const fecha    = s.fecha_solicitada
-                ? new Date(s.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
-                : new Date(s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
-              const hora     = (s as any).hora_solicitada ? (s as any).hora_solicitada.slice(0, 5) : null
-              return (
-                <div class={`px-6 py-5 flex flex-col gap-4 ${s.estado === 'cancelada' ? 'bg-red-50/70' : ''}`}>
-
-                  {/* Fila principal */}
-                  <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                    <div class="flex flex-col gap-1">
-                      <a href={`/dashboard/cliente/solicitud/${s.id}`} class="font-semibold text-gray-900 hover:text-primary hover:underline w-fit">
-                        {s.titulo}
-                      </a>
-                      <p class="text-xs text-gray-400">
-                        {cat?.icono} {cat?.nombre} · 📅 {fecha}{hora && ` ${hora} hs`}
-                      </p>
-                    </div>
-                    <span class={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 w-fit ${estadoColor[s.estado]}`}>
-                      {estadoLabel[s.estado]}
-                    </span>
-                  </div>
-
-                  {/* Grid de detalles */}
-                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-
-                    {/* Técnico */}
-                    <div class="flex items-start gap-2.5">
-                      {tec?.usuarios ? (
-                        <>
-                          <div class="w-8 h-8 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-xs shrink-0 mt-0.5 overflow-hidden">
-                            {(tec.usuarios as any).foto_url
-                              ? <img src={(tec.usuarios as any).foto_url} class="w-full h-full object-cover" />
-                              : tec.usuarios.nombre_completo?.split(' ').slice(0,2).map((p: string) => p[0]).join('')
-                            }
-                          </div>
-                          <div class="flex flex-col gap-0.5">
-                            <span class="text-xs text-gray-400">Técnico</span>
-                            <span class="font-medium text-gray-800 text-xs">{tec.usuarios.nombre_completo}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div class="flex flex-col gap-0.5">
-                          <span class="text-xs text-gray-400">Técnico</span>
-                          <span class="text-xs text-amber-600 font-medium">Pendiente de asignación</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Dirección */}
-                    {s.direccion && (
-                      <div class="flex flex-col gap-0.5">
-                        <span class="text-xs text-gray-400">Dirección</span>
-                        <span class="text-xs font-medium text-gray-800">📍 {s.direccion}</span>
-                      </div>
-                    )}
-
-                    {/* Descripción */}
-                    {s.descripcion && (
-                      <div class="flex flex-col gap-0.5 sm:col-span-2 lg:col-span-1">
-                        <span class="text-xs text-gray-400">Detalle</span>
-                        <span class="text-xs text-gray-600 leading-relaxed">{s.descripcion}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Financiero (solo si hay tarifa) */}
-                  {total != null && (
-                    <div class="bg-cream rounded-xl px-4 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
-                      {tasa != null && tasa > 0 && (
-                        <span>Tasa plataforma {tasa}%{ganancia != null ? ` = ${fmt(ganancia)}` : ''}</span>
-                      )}
-                      <span class="font-bold text-gray-900 ml-auto">Total: {fmt(total)}</span>
-                    </div>
-                  )}
-
-                  {/* Cancelar — solo en solicitudes que todavía no terminaron */}
-                  {['pendiente', 'aceptada', 'en_curso'].includes(s.estado) && (
-                    <CancelarSolicitud client:load solicitudId={s.id} titulo={s.titulo} />
-                  )}
-
-                  {/* Reseña — solo en solicitudes completadas sin reseña previa */}
-                  {s.estado === 'completada' && !(s as any).resenas?.length && s.tecnico_id && tec?.usuarios && (
-                    <ResenaForm
-                      client:load
-                      solicitudId={s.id}
-                      tecnicoId={s.tecnico_id}
-                      tecnicoNombre={tec.usuarios.nombre_completo}
-                    />
-                  )}
-
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <MisSolicitudes client:load initialData={solicitudes as any} initialTotal={totalSolicitudes ?? 0} />
       </div>
 
       <!-- Perfil -->

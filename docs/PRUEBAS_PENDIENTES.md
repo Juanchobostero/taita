@@ -144,6 +144,46 @@ a tirar error.
 
 ---
 
+## ⏳ Falta probar — Sacar "horas estimadas" (2026-07-24)
+
+Cambio a pedido de Agustín: no se pide más una estimación de horas al crear la solicitud. La
+validación de choque de agenda ahora es por **hora exacta** (antes era por rango de horas
+estimadas), y el cron **ya no completa solo** las solicitudes "En curso" (eso quedó pausado, ver
+`ESTADO_PROYECTO.md`).
+
+### Formulario de solicitud
+
+1. Entrar a `/solicitud` (flujo libre o desde el perfil de un técnico) → confirmar que **no**
+   aparece el campo "Horas estimadas" en ningún lado del formulario.
+2. Completar y enviar una solicitud nueva → tiene que crearse sin error.
+
+### Choque de agenda (hora exacta, no por rango)
+
+3. Con un técnico que ya tenga una solicitud **Aceptada** a una hora puntual (ej. 10:00), pedirle
+   **la misma fecha y la misma hora exacta** (10:00) desde su perfil → tiene que aparecer el aviso
+   de conflicto con horario sugerido, igual que antes.
+4. Pedirle al mismo técnico, mismo día, un horario **distinto** aunque sea cercano (ej. 10:30) →
+   ahora **no** debería chocar — tiene que dejar crear la solicitud sin aviso (este es el cambio de
+   comportamiento respecto a como estaba probado en la Tanda 3 originalmente).
+5. Repetir el punto 3 desde el lado del admin: crear una solicitud en el flujo libre a esa misma
+   hora exacta y intentar asignarle el técnico ocupado → mismo aviso con "Asignar igual".
+
+### Cron — completado automático pausado
+
+6. Repetir la prueba de cron de la Tanda 4 (adelantar `fecha_solicitada`/`hora_solicitada` de una
+   solicitud "Aceptada" a algo ya pasado y llamar a `/api/cron/actualizar-estados`) → tiene que
+   seguir pasando a **"En curso"** normalmente (`aEnCurso: 1`), pero **`aCompletada` tiene que dar
+   siempre 0**, aunque haya pasado mucho tiempo — ya no completa solo.
+7. Confirmar que el técnico puede seguir marcando "Completar trabajo" a mano en una solicitud "En
+   curso" para pasarla a "Completada" (ese camino no depende del cron y no debería haberse tocado).
+
+### Chequeo general de que no se rompió nada
+
+8. Revisar el detalle de una solicitud vieja que sí tenía horas estimadas cargadas (de antes de
+   este cambio) — no debería tirar error ni mostrar "undefined", simplemente ya no se ve ese dato.
+
+---
+
 ## Notas rápidas
 
 - `CRON_SECRET` está vacío en el `.env` a propósito — así en local no hace falta mandar ningún

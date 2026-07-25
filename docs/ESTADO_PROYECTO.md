@@ -53,7 +53,7 @@ cuando haya tiempo, cada uno a su ritmo. El detalle de cada uno está más abajo
 4. (Ya con `RESEND_API_KEY` cargada) repetir los pasos de arriba y esta vez sí debería llegar el
    mail real a la casilla que corresponda.
 
-### Tanda 3 — Horarios y solapamiento
+### Tanda 3 — Horarios y solapamiento (⚠️ semántica cambiada el 2026-07-24, ver más abajo)
 Para que se note el conflicto hace falta que el técnico ya tenga **una solicitud en estado
 "Aceptada"** en ese horario (mientras está en "Pendiente" no cuenta como agenda ocupada todavía).
 
@@ -61,14 +61,15 @@ Para que se note el conflicto hace falta que el técnico ya tenga **una solicitu
    formulario **incluyendo el horario nuevo** (selector de franjas de 30') → enviar.
 2. Como admin: entrar al detalle de esa solicitud y cambiar el estado a **"Aceptada"** (ya tiene
    técnico asignado, así que el dropdown lo permite).
-3. Como cliente de nuevo: pedirle **al mismo técnico**, **la misma fecha**, un horario que se pise
-   con el de la solicitud del paso 1 (ej. si la primera es 10:00 con 2hs, probar con 11:00) →
+3. Como cliente de nuevo: pedirle **al mismo técnico**, **la misma fecha** y **la misma hora exacta**
+   que la solicitud del paso 1 (ej. si la primera es a las 10:00, volver a probar con 10:00) →
    al enviar tiene que aparecer un aviso ámbar de conflicto con un horario sugerido, y no debería
-   crearse la solicitud hasta que elijas otro horario (o uses el sugerido).
+   crearse la solicitud hasta que elijas otro horario (o uses el sugerido). Un horario distinto
+   aunque sea cercano (ej. 10:30) **ya no choca** — ver nota de la Tanda "Sacar horas estimadas".
 4. Para probar el lado del admin: crear una solicitud en el **flujo libre** (sin elegir técnico,
-   desde `/solicitud` sin venir de un perfil), y en su detalle intentar asignarle el técnico que ya
-   quedó ocupado en el paso 2, en el mismo horario → debería aparecer el mismo aviso con el botón
-   "Asignar igual" (por si el admin quiere forzarlo a propósito).
+   desde `/solicitud` sin venir de un perfil) a esa misma hora exacta, y en su detalle intentar
+   asignarle el técnico que ya quedó ocupado en el paso 2 → debería aparecer el mismo aviso con el
+   botón "Asignar igual" (por si el admin quiere forzarlo a propósito).
 
 ### Tanda 5 — Vista de detalle + timeline para el cliente
 1. Como cliente, entrar a "Mis solicitudes" y hacer click en el **título** de cualquier solicitud
@@ -106,8 +107,10 @@ Para que se note el conflicto hace falta que el técnico ya tenga **una solicitu
 | Notificaciones por email (nueva solicitud + cambios de estado) | ✅ Operativo (Tanda 2) — falta cargar `RESEND_API_KEY` real para que salgan en producción |
 | Historial de estados con timestamp | ✅ Operativo (Tanda 2) |
 | Notificaciones por WhatsApp | ⏳ Pendiente (después de validar email) |
-| Campo de hora + validación de solapamiento de horarios | ✅ Operativo y probado (Tanda 3) |
-| Cambio automático de estado por fecha/hora | ✅ Operativo (Tanda 4) — falta configurar el cron externo (ver abajo) |
+| Campo de hora + validación de solapamiento de horarios | ✅ Operativo — semántica cambiada 2026-07-24 (choque por hora exacta, ver abajo), falta probar |
+| "Horas estimadas" del servicio | ❌ Sacado de la app (2026-07-24, a pedido de Agustín) |
+| Cambio automático Aceptada → En curso (cron) | ✅ Operativo (Tanda 4) — falta configurar el cron externo (ver abajo) |
+| Cambio automático En curso → Completada (cron) | ⏸️ Pausado (2026-07-24) — dependía de "horas estimadas"; el paso a Completada ahora es manual |
 | Cancelación con confirmación inline | ✅ Operativo (Tanda 4) |
 | Timeline de estados para el cliente | ✅ Operativo y probado (Tanda 5) |
 | Conformidad del cliente + registro de pago (sin cobro real) | ✅ Operativo y probado (Tanda 6) |
@@ -207,6 +210,27 @@ Agustín pueda probar y dar feedback antes de seguir.
         ve un aviso de "pago registrado, pendiente de acreditación".
       - Panel técnico: aviso en la solicitud cuando el cliente ya dio conformidad.
       - Panel admin: indicador de conformidad (dado/pendiente) en el detalle, además del email.
+- [x] **Sacar "horas estimadas"** — a pedido de Agustín (2026-07-24): los trabajos no se van a medir
+      por horas (van a usar m² u otra métrica a definir más adelante), así que se sacó el concepto
+      de la app. **Falta probar** (ver checklist en `PRUEBAS_PENDIENTES.md`).
+      - Se sacó el campo del formulario de solicitud (`FormSolicitud.tsx`) y el renglón de
+        "Horas estimadas" de las vistas de detalle (admin y cliente).
+      - La columna `solicitudes.horas_estimadas` **no se borró** de la base (evita un cambio
+        destructivo) — simplemente ya no se pide ni se completa; queda `null` en las solicitudes
+        nuevas y sin usar en el resto del código.
+      - **Validación de solapamiento de horarios (Tanda 3)** — se simplificó: como ya no hay
+        duración de trabajo, el choque de agenda pasa a ser **mismo técnico + misma fecha + misma
+        hora exacta** (antes calculaba un rango de solapamiento con las horas estimadas). Dos
+        horarios distintos, aunque sean consecutivos (ej. 10:00 y 10:30), ya no chocan entre sí.
+        Reescrito en `src/lib/disponibilidad.ts`; sigue sugiriendo el próximo horario libre igual
+        que antes. Se mantiene la validación tanto cuando el cliente pide un técnico puntual como
+        cuando el admin asigna/reasigna técnico.
+      - **Cron de auto-completado (Tanda 4)** — la transición automática **En curso → Completada**
+        dependía de "horas estimadas" para saber cuándo terminaba el trabajo, así que **se pausó**
+        (queda comentada en `src/pages/api/cron/actualizar-estados.ts`, no se borró, para retomarla
+        si más adelante se define una métrica). La transición **Aceptada → En curso** sigue andando
+        igual que antes, por fecha/hora de inicio. El paso a "Completada" ahora es siempre manual:
+        el técnico lo hace vía "Completar trabajo" (no depende del cron) o el admin lo cambia a mano.
 - [ ] **Tanda 7** — Integración Mercado Pago (al final, requiere credenciales de Agustín)
 
 WhatsApp (parte del Paso 2 del backlog) se encara después de validar el email con Agustín —

@@ -13,7 +13,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const body = await request.json()
-  const { tecnicoId, categoriaId, titulo, descripcion, horasEstimadas,
+  const { tecnicoId, categoriaId, titulo, descripcion,
           precioBase, tasaAplicada, totalEstimado, fechaSolicitada, horaSolicitada, direccion } = body
 
   if (!categoriaId || !titulo || !fechaSolicitada || !horaSolicitada || !direccion) {
@@ -26,7 +26,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   // por si el cliente lo eligió antes del chequeo del front o el chequeo quedó desactualizado.
   if (tecnicoId) {
     const disponibilidad = await chequearDisponibilidad(supabase, {
-      tecnicoId, fecha: fechaSolicitada, hora: horaSolicitada, horasEstimadas,
+      tecnicoId, fecha: fechaSolicitada, hora: horaSolicitada,
     })
     if (!disponibilidad.disponible) {
       return new Response(JSON.stringify({
@@ -42,7 +42,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     categoria_id:     categoriaId,
     titulo,
     descripcion:      descripcion || null,
-    horas_estimadas:  horasEstimadas,
+    horas_estimadas:  null,
     precio_base:      precioBase ?? null,
     tasa_aplicada:    tasaAplicada ?? null,
     total_estimado:   totalEstimado ?? null,

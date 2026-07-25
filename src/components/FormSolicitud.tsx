@@ -37,7 +37,6 @@ const schema = z.object({
   categoria_id:     z.string().min(1, 'Seleccioná una categoría'),
   titulo:           z.string().min(5, 'Mínimo 5 caracteres'),
   descripcion:      z.string().optional(),
-  horas_estimadas:  z.coerce.number({ invalid_type_error: 'Ingresá un número' }).min(0.5, 'Mínimo 0.5 horas').max(100),
   fecha_solicitada: z.string().min(1, 'Ingresá una fecha'),
   hora_solicitada:  z.string().min(1, 'Elegí un horario'),
   direccion:        z.string().min(5, 'Ingresá la dirección del trabajo'),
@@ -106,7 +105,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
       try {
         const r = await fetch(
           `/api/disponibilidad-tecnico?tecnicoId=${tecnicoId}&fecha=${data.fecha_solicitada}` +
-          `&hora=${data.hora_solicitada}&horasEstimadas=${data.horas_estimadas}`
+          `&hora=${data.hora_solicitada}`
         )
         const disp: Conflicto = await r.json()
         if (!disp.disponible) {
@@ -126,7 +125,6 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
         categoriaId:     data.categoria_id,
         titulo:          data.titulo,
         descripcion:     data.descripcion || null,
-        horasEstimadas:  data.horas_estimadas,
         precioBase,
         tasaAplicada:    tasa,
         totalEstimado:   total,
@@ -286,22 +284,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Horas estimadas */}
-        <div className="flex flex-col gap-1.5">
-          <Label>Horas estimadas</Label>
-          <Input
-            type="number"
-            step="0.5"
-            min="0.5"
-            max="100"
-            placeholder="Ej: 2"
-            {...register('horas_estimadas')}
-            className={errors.horas_estimadas ? 'border-destructive' : ''}
-          />
-          <FieldError msg={errors.horas_estimadas?.message} />
-        </div>
-
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Fecha */}
         <div className="flex flex-col gap-1.5">
           <Label>Fecha preferida</Label>
