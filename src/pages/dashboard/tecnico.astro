@@ -5,37 +5,10 @@ import AvatarUpload from '../../components/AvatarUpload'
 import GestionEspecialidades from '../../components/GestionEspecialidades'
 import CompletarTrabajo from '../../components/CompletarTrabajo'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
-import { notificarCambioEstado } from '../../lib/notificaciones'
 import type { TecnicoConUsuario, SolicitudParaTecnico } from '../../lib/types'
 
 const supabase = createSupabaseAdmin()
 const userId = Astro.locals.user!.id
-
-if (Astro.request.method === 'POST') {
-  const form      = await Astro.request.formData()
-  const solicitudId = form.get('solicitudId')?.toString()
-  const accion    = form.get('accion')?.toString()
-  const { data: tec } = await supabase.from('tecnicos').select('id, total_servicios').eq('usuario_id', userId).single()
-
-  if (solicitudId && tec && (accion === 'aceptar' || accion === 'rechazar')) {
-    // Verificar que la solicitud sigue siendo del técnico antes de tocarla
-    const { data: check } = await supabase.from('solicitudes').select('tecnico_id').eq('id', solicitudId).single()
-    if (check?.tecnico_id === tec.id) {
-      try {
-        if (accion === 'aceptar') {
-          await notificarCambioEstado(supabase, solicitudId, 'aceptada', userId)
-        } else {
-          // Rechazar: volver a pendiente y desasignar técnico
-          await notificarCambioEstado(supabase, solicitudId, 'pendiente', userId)
-          await supabase.from('solicitudes').update({ tecnico_id: null }).eq('id', solicitudId)
-        }
-      } catch (err) {
-        console.error('[tecnico aceptar/rechazar]', err)
-      }
-    }
-  }
-  return Astro.redirect('/dashboard/tecnico')
-}
 
 const { data: rawTecnico } = await supabase
   .from('tecnicos')

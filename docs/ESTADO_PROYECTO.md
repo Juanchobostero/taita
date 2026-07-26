@@ -3,16 +3,17 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-07-24
+**Última actualización:** 2026-07-25
 
 ---
 
 ## Resumen
 
 Plataforma operativa con registro de clientes/técnicos, flujo completo de solicitud de
-servicio, panel admin/cliente/técnico, y páginas legales. Pendiente: capa de notificaciones,
-gestión de horarios con solapamiento, timeline de estados para el cliente, conformidad final y
-Mercado Pago.
+servicio, panel admin/cliente/técnico, y páginas legales. **Ya publicada en el dominio propio**
+(`taitasoluciones.com.ar`, vía Vercel + Cloudflare) **con envío de email real funcionando**
+(Resend). Pendiente: WhatsApp, cron externo para producción, conformidad+pago ya implementados,
+Mercado Pago al final.
 
 ---
 
@@ -21,14 +22,19 @@ Mercado Pago.
 Todo lo de código está listo; esto son pasos que hay que hacer en paneles/cuentas externas
 cuando haya tiempo, cada uno a su ritmo. El detalle de cada uno está más abajo en este documento.
 
-- [ ] **Email real (Resend)** — verificar dominio `taitasoluciones.com.ar` en Resend (requiere
-      antes migrar el DNS a Cloudflare y vincularlo a Vercel) y cargar `RESEND_API_KEY` real.
-      Ver sección "SQL pendiente... → Tanda 2".
-- [ ] **Cron externo (cron-job.org)** — para que el cambio automático de estado por fecha/hora
-      (Tanda 4) funcione en producción. Generar `CRON_SECRET` y configurar el servicio. Jota
-      ayuda con esto cuando Agustín/vos lo pidan. Ver sección "Tanda 4" más abajo.
+- [x] **Dominio propio** — `taitasoluciones.com.ar` migrado de DonWeb a Cloudflare (nameservers) y
+      conectado a Vercel (registros A/CNAME, ambos en "DNS only"). SSL emitido por Vercel, sitio
+      accesible en `https://taitasoluciones.com.ar`. Hecho el 2026-07-25.
+- [x] **Email real (Resend)** — dominio verificado en Resend (DKIM, SPF/MX de envío, DMARC, todos
+      cargados en Cloudflare DNS). `RESEND_API_KEY`, `RESEND_FROM_EMAIL` y `PUBLIC_SITE_URL`
+      cargadas tanto en `.env` local como en Vercel (Production + Preview). Probado de punta a
+      punta: mail de `/contacto` llegó y figura "Delivered" en Resend → Logs. Hecho el 2026-07-25.
+- [ ] **Cron externo (cron-job.org)** — para que el cambio automático **Aceptada → En curso**
+      (Tanda 4) funcione en producción, no solo llamando la URL a mano. Sigue pendiente — ver
+      checklist detallado en la sección "Tanda 4" más abajo. (El paso **En curso → Completada**
+      quedó pausado a propósito, no depende de esto — ver "Sacar horas estimadas".)
 - [ ] **WhatsApp** — cuenta Twilio/WhatsApp Cloud API, después de validar que el email ya
-      funciona bien.
+      funciona bien (✅ ya validado). Se puede encarar cuando haya tiempo.
 - [ ] **Mercado Pago** — credenciales de Agustín, se coordina al llegar a la Tanda 7 (al final,
       a propósito).
 
@@ -280,12 +286,29 @@ También hace falta, en el proyecto de Vercel (o `.env` local), cargar:
 Sin `RESEND_API_KEY`, la app sigue funcionando normal — los emails simplemente no se mandan y
 queda un warning en el log del servidor.
 
-> **Pendiente de Jota (fuera del código, cuentas externas — no bloquea el resto de las tandas):**
-> 1. Migrar el DNS de `taitasoluciones.com.ar` a Cloudflare (para el SSL).
-> 2. Vincular el dominio a Vercel (Project Settings → Domains).
-> 3. Verificar el dominio en Resend (Domains → Add Domain) y cargar los registros TXT/CNAME en Cloudflare.
-> 4. Una vez verificado, cargar `RESEND_API_KEY` real y `RESEND_FROM_EMAIL=Taita Soluciones <notificaciones@taitasoluciones.com.ar>`.
-> Hasta entonces, los emails quedan solo logueados en consola (no rompe nada, pero no llegan de verdad).
+> **✅ Hecho (2026-07-25):** dominio migrado a Cloudflare, vinculado a Vercel con SSL, dominio
+> verificado en Resend, `RESEND_API_KEY`/`RESEND_FROM_EMAIL`/`PUBLIC_SITE_URL` cargadas en local y
+> en Vercel (Production + Preview). Probado en producción: mail de `/contacto` llegó y figura
+> "Delivered" en Resend → Logs.
+
+### Cron externo — lo único que falta para producción
+
+El cambio automático **Aceptada → En curso** (`GET /api/cron/actualizar-estados`) ya funciona en
+el código y está probado en local. Para que corra solo en producción, sin depender de que alguien
+entre a la URL a mano, faltan estos 3 pasos (ninguno toca código):
+
+1. **Generar un secreto** (ej. `openssl rand -hex 32` en una terminal, o cualquier string largo y
+   random) y cargarlo como `CRON_SECRET` en Vercel → Settings → Environment Variables (Production).
+   Mientras no esté cargado, el endpoint queda sin proteger — no rompe nada porque solo mueve
+   estados según fecha/hora real, pero conviene cargarlo antes de depender de esto en el día a día.
+2. **Redeploy** en Vercel para que la variable nueva quede activa.
+3. **Crear cuenta gratis en [cron-job.org](https://cron-job.org)** y armar un cronjob:
+   - URL: `https://taitasoluciones.com.ar/api/cron/actualizar-estados?secret=EL_CRON_SECRET`
+     (o header `Authorization: Bearer EL_CRON_SECRET` si el servicio lo soporta — el endpoint
+     acepta cualquiera de las dos formas).
+   - Método: `GET`.
+   - Frecuencia: cada 15 minutos.
+   - (El plan Hobby de Vercel no sirve para esto — sus cron jobs nativos corren 1 vez por día.)
 
 ### Tanda 3 — hora de la solicitud
 

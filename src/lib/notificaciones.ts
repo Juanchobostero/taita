@@ -107,12 +107,13 @@ export async function notificarCambioEstado(
     })
   }
 
-  // El técnico rechazó el trabajo (vuelve a pendiente) → avisar al admin para reasignar.
+  // La solicitud volvió a Pendiente (hoy siempre por acción del admin desde el dropdown de
+  // estado) → avisarle que quedó libre para reasignar.
   if (estadoNuevo === 'pendiente' && cambiadoPor) {
     await enviarEmail({
       to:      ADMIN_EMAIL,
-      subject: `Técnico rechazó la solicitud "${sol.titulo}"`,
-      html:    `<p>La solicitud <strong>${sol.titulo}</strong> quedó nuevamente disponible para reasignar.</p>`,
+      subject: `La solicitud "${sol.titulo}" volvió a Pendiente`,
+      html:    `<p>La solicitud <strong>${sol.titulo}</strong> volvió al estado <strong>Pendiente</strong> y quedó disponible para asignar un técnico.</p>`,
     })
   }
 }
