@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useId } from 'react'
+import { supabase } from '@/lib/supabase'
 
 interface SolicitudRow {
   id: string
@@ -41,14 +42,18 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal }: Pro
   const [total,   setTotal]   = useState(initialTotal)
   const [page,    setPage]    = useState(1)
   const [loading, setLoading] = useState(false)
+  const [synced,  setSynced]  = useState(false)
+
+  const pageRef = useRef(page)
+  pageRef.current = page
+  const instanceId = useId()
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const rangeFrom  = (page - 1) * PAGE_SIZE + 1
   const rangeTo    = Math.min(page * PAGE_SIZE, total)
 
-  async function goTo(next: number) {
-    if (next === page || next < 1 || next > totalPages) return
-    setLoading(true)
+  async function fetchPage(next: number, opts: { silent?: boolean } = {}) {
+    if (!opts.silent) setLoading(true)
     try {
       const res  = await fetch(`/api/admin/solicitudes?page=${next}`)
       const json = await res.json()
@@ -56,9 +61,33 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal }: Pro
       setTotal(json.total)
       setPage(next)
     } finally {
-      setLoading(false)
+      if (!opts.silent) setLoading(false)
     }
   }
+
+  async function goTo(next: number) {
+    if (next === page || next < 1 || next > totalPages) return
+    await fetchPage(next)
+  }
+
+  // Tiempo real: el admin ve todas las solicitudes, así que no hace falta filtro — cualquier
+  // insert/update en la tabla re-trae la página actual (silencioso, sin el dimming de loading).
+  useEffect(() => {
+    const channel = supabase
+      .channel(`tabla-solicitudes-admin-${instanceId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'solicitudes' },
+        () => {
+          setSynced(true)
+          fetchPage(pageRef.current, { silent: true })
+        },
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instanceId])
 
   return (
     <div className={`transition-opacity duration-150 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -66,7 +95,8 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal }: Pro
       {/* Header */}
       <div className="px-6 py-4 border-b border-[#E8E0D5] flex items-center justify-between">
         <h2 className="font-serif font-bold text-[#1B4D2E] text-base">Solicitudes de servicio</h2>
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-gray-400 flex items-center gap-1.5">
+          {synced && <span className="w-1.5 h-1.5 rounded-full bg-[#1B4D2E]" />}
           {total === 0 ? '0' : `${rangeFrom}–${rangeTo}`} de {total}
         </span>
       </div>

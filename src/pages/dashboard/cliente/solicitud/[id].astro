@@ -4,6 +4,7 @@ import Navbar from '../../../../components/Navbar'
 import GaleriaFotos from '../../../../components/GaleriaFotos'
 import CancelarSolicitud from '../../../../components/CancelarSolicitud'
 import DarConformidad from '../../../../components/DarConformidad'
+import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
 
 const { id } = Astro.params
@@ -81,6 +82,7 @@ const fmtFechaHora = (iso: string) =>
 
 <Layout title={`Solicitud — ${sol.titulo}`}>
   <Navbar client:load />
+  <CambiosEnVivo client:load autoReload suscripciones={[{ tabla: 'solicitudes', filtro: `id=eq.${sol.id}` }]} />
 
   <div class="bg-cream min-h-screen py-8 px-4">
     <div class="max-w-4xl mx-auto flex flex-col gap-6">

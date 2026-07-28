@@ -27,7 +27,7 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
         resenas ( id )
       `, { count: 'exact' })
       .eq('cliente_id', user.id)
-      .order('creado_en', { ascending: false })
+      .order('actualizado_en', { ascending: false })
       .range(from, to)
 
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })

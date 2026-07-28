@@ -3,7 +3,8 @@ import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
 import AvatarUpload from '../../components/AvatarUpload'
 import GestionEspecialidades from '../../components/GestionEspecialidades'
-import CompletarTrabajo from '../../components/CompletarTrabajo'
+import SolicitudesTecnico from '../../components/SolicitudesTecnico'
+import CambiosEnVivo from '../../components/CambiosEnVivo'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
 import type { TecnicoConUsuario, SolicitudParaTecnico } from '../../lib/types'
 
@@ -41,25 +42,10 @@ const { data: rawSolicitudes } = await supabase
     categorias ( nombre, icono )
   `)
   .eq('tecnico_id', tecnico.id)
-  .order('creado_en', { ascending: false })
+  .order('actualizado_en', { ascending: false })
   .limit(20)
 
 const solicitudes = (rawSolicitudes ?? []) as SolicitudParaTecnico[]
-
-const estadoLabel: Record<string, string> = {
-  pendiente:  'Pendiente',
-  aceptada:   'Aceptada',
-  en_curso:   'En curso',
-  completada: 'Completada',
-  cancelada:  'Cancelada',
-}
-const estadoColor: Record<string, string> = {
-  pendiente:  'bg-amber-100 text-amber-800',
-  aceptada:   'bg-blue-100 text-blue-800',
-  en_curso:   'bg-blue-100 text-blue-800',
-  completada: 'bg-primary-soft text-[#1B4D2E]',
-  cancelada:  'bg-gray-100 text-gray-500',
-}
 
 const stats = {
   pendientes:  solicitudes.filter(s => s.estado === 'pendiente').length,
@@ -76,6 +62,13 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
 
 <Layout title="Panel técnico — Taita Soluciones">
   <Navbar client:load />
+  <CambiosEnVivo
+    client:load
+    autoReload
+    suscripciones={[
+      { tabla: 'tecnicos', filtro: `id=eq.${tecnico.id}` },
+    ]}
+  />
 
   <div class="bg-cream min-h-screen py-8 px-4">
     <div class="max-w-5xl mx-auto flex flex-col gap-6">
@@ -116,71 +109,8 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
         </div>
       </div>
 
-      <!-- Solicitudes -->
-      <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
-        <div class="px-6 py-4 border-b border-cream">
-          <h2 class="font-serif font-bold text-[#1B4D2E] text-lg">Solicitudes recibidas</h2>
-        </div>
-
-        {solicitudes.length === 0 ? (
-          <div class="px-6 py-12 text-center text-gray-400 text-sm flex flex-col items-center gap-3">
-            <span class="text-3xl">📋</span>
-            <p>Todavía no recibiste solicitudes.</p>
-          </div>
-        ) : (
-          <div class="divide-y divide-cream">
-            {solicitudes.map(s => (
-              <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div class="flex flex-col gap-1">
-                  <a href={`/dashboard/tecnico/solicitud/${s.id}`} class="font-semibold text-gray-900 text-sm hover:text-primary transition-colors w-fit">{s.titulo}</a>
-                  <p class="text-xs text-gray-400">
-                    {s.categorias?.icono} {s.categorias?.nombre}
-                    {s.usuarios?.nombre_completo && ` · 👤 ${s.usuarios.nombre_completo}`}
-                  </p>
-                  {s.direccion && <p class="text-xs text-gray-400">📍 {s.direccion}</p>}
-                  {s.estado === 'completada' && (s as any).conformidad_cliente && (
-                    <p class="text-xs text-primary font-medium">
-                      ✅ El cliente dio conformidad — el pago se va a reflejar próximamente en tu cuenta.
-                    </p>
-                  )}
-                  <p class="text-xs text-gray-400">
-                    📅 {s.fecha_solicitada
-                      ? new Date(s.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
-                      : new Date(s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    {(s as any).hora_solicitada && ` ${(s as any).hora_solicitada.slice(0, 5)} hs`}
-                  </p>
-                </div>
-                <div class="flex items-center gap-3 shrink-0">
-                  <span class={`text-xs font-medium px-3 py-1 rounded-full ${estadoColor[s.estado]}`}>
-                    {estadoLabel[s.estado]}
-                  </span>
-                  {s.total_estimado != null && (
-                    <span class="text-sm font-semibold text-gray-700">
-                      ${Number(s.total_estimado).toLocaleString('es-AR')}
-                    </span>
-                  )}
-                  <a
-                    href={`/dashboard/tecnico/solicitud/${s.id}`}
-                    class="inline-flex items-center gap-1 text-xs font-semibold bg-primary-soft hover:bg-primary text-[#1B4D2E] hover:text-white px-3 py-1.5 rounded-full transition-colors whitespace-nowrap"
-                  >
-                    Ver detalle →
-                  </a>
-                  {(s.estado === 'aceptada' || s.estado === 'en_curso' ||
-                    (s.estado === 'completada' && !(s.imagenes_trabajo?.length) && s.gastos_extra == null)) && (
-                    <CompletarTrabajo
-                      client:load
-                      solicitudId={s.id}
-                      tecnicoId={tecnico.id}
-                      precioBase={(s as any).precio_base ?? null}
-                      tasa={(s as any).tasa_aplicada ?? null}
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <!-- Solicitudes (en vivo) -->
+      <SolicitudesTecnico client:load tecnicoId={tecnico.id} usuarioId={userId} initialData={solicitudes as any} />
 
       <!-- Perfil público -->
       <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">

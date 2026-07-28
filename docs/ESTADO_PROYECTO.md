@@ -99,6 +99,17 @@ punta** (registro cliente, registro técnico, y el caso de mail repetido).
         de mail, hay que volver a esta pantalla y cargar `https://taitasoluciones.com.ar` como
         Site URL + Redirect URL antes de que ese flujo dependa de ahí.
 
+**Encontrado al probar (2026-07-28):** con "Confirm email" desactivado, Supabase para un mail ya
+registrado **ya no devuelve el "usuario fantasma" con `identities: []`** (ese comportamiento es
+solo para mails sin confirmar) — devuelve directo un `error` real (`"User already registered"`, en
+inglés), que cortaba antes de llegar al chequeo de `identities`. El mensaje le llegaba al usuario
+tal cual, en inglés y sin indicarle qué hacer. Se agregó `mensajeErrorAuth()` en
+`RegistroForm.tsx` que detecta ese caso puntual (por `error.code === 'user_already_exists'` o el
+texto del mensaje) y lo traduce a: *"Ese correo ya está registrado. Si ya tenés cuenta, iniciá
+sesión — o si olvidaste tu contraseña, escribinos a taitasoluciones@gmail.com para recuperarla."*
+Se mantiene el chequeo de `identities.length === 0` como respaldo para el caso de mail existente
+sin confirmar (por si queda alguno de antes de desactivar "Confirm email").
+
 **Falta probar (checklist para retomar en casa):**
 - [ ] Registrar un cliente nuevo con un mail que no exista → tiene que crear la cuenta y mandar
       directo a `/dashboard/cliente`, sin pantalla de "revisá tu correo" ni mail de confirmación.
@@ -184,30 +195,198 @@ botón "Ver detalle →").
 - [ ] Entrar a esa URL nueva con el id de una solicitud de **otro técnico** → tiene que redirigir
       a `/dashboard/tecnico` (mismo chequeo de seguridad que la vista del cliente).
 
-### 4. Notificaciones in-app (pedido nuevo de Agustín — 2026-07-28)
+### 4. Notificaciones in-app en tiempo real (pedido de Agustín — 2026-07-28)
+
+**✅ Código implementado (2026-07-28). Falta correr el SQL en Supabase, habilitar Realtime, y
+probar de punta a punta.**
 
 **Objetivo:** que cada usuario (cliente, técnico, admin) vea dentro de la web un historial de los
 sucesos que le corresponden — mismo contenido que ya recibe por mail, pero también visible adentro
-de la app (tipo campanita de Facebook/Instagram), para que no dependa solo de revisar el correo.
+de la app (tipo campanita de Facebook/Instagram) y **en tiempo real**, sin recargar la página.
 
-**Diseño propuesto (a confirmar antes de implementar):**
-- Tabla nueva `notificaciones` (`usuario_id` destinatario, `solicitud_id` opcional para poder
-  linkear al detalle, `titulo`, `mensaje`, `leida boolean`, `creado_en`).
-- Se inserta una fila ahí en **los mismos puntos donde ya se manda uno de los 12 mails** — mismo
-  destinatario, mismo evento. Reusa `notificarCambioEstado()`, `notificarNuevaSolicitud()` y
-  `notificarConformidad()` en `src/lib/notificaciones.ts` (punto único ya existente) — no se
-  inventan sucesos nuevos, espeja uno a uno lo que ya se manda por correo.
-- Campanita en el `Navbar` (logueado, los 3 roles) con contador de no leídas, dropdown con la
-  lista más reciente primero, click → marca como leída y navega al detalle de esa solicitud.
-- Sin tiempo real por ahora (nada de WebSockets/Supabase Realtime) — se actualiza al cargar la
-  página o al abrir la campanita. Se puede sumar tiempo real más adelante si hace falta.
+**A quién le llega cada notificación** (mapeo 1 a 1 con los 12 mails que ya existían — no se
+inventaron sucesos nuevos):
 
-**Plan:**
-- [ ] Confirmar el diseño de arriba con Jota/Agustín antes de escribir código.
-- [ ] SQL: tabla `notificaciones` + políticas RLS (mismo patrón que `solicitud_historial_estados`).
-- [ ] Extender las 3 funciones de `notificaciones.ts` para insertar también la notificación in-app.
-- [ ] Componente `NotificacionesBell.tsx` + API para listar/marcar como leídas.
-- [ ] Sumar la campanita al `Navbar` en los 3 dashboards.
+| Evento | Cliente | Técnico | Admin |
+|---|:---:|:---:|:---:|
+| Nueva solicitud | ✅ | | ✅ (todos) |
+| Aceptada / En curso / Completada | ✅ | | |
+| Cancelada | ✅ | ✅ si asignado | |
+| Vuelve a Pendiente | | | ✅ (todos) |
+| Conformidad recibida | | ✅ si asignado | ✅ (todos) |
+| Contacto / Reclamo | | | ✅ (todos) |
+
+A diferencia del mail (que va a una casilla fija `taitasoluciones@gmail.com`), la notificación
+in-app de "admin" se crea para **todos** los `usuarios.tipo = 'admin'` — pensado para si en algún
+momento hay más de un admin logueado.
+
+**Cómo funciona:**
+- Tabla `notificaciones` (`usuario_id`, `solicitud_id` opcional, `titulo`, `mensaje`, `leida`,
+  `creado_en`). Se inserta una fila en los mismos puntos donde ya se manda cada mail — nuevas
+  funciones `crearNotificacion()` / `crearNotificacionesAdmin()` en `src/lib/notificaciones.ts`,
+  llamadas desde `notificarCambioEstado()`, `notificarNuevaSolicitud()` y `notificarConformidad()`
+  (mismo punto único de siempre) y desde `contacto.astro`/`reclamos.astro` (nueva función
+  `notificarMensajeAdmin()`, sin `solicitud_id` porque no hay una solicitud asociada).
+- **Tiempo real vía Supabase Realtime**: `NotificacionesBell.tsx` (nuevo) se suscribe a inserts en
+  `notificaciones` filtrados por su propio `usuario_id` — apenas se inserta una fila, aparece en la
+  campanita sin recargar ni hacer polling. La policy RLS de `SELECT` (`usuario_id = auth.uid()`) es
+  la que Supabase usa también para filtrar qué le llega a cada conexión, así que es obligatoria
+  para que Realtime funcione, no solo para el listado normal.
+- Campanita sumada al `Navbar` (desktop y mobile), visible para los 3 roles logueados. Contador de
+  no leídas, dropdown con las últimas 20, botón "Marcar todas como leídas". Click en una
+  notificación con `solicitud_id` → marca como leída y navega a la vista de detalle
+  correspondiente a su rol (`/dashboard/{cliente|tecnico|admin}/solicitud/[id]`); las de
+  contacto/reclamo (sin `solicitud_id`) solo se marcan como leídas.
+- Marcar como leída pasa por `POST /api/notificaciones/marcar-leida` (patrón ya establecido:
+  mutaciones del cliente van por API route con `service_role`, no directo desde el browser) — el
+  "marcar todas" también funciona ahí mismo.
+- No sincroniza entre pestañas del mismo usuario (si marcás como leída en una pestaña, la otra no
+  se entera hasta que la recargués) — no hacía falta para este caso de uso, se puede sumar después
+  si molesta en el uso real.
+
+**Bug encontrado y arreglado al probar (2026-07-28):** el `Navbar` renderiza la campanita **dos
+veces** (versión desktop + versión mobile) — Tailwind solo oculta la que no corresponde con CSS
+(`hidden`/`md:hidden`), las dos quedan montadas en React al mismo tiempo. Como las dos usaban el
+mismo nombre de canal de Realtime (`notificaciones-{userId}`), la segunda instancia chocaba contra
+la primera ya suscripta (`Uncaught Error: cannot add postgres_changes callbacks... after
+subscribe()`), rompiendo el Navbar entero. Arreglado agregando `useId()` de React al nombre del
+canal (`notificaciones-{userId}-{instanceId}`) para que cada instancia tenga su propio canal.
+
+**Extensión — "Mis solicitudes" del cliente también en tiempo real (pedido de Jota, 2026-07-28):**
+`MisSolicitudes.tsx` (la lista paginada del panel del cliente) ahora también se suscribe a
+`postgres_changes` en `solicitudes` filtrado por `cliente_id`. Ante cualquier cambio (nueva
+solicitud, cambio de estado, técnico asignado, etc.) re-trae la página actual sola, sin recargar
+— refetch de la página completa vía la misma API de paginado, no un merge campo a campo, porque el
+payload de Realtime trae columnas crudas sin los joins (técnico, categoría) que la lista necesita
+para mostrarse bien. **No se tocaron** las tarjetitas de arriba (Pendientes/En curso/Completadas,
+en `cliente.astro`) ni los paneles de técnico/admin — quedan para una extensión aparte si hace
+falta, esto se hizo acotado a un solo componente para probarlo primero.
+
+**SQL adicional para esto** (además del bloque de notificaciones de más abajo):
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE solicitudes;
+```
+La política RLS de `solicitudes` para que el cliente vea las suyas **ya existe** desde el
+principio del proyecto (`supabase/rls_policies.sql`, "solicitudes: cliente ve las suyas") — no
+hace falta agregar nada de RLS nuevo, solo esa línea de `ALTER PUBLICATION`.
+
+**Extensión 2 — replicado al resto de las pantallas (pedido de Jota, 2026-07-28):** después de
+confirmar que "Mis solicitudes" funcionaba bien, se replicó el mismo espíritu (vivo, sin recargar)
+al resto de las vistas que muestran datos de una solicitud, con dos patrones distintos según el
+tipo de pantalla:
+
+- **Componente `CambiosEnVivo.tsx`** — banner chico ("🔄 Hay cambios nuevos — Actualizar"), y
+  ahora con una prop `autoReload` (default `false`): si se pasa, en vez de esperar el click
+  **recarga sola a los 2.5s** — sumado a pedido de Jota ("no me gusta el botón, quiero que se
+  actualice donde corresponda"). Se usa `autoReload` en las 3 pantallas de detalle (cliente,
+  técnico, admin) y en el aviso de aprobación del técnico — son pantallas donde el riesgo de
+  interrumpir un formulario a medio llenar es bajo/aceptable. Reusable — recibe una lista de
+  `{tabla, filtro}` a escuchar. Sumado a:
+  - `/dashboard/cliente/solicitud/[id].astro` — escucha esa solicitud puntual, `autoReload`.
+  - `/dashboard/tecnico/solicitud/[id].astro` — ídem, `autoReload`.
+  - `/dashboard/admin/solicitud/[id].astro` — ídem, `autoReload`.
+  - `/dashboard/tecnico.astro` — solo para su propia fila en `tecnicos` (`id=eq.{id}`, cuando el
+    admin lo aprueba), `autoReload`. Las solicitudes del técnico **ya no** usan este banner — ver
+    el punto siguiente, ahí se resolvió con datos en vivo de verdad, no con un aviso para refrescar.
+- **`SolicitudesTecnico.tsx`** (nuevo) — la lista "Solicitudes recibidas" del panel del técnico
+  dejó de ser Astro estático y pasó a ser un componente React con el mismo patrón que
+  `MisSolicitudes.tsx`/`TablaSolicitudesAdmin.tsx`: se suscribe a `solicitudes` filtrado por
+  `tecnico_id` y, ante cualquier cambio (trabajo nuevo asignado, cambio de estado, cierre,
+  conformidad), se re-trae sola vía la API nueva `GET /api/tecnico/solicitudes` — sin banner, sin
+  click, sin recargar la página. Indicador chico "● En vivo" que se activa cuando sincroniza por
+  primera vez.
+- **`TablaSolicitudesAdmin.tsx`** (la tabla principal del dashboard del admin) — mismo patrón que
+  `MisSolicitudes.tsx`: refetch silencioso de la página actual ante cualquier cambio en
+  `solicitudes` (sin filtro, porque el admin ve todas). Indicador visual chico (punto verde) junto
+  al conteo de resultados cuando ya sincronizó al menos una vez.
+- **Bug real encontrado y arreglado al probar:** al asignarle un trabajo nuevo a un técnico, no le
+  llegaba nada — ni mail, ni notificación in-app, ni el banner. La causa **no era de Realtime**:
+  `AVISAR_TECNICO` en `notificaciones.ts` (la lista de estados que le avisan al técnico) nunca
+  incluyó `"aceptada"`, solo `"cancelada"` — hueco del diseño original, de antes de esta sesión.
+  Arreglado agregando `"aceptada"` a esa lista. **Cambio de comportamiento a tener en cuenta:** el
+  técnico ahora también recibe mail (no solo notificación in-app) cuando le asignan un trabajo
+  nuevo, cosa que antes no pasaba.
+- **Lo que quedó afuera a propósito:** las tarjetitas de stats (`admin.astro` arriba de la tabla,
+  y las de `cliente.astro`/`tecnico.astro`) y la lista de "técnicos pendientes de aprobación" del
+  admin siguen siendo estáticas (se actualizan solo al recargar) — no se pidieron puntualmente y
+  cada una implicaría convertir más código de Astro server-rendered a React con estado. Se pueden
+  sumar después si hace falta, siguiendo el mismo patrón ya probado acá.
+
+**✅ Confirmado con Jota al probar (2026-07-28):** la campanita funcionó perfecto (notificación de
+"Aceptada" en tiempo real), pero la lista `SolicitudesTecnico.tsx` **no** se actualizaba sola.
+Causa confirmada: la policy RLS `"solicitudes: tecnico ve las suyas"` usa un `EXISTS` contra
+`tecnicos` (no una comparación directa de columna) para resolver de quién es la solicitud, y ese
+tipo de policy con join **no le llega a Supabase Realtime** — el dato en sí es correcto para
+queries normales, pero Realtime nunca entrega el evento. La política de `notificaciones`
+(`usuario_id = auth.uid()`, comparación directa) sí funciona.
+
+**Fix aplicado:** en vez de arriesgar tocar la policy de `solicitudes` (toca lecturas normales,
+más superficie de riesgo), `SolicitudesTecnico.tsx` ahora escucha inserts en **`notificaciones`**
+como disparador de refresco, no `solicitudes` directo — reusa el canal ya probado y funcionando.
+Para que esto cubra todos los casos, se extendió `AVISAR_TECNICO` a los 4 estados
+(`aceptada`, `en_curso`, `completada`, `cancelada` — antes solo `aceptada`/`cancelada`), así el
+técnico siempre tiene una notificación disparando el refresco de su lista sin importar qué cambió.
+
+**Segundo hallazgo (orden de la lista):** las listas ordenaban por `creado_en` (fecha en que el
+*cliente* creó la solicitud), no por la última vez que algo cambió — por eso una solicitud vieja
+recién asignada no subía al principio. Se agregó una columna `actualizado_en`, que se pisa en cada
+escritura real sobre una solicitud (cambio de estado, asignación, cierre del técnico,
+conformidad), y las 3 listas (cliente, técnico, admin) ahora ordenan por ahí en vez de por
+`creado_en`.
+
+**SQL adicional para esta extensión:**
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE tecnicos;
+
+ALTER TABLE solicitudes ADD COLUMN IF NOT EXISTS actualizado_en timestamptz DEFAULT now();
+UPDATE solicitudes SET actualizado_en = creado_en WHERE actualizado_en IS NULL;
+```
+(La segunda línea es el backfill — sin ella, las solicitudes viejas quedarían todas con la misma
+fecha "de ahora" en vez de su fecha real, y se irían todas juntas al principio del listado.)
+
+La política RLS de `tecnicos` para que el técnico vea su propia fila **ya existe** ("tecnicos:
+tecnico ve el suyo", `usuario_id = auth.uid()`) y la de admin también — no hace falta RLS nueva
+para nada de esto.
+
+**Falta probar (checklist para retomar):**
+- [ ] Correr el SQL de arriba (columna `actualizado_en` + backfill; `ALTER PUBLICATION` de
+      `tecnicos` puede tirar "ya existe", es esperado).
+- [ ] Como técnico: dejar `/dashboard/tecnico` abierto, y desde el admin asignarle una solicitud
+      → tiene que aparecer sola **arriba de todo** en la lista, sin recargar, con "● En vivo".
+- [ ] Como técnico: que le asignen una solicitud **vieja** (creada hace tiempo, recién asignada
+      ahora) → tiene que subir arriba de todo igual, no quedar por fecha de creación.
+- [ ] Repetir con cambios de estado (en curso, completada, cancelada) → la lista del técnico se
+      reordena sola en cada uno.
+- [ ] Panel cliente: mismo chequeo de orden — una solicitud vieja que cambia de estado tiene que
+      subir al principio de "Mis solicitudes".
+- [ ] Panel admin: mismo chequeo en la tabla principal.
+- [ ] Como técnico recién registrado (con `activo = false`): dejar `/dashboard/tecnico` abierto, y
+      desde el admin aprobarlo → banner "actualizando..." y recarga sola a los ~2.5s.
+- [ ] Como cliente/técnico/admin: dejar el **detalle** de una solicitud abierto, y desde otro lado
+      cambiarle el estado → banner "actualizando..." y recarga sola a los ~2.5s con los datos
+      nuevos.
+- [ ] Confirmar que nada de esto rompió el flujo normal (crear, cancelar, asignar, completar,
+      dar conformidad, "Completar trabajo" desde la lista del técnico) — debería seguir
+      funcionando exactamente igual que antes de esta sesión.
+
+**Falta probar (checklist original, Frente 4):**
+- [x] Correr el SQL de abajo en Supabase (tabla + RLS + habilitar Realtime).
+- [ ] Como cliente: crear una solicitud nueva → tiene que aparecer la notificación en la campanita
+      **sin recargar la página** (dejar la pestaña abierta, hacer la acción desde otra
+      pestaña/usuario, y ver que aparece sola).
+- [ ] Como admin: asignar un técnico a esa solicitud → notificación de "Aceptada" le debe aparecer
+      al cliente en tiempo real; abrir la solicitud como cliente y confirmar que el link de la
+      notificación lleva al lugar correcto.
+- [ ] Cancelar una solicitud con técnico asignado → notificación le debe llegar en tiempo real
+      tanto al cliente como al técnico.
+- [ ] Dar conformidad como cliente → notificación en tiempo real a técnico y a **todos** los admin
+      (si hay más de un usuario admin, probar con dos).
+- [ ] Enviar el formulario de `/contacto` y de `/reclamos` → notificación al admin, sin
+      `solicitud_id` (no debe navegar a ningún lado al hacer click, solo marcarse como leída).
+- [ ] Marcar una notificación como leída (click) y "Marcar todas como leídas" → confirmar que el
+      contador de la campanita baja correctamente y que persiste al recargar la página.
+- [ ] Confirmar que un usuario **no** ve notificaciones de otro (por las dudas, revisar en la
+      pestaña Network que la suscripción de Realtime solo trae las propias).
 
 ---
 
@@ -291,6 +470,7 @@ Para que se note el conflicto hace falta que el técnico ya tenga **una solicitu
 | Cancelación con confirmación inline | ✅ Operativo (Tanda 4) |
 | Timeline de estados para el cliente | ✅ Operativo y probado (Tanda 5) |
 | Conformidad del cliente + registro de pago (sin cobro real) | ✅ Operativo y probado (Tanda 6) |
+| Notificaciones in-app en tiempo real (campanita) | ✅ Implementado (2026-07-28) — falta correr el SQL, habilitar Realtime y probar |
 | Integración Mercado Pago | ⏳ Pendiente (Tanda 7, al final) |
 
 ---
@@ -559,6 +739,48 @@ bloque nuevo del final para no chocar con policies existentes).
   solicitudes completadas.
 - El panel del admin muestra un indicador de conformidad en el detalle de la solicitud (además del
   email que ya recibe).
+
+### Notificaciones in-app en tiempo real
+
+Ejecutar en el SQL Editor de Supabase (aditivo, no rompe nada existente):
+
+```sql
+CREATE TABLE IF NOT EXISTS notificaciones (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  usuario_id    uuid NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  solicitud_id  uuid REFERENCES solicitudes(id) ON DELETE CASCADE,
+  titulo        text NOT NULL,
+  mensaje       text,
+  leida         boolean NOT NULL DEFAULT false,
+  creado_en     timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notificaciones_usuario ON notificaciones (usuario_id, creado_en DESC);
+
+-- Habilita Supabase Realtime para esta tabla (necesario para que la campanita reciba los inserts
+-- al instante, sin esto no hay tiempo real aunque el resto del código esté bien).
+ALTER PUBLICATION supabase_realtime ADD TABLE notificaciones;
+
+-- Políticas RLS (idénticas a las de supabase/rls_policies.sql, sección NOTIFICACIONES — quedan
+-- también acá para no tener que ir a buscar el archivo).
+ALTER TABLE notificaciones ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "notificaciones: usuario ve las suyas"
+  ON notificaciones FOR SELECT
+  USING (usuario_id = auth.uid());
+
+CREATE POLICY "notificaciones: usuario marca las suyas como leidas"
+  ON notificaciones FOR UPDATE
+  USING (usuario_id = auth.uid())
+  WITH CHECK (usuario_id = auth.uid());
+```
+
+**Importante:** la policy de `SELECT` no es opcional acá — es la misma que Supabase Realtime usa
+para filtrar qué fila le llega a cada conexión. Sin ella, no hay tiempo real aunque el resto del
+código esté bien.
+
+Si `ALTER PUBLICATION` tira error porque la tabla ya está agregada (puede pasar si se corre el
+bloque dos veces), es seguro ignorarlo — significa que Realtime ya estaba habilitado.
 
 ---
 

@@ -51,6 +51,7 @@ export interface Solicitud {
   direccion:           string | null
   estado:              SolicitudEstado
   creado_en:           string
+  actualizado_en:      string
   gastos_extra:        number | null
   descripcion_gastos:  string | null
   imagenes_trabajo:    string[] | null
@@ -63,6 +64,16 @@ export interface Pago {
   solicitud_id: string
   monto:        number
   estado:       string
+  creado_en:    string
+}
+
+export interface Notificacion {
+  id:           string
+  usuario_id:   string
+  solicitud_id: string | null
+  titulo:       string
+  mensaje:      string | null
+  leida:        boolean
   creado_en:    string
 }
 

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useId } from 'react'
+import { supabase } from '@/lib/supabase'
 import CancelarSolicitud from '@/components/CancelarSolicitud'
 import ResenaForm from '@/components/ResenaForm'
 
@@ -21,6 +22,7 @@ interface SolicitudRow {
 }
 
 interface Props {
+  userId:       string
   initialData:  SolicitudRow[]
   initialTotal: number
 }
@@ -54,19 +56,23 @@ function pageNumbers(current: number, total: number): (number | '...')[] {
 
 const fmt = (n: number) => `$${n.toLocaleString('es-AR')}`
 
-export default function MisSolicitudes({ initialData, initialTotal }: Props) {
+export default function MisSolicitudes({ userId, initialData, initialTotal }: Props) {
   const [rows,    setRows]    = useState<SolicitudRow[]>(initialData)
   const [total,   setTotal]   = useState(initialTotal)
   const [page,    setPage]    = useState(1)
   const [loading, setLoading] = useState(false)
+  const [synced,  setSynced]  = useState(false)
+
+  const pageRef = useRef(page)
+  pageRef.current = page
+  const instanceId = useId()
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const rangeFrom   = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const rangeTo     = Math.min(page * PAGE_SIZE, total)
 
-  async function goTo(next: number) {
-    if (next === page || next < 1 || next > totalPages) return
-    setLoading(true)
+  async function fetchPage(next: number, opts: { silent?: boolean } = {}) {
+    if (!opts.silent) setLoading(true)
     try {
       const res  = await fetch(`/api/cliente/solicitudes?page=${next}`)
       const json = await res.json()
@@ -74,9 +80,36 @@ export default function MisSolicitudes({ initialData, initialTotal }: Props) {
       setTotal(json.total)
       setPage(next)
     } finally {
-      setLoading(false)
+      if (!opts.silent) setLoading(false)
     }
   }
+
+  async function goTo(next: number) {
+    if (next === page || next < 1 || next > totalPages) return
+    await fetchPage(next)
+  }
+
+  // Tiempo real: si algo cambia en una solicitud de este cliente (nueva, estado, técnico
+  // asignado, etc.) en cualquier lado de la app, se re-trae la página actual sola, sin recargar.
+  // Es un refetch de la página completa (5 filas) en vez de un merge campo a campo porque el
+  // payload de Realtime trae solo columnas crudas de `solicitudes`, no los joins (técnico,
+  // categoría) que ya vienen resueltos en esta lista — así evitamos mostrar datos a medio
+  // actualizar mientras llega el resto.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`mis-solicitudes-${userId}-${instanceId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'solicitudes', filter: `cliente_id=eq.${userId}` },
+        () => {
+          setSynced(true)
+          fetchPage(pageRef.current, { silent: true })
+        },
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [userId, instanceId])
 
   if (rows.length === 0 && total === 0) {
     return (
@@ -92,6 +125,11 @@ export default function MisSolicitudes({ initialData, initialTotal }: Props) {
 
   return (
     <div className={`transition-opacity duration-150 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
+      {synced && (
+        <p className="px-6 pt-3 text-[11px] text-gray-400 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Actualizado en tiempo real
+        </p>
+      )}
       <div className="divide-y divide-cream">
         {rows.map(s => {
           const tec      = s.tecnicos

@@ -41,6 +41,18 @@ type TecnicoData = z.infer<typeof tecnicoSchema>
 
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+// Supabase devuelve el error de "ya existe" en inglés y con distinta forma según la versión —
+// lo mapeamos a un mensaje en español y accionable para el usuario.
+function mensajeErrorAuth(error: { message: string; code?: string }): string {
+  const yaRegistrado = error.code === 'user_already_exists'
+    || error.message?.toLowerCase().includes('already registered')
+    || error.message?.toLowerCase().includes('already exists')
+  if (yaRegistrado) {
+    return 'Ese correo ya está registrado. Si ya tenés cuenta, iniciá sesión — o si olvidaste tu contraseña, escribinos a taitasoluciones@gmail.com para recuperarla.'
+  }
+  return error.message
+}
+
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null
   return <p className="text-xs text-destructive mt-1">{msg}</p>
@@ -108,7 +120,7 @@ function ClienteForm() {
         },
       },
     })
-    if (error) { setServerError(error.message); return }
+    if (error) { setServerError(mensajeErrorAuth(error)); return }
     if (authData.user?.identities?.length === 0) {
       setServerError('Este mail ya está registrado, ¿ya tenés cuenta?')
       return
@@ -223,7 +235,7 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
         },
       },
     })
-    if (error) { setServerError(error.message); return }
+    if (error) { setServerError(mensajeErrorAuth(error)); return }
     if (authData.user?.identities?.length === 0) {
       setServerError('Este mail ya está registrado, ¿ya tenés cuenta?')
       return

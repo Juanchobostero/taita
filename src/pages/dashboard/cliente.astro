@@ -32,7 +32,7 @@ const [
       resenas ( id )
     `, { count: 'exact' })
     .eq('cliente_id', userId)
-    .order('creado_en', { ascending: false })
+    .order('actualizado_en', { ascending: false })
     .range(0, PAGE_SIZE - 1),
   supabase.from('solicitudes').select('*', { count: 'exact', head: true })
     .eq('cliente_id', userId).eq('estado', 'pendiente'),
@@ -95,7 +95,7 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
           <h2 class="font-serif font-bold text-[#1B4D2E] text-lg">Mis solicitudes</h2>
         </div>
 
-        <MisSolicitudes client:load initialData={solicitudes as any} initialTotal={totalSolicitudes ?? 0} />
+        <MisSolicitudes client:load userId={userId} initialData={solicitudes as any} initialTotal={totalSolicitudes ?? 0} />
       </div>
 
       <!-- Perfil -->

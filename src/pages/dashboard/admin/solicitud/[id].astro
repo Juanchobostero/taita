@@ -5,6 +5,7 @@ import GaleriaFotos from '../../../../components/GaleriaFotos'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
 import { notificarCambioEstado } from '../../../../lib/notificaciones'
 import { chequearDisponibilidad } from '../../../../lib/disponibilidad'
+import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 
 const { id } = Astro.params
 if (!id) return Astro.redirect('/dashboard/admin')
@@ -174,6 +175,7 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
 
 <Layout title={`Solicitud — ${sol.titulo}`}>
   <Navbar client:load />
+  <CambiosEnVivo client:load autoReload suscripciones={[{ tabla: 'solicitudes', filtro: `id=eq.${sol.id}` }]} />
 
   <div class="bg-cream min-h-screen py-8 px-4">
     <div class="max-w-4xl mx-auto flex flex-col gap-6">

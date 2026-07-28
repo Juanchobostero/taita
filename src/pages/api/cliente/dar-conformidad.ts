@@ -31,7 +31,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const { error: updError } = await supabase
       .from('solicitudes')
-      .update({ conformidad_cliente: true, conformidad_en: new Date().toISOString() })
+      .update({
+        conformidad_cliente: true,
+        conformidad_en:      new Date().toISOString(),
+        actualizado_en:      new Date().toISOString(),
+      })
       .eq('id', solicitudId)
     if (updError) throw updError
 

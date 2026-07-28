@@ -91,7 +91,7 @@ const [
       tecnicos ( id, usuarios ( nombre_completo ) ),
       categorias ( nombre )
     `)
-    .order('creado_en', { ascending: false })
+    .order('actualizado_en', { ascending: false })
     .range(0, 9),
   supabase.from('solicitudes').select('total_estimado').eq('estado', 'completada'),
 ])

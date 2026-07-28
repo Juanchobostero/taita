@@ -27,7 +27,7 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
         tecnicos ( id, usuarios ( nombre_completo ) ),
         categorias ( nombre )
       `, { count: 'exact' })
-      .order('creado_en', { ascending: false })
+      .order('actualizado_en', { ascending: false })
       .range(from, to)
 
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })

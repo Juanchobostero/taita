@@ -313,3 +313,29 @@ CREATE POLICY "pagos: admin ve todos"
 
 -- Los inserts se hacen desde el backend con service_role (dar-conformidad.ts) — no hace falta
 -- policy de INSERT para usuarios normales.
+
+-- ============================================================
+-- NOTIFICACIONES (campanita in-app, tiempo real vía Supabase Realtime)
+-- ============================================================
+
+ALTER TABLE notificaciones ENABLE ROW LEVEL SECURITY;
+
+-- Cada usuario ve solo sus propias notificaciones. Esta misma policy es la que Supabase Realtime
+-- usa para filtrar qué inserts le llegan a cada cliente conectado — sin esto, Realtime no
+-- entregaría ninguna fila (o las entregaría todas, según config), así que es obligatoria para
+-- que la campanita funcione, no solo para el listado normal.
+CREATE POLICY "notificaciones: usuario ve las suyas"
+  ON notificaciones FOR SELECT
+  USING (usuario_id = auth.uid());
+
+-- El usuario puede marcar sus propias notificaciones como leídas (usado desde
+-- /api/notificaciones/marcar-leida, que ya filtra por usuario_id igual — esta policy es la
+-- segunda capa de defensa, por si algún día se llama directo con el cliente browser).
+CREATE POLICY "notificaciones: usuario marca las suyas como leidas"
+  ON notificaciones FOR UPDATE
+  USING (usuario_id = auth.uid())
+  WITH CHECK (usuario_id = auth.uid());
+
+-- Los inserts se hacen desde el backend con service_role (notificarCambioEstado,
+-- notificarNuevaSolicitud, notificarConformidad, notificarMensajeAdmin) — no hace falta policy de
+-- INSERT para usuarios normales.

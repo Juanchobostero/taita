@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import CommandPalette from './CommandPalette'
+import NotificacionesBell from './NotificacionesBell'
 import { mockTecnicos } from '@/data/mockTecnicos'
 import type { UserTipo } from '@/lib/types'
 
 interface UserInfo {
+  id:       string
   nombre:   string
   tipo:     UserTipo
   foto_url: string | null
@@ -34,7 +36,7 @@ export default function Navbar() {
         .select('nombre_completo, tipo, foto_url')
         .eq('id', userId)
         .single()
-      if (data) setUserInfo({ nombre: data.nombre_completo, tipo: data.tipo as UserTipo, foto_url: data.foto_url ?? null })
+      if (data) setUserInfo({ id: userId, nombre: data.nombre_completo, tipo: data.tipo as UserTipo, foto_url: data.foto_url ?? null })
       setLoading(false)
     }
 
@@ -111,6 +113,8 @@ export default function Navbar() {
 
             {!loading && (
               userInfo ? (
+                <>
+                <NotificacionesBell userId={userInfo.id} tipo={userInfo.tipo} />
                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setDropdownOpen(o => !o)}
@@ -159,6 +163,7 @@ export default function Navbar() {
                     </div>
                   )}
                 </div>
+                </>
               ) : (
                 <>
                   <a href="/login" className="bg-primary-soft hover:bg-primary-pale text-primary rounded-full px-4 py-1.5 text-sm font-semibold transition-colors">
@@ -185,6 +190,7 @@ export default function Navbar() {
             </div>
           </a>
           <div className="flex items-center gap-2">
+            {!loading && userInfo && <NotificacionesBell userId={userInfo.id} tipo={userInfo.tipo} />}
             <button aria-label="Buscar" onClick={openPalette} className="p-2 rounded-lg text-gray-500 hover:bg-cream transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />

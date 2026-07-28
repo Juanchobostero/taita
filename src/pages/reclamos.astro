@@ -2,6 +2,8 @@
 import Layout from '../layouts/Layout.astro'
 import Navbar from '../components/Navbar'
 import { enviarEmail } from '../lib/email'
+import { createSupabaseAdmin } from '../lib/supabase-admin'
+import { notificarMensajeAdmin } from '../lib/notificaciones'
 
 let enviado = false
 let errorMsg = ''
@@ -27,6 +29,11 @@ if (Astro.request.method === 'POST') {
         <p>${mensaje.replace(/\n/g, '<br />')}</p>
       `,
     })
+    await notificarMensajeAdmin(
+      createSupabaseAdmin(),
+      `Reclamo de ${nombre || email}`,
+      mensaje.length > 140 ? `${mensaje.slice(0, 140)}…` : mensaje,
+    )
     enviado = true
   }
 }

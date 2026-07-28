@@ -54,6 +54,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       descripcion_gastos:  descripcionGastos?.trim() || null,
       imagenes_trabajo:    Array.isArray(imagenes) && imagenes.length > 0 ? imagenes : null,
       total_estimado:      nuevoTotal,
+      actualizado_en:      new Date().toISOString(),
     }
 
     await Promise.all([

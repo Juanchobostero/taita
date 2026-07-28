@@ -15,8 +15,13 @@ const ESTADO_LABEL: Record<string, string> = {
 
 // Estados en los que el cliente recibe email de aviso.
 const AVISAR_CLIENTE = new Set(['aceptada', 'en_curso', 'completada', 'cancelada'])
-// Estados en los que el técnico asignado recibe email de aviso.
-const AVISAR_TECNICO  = new Set(['cancelada'])
+// Estados en los que el técnico asignado recibe email de aviso. "aceptada" es cuando le asignan
+// el trabajo — antes no estaba (el técnico solo se enteraba mirando su panel), agregado a pedido
+// de Agustín para que le llegue aviso (mail + notificación in-app) apenas le asignan algo.
+// "en_curso"/"completada" se sumaron después: la lista de solicitudes del técnico (in-app, tiempo
+// real) usa estas notificaciones como disparador para refrescarse sola — sin esto, no se enteraba
+// de esos dos cambios.
+const AVISAR_TECNICO  = new Set(['aceptada', 'en_curso', 'completada', 'cancelada'])
 
 interface SolicitudNotif {
   id:               string
@@ -24,8 +29,8 @@ interface SolicitudNotif {
   fecha_solicitada: string | null
   hora_solicitada:  string | null
   total_estimado:   number | null
-  usuarios:         { nombre_completo: string; email: string | null } | null
-  tecnicos:         { usuarios: { nombre_completo: string; email: string | null } | null } | null
+  usuarios:         { id: string; nombre_completo: string; email: string | null } | null
+  tecnicos:         { usuario_id: string; usuarios: { nombre_completo: string; email: string | null } | null } | null
   categorias:       { nombre: string } | null
 }
 
@@ -34,8 +39,8 @@ async function fetchSolicitudNotif(supabase: SupabaseClient, solicitudId: string
     .from('solicitudes')
     .select(`
       id, titulo, fecha_solicitada, hora_solicitada, total_estimado,
-      usuarios!cliente_id ( nombre_completo, email ),
-      tecnicos ( usuarios ( nombre_completo, email ) ),
+      usuarios!cliente_id ( id, nombre_completo, email ),
+      tecnicos ( usuario_id, usuarios ( nombre_completo, email ) ),
       categorias ( nombre )
     `)
     .eq('id', solicitudId)
@@ -51,10 +56,49 @@ function formatearFechaHora(sol: Pick<SolicitudNotif, 'fecha_solicitada' | 'hora
   return `${fecha}${hora}`
 }
 
+// ── Notificaciones in-app (campanita) ───────────────────────────────────────
+// Espejan uno a uno los mismos eventos que ya disparan un email — mismo destinatario, mismo
+// momento. No inventar sucesos nuevos acá; si hace falta un aviso nuevo, se define primero el
+// email correspondiente y después se replica acá.
+
+async function crearNotificacion(
+  supabase:    SupabaseClient,
+  usuarioId:   string,
+  titulo:      string,
+  mensaje:     string,
+  solicitudId: string | null = null,
+): Promise<void> {
+  const { error } = await supabase.from('notificaciones').insert({
+    usuario_id:   usuarioId,
+    solicitud_id: solicitudId,
+    titulo,
+    mensaje,
+  })
+  if (error) console.error('[crearNotificacion] error:', error.message)
+}
+
+// El mail de admin va a una casilla fija; la notificación in-app, en cambio, se le crea a
+// TODOS los usuarios con tipo 'admin' (por si en el futuro hay más de un admin logueado).
+async function crearNotificacionesAdmin(
+  supabase:    SupabaseClient,
+  titulo:      string,
+  mensaje:     string,
+  solicitudId: string | null = null,
+): Promise<void> {
+  const { data: admins } = await supabase.from('usuarios').select('id').eq('tipo', 'admin')
+  await Promise.all((admins ?? []).map(a => crearNotificacion(supabase, a.id, titulo, mensaje, solicitudId)))
+}
+
+/** Notificación in-app para admin al recibir un mensaje de /contacto o /reclamos (sin mail asociado a una solicitud). */
+export async function notificarMensajeAdmin(supabase: SupabaseClient, titulo: string, mensaje: string): Promise<void> {
+  await crearNotificacionesAdmin(supabase, titulo, mensaje, null)
+}
+
 /**
  * Cambia el estado de una solicitud, deja registro en el historial (para el timeline del
- * cliente) y dispara los emails correspondientes. Punto único de cambio de estado — no hacer
- * `update({ estado })` directo en otro lado para no perder el historial/las notificaciones.
+ * cliente) y dispara los emails y notificaciones in-app correspondientes. Punto único de cambio
+ * de estado — no hacer `update({ estado })` directo en otro lado para no perder el
+ * historial/las notificaciones.
  */
 export async function notificarCambioEstado(
   supabase:    SupabaseClient,
@@ -62,7 +106,10 @@ export async function notificarCambioEstado(
   estadoNuevo: string,
   cambiadoPor: string | null,
 ): Promise<void> {
-  const { error } = await supabase.from('solicitudes').update({ estado: estadoNuevo }).eq('id', solicitudId)
+  const { error } = await supabase
+    .from('solicitudes')
+    .update({ estado: estadoNuevo, actualizado_en: new Date().toISOString() })
+    .eq('id', solicitudId)
   if (error) throw error
 
   const { error: histError } = await supabase.from('solicitud_historial_estados').insert({
@@ -77,34 +124,54 @@ export async function notificarCambioEstado(
 
   const cliente   = sol.usuarios
   const tecnico   = sol.tecnicos?.usuarios ?? null
+  const tecnicoId = sol.tecnicos?.usuario_id ?? null
   const categoria = sol.categorias
   const label     = ESTADO_LABEL[estadoNuevo] ?? estadoNuevo
   const link      = `${SITE_URL}/dashboard/cliente`
 
-  if (cliente?.email && AVISAR_CLIENTE.has(estadoNuevo)) {
+  if (cliente && AVISAR_CLIENTE.has(estadoNuevo)) {
     const fechaHora = estadoNuevo === 'aceptada' ? formatearFechaHora(sol) : null
-    await enviarEmail({
-      to:      cliente.email,
-      subject: `Tu solicitud "${sol.titulo}" — ${label}`,
-      html: `
-        <p>Hola ${cliente.nombre_completo},</p>
-        <p>Tu solicitud <strong>${sol.titulo}</strong> (${categoria?.nombre ?? 'servicio'}) cambió de estado a
-        <strong>${label}</strong>.</p>
-        ${fechaHora ? `<p>Horario confirmado: <strong>${fechaHora}</strong>.</p>` : ''}
-        <p><a href="${link}">Ver el detalle en tu panel</a></p>
-      `,
-    })
+
+    if (cliente.email) {
+      await enviarEmail({
+        to:      cliente.email,
+        subject: `Tu solicitud "${sol.titulo}" — ${label}`,
+        html: `
+          <p>Hola ${cliente.nombre_completo},</p>
+          <p>Tu solicitud <strong>${sol.titulo}</strong> (${categoria?.nombre ?? 'servicio'}) cambió de estado a
+          <strong>${label}</strong>.</p>
+          ${fechaHora ? `<p>Horario confirmado: <strong>${fechaHora}</strong>.</p>` : ''}
+          <p><a href="${link}">Ver el detalle en tu panel</a></p>
+        `,
+      })
+    }
+
+    await crearNotificacion(
+      supabase, cliente.id,
+      `Tu solicitud "${sol.titulo}" — ${label}`,
+      fechaHora ? `Horario confirmado: ${fechaHora}.` : `Cambió de estado a ${label}.`,
+      sol.id,
+    )
   }
 
-  if (tecnico?.email && AVISAR_TECNICO.has(estadoNuevo)) {
-    await enviarEmail({
-      to:      tecnico.email,
-      subject: `Solicitud "${sol.titulo}" — ${label}`,
-      html: `
-        <p>Hola ${tecnico.nombre_completo},</p>
-        <p>La solicitud <strong>${sol.titulo}</strong> pasó a estado <strong>${label}</strong>.</p>
-      `,
-    })
+  if (tecnico && tecnicoId && AVISAR_TECNICO.has(estadoNuevo)) {
+    if (tecnico.email) {
+      await enviarEmail({
+        to:      tecnico.email,
+        subject: `Solicitud "${sol.titulo}" — ${label}`,
+        html: `
+          <p>Hola ${tecnico.nombre_completo},</p>
+          <p>La solicitud <strong>${sol.titulo}</strong> pasó a estado <strong>${label}</strong>.</p>
+        `,
+      })
+    }
+
+    await crearNotificacion(
+      supabase, tecnicoId,
+      `Solicitud "${sol.titulo}" — ${label}`,
+      `La solicitud pasó a estado ${label}.`,
+      sol.id,
+    )
   }
 
   // La solicitud volvió a Pendiente (hoy siempre por acción del admin desde el dropdown de
@@ -115,10 +182,16 @@ export async function notificarCambioEstado(
       subject: `La solicitud "${sol.titulo}" volvió a Pendiente`,
       html:    `<p>La solicitud <strong>${sol.titulo}</strong> volvió al estado <strong>Pendiente</strong> y quedó disponible para asignar un técnico.</p>`,
     })
+    await crearNotificacionesAdmin(
+      supabase,
+      `La solicitud "${sol.titulo}" volvió a Pendiente`,
+      'Quedó disponible para asignar un técnico.',
+      sol.id,
+    )
   }
 }
 
-/** Email a cliente y admin al crear una solicitud nueva (Paso 2.1 del backlog). */
+/** Email + notificación in-app a cliente y admin al crear una solicitud nueva (Paso 2.1 del backlog). */
 export async function notificarNuevaSolicitud(supabase: SupabaseClient, solicitudId: string): Promise<void> {
   const sol = await fetchSolicitudNotif(supabase, solicitudId)
   if (!sol) return
@@ -137,17 +210,25 @@ export async function notificarNuevaSolicitud(supabase: SupabaseClient, solicitu
     </ul>
   `
 
-  if (cliente?.email) {
-    await enviarEmail({
-      to:      cliente.email,
-      subject: `Recibimos tu solicitud "${sol.titulo}"`,
-      html: `
-        <p>Hola ${cliente.nombre_completo},</p>
-        <p>Recibimos tu solicitud <strong>${sol.titulo}</strong>.</p>
-        ${detalle}
-        <p>Revisá tu perfil para ver el detalle.</p>
-      `,
-    })
+  if (cliente) {
+    if (cliente.email) {
+      await enviarEmail({
+        to:      cliente.email,
+        subject: `Recibimos tu solicitud "${sol.titulo}"`,
+        html: `
+          <p>Hola ${cliente.nombre_completo},</p>
+          <p>Recibimos tu solicitud <strong>${sol.titulo}</strong>.</p>
+          ${detalle}
+          <p>Revisá tu perfil para ver el detalle.</p>
+        `,
+      })
+    }
+    await crearNotificacion(
+      supabase, cliente.id,
+      `Recibimos tu solicitud "${sol.titulo}"`,
+      `${categoria?.nombre ?? 'Servicio'} · Técnico: ${tecnicoTexto}.`,
+      sol.id,
+    )
   }
 
   await enviarEmail({
@@ -158,16 +239,23 @@ export async function notificarNuevaSolicitud(supabase: SupabaseClient, solicitu
       ${detalle}
     `,
   })
+  await crearNotificacionesAdmin(
+    supabase,
+    `Nueva solicitud: ${sol.titulo}`,
+    `Cliente: ${cliente?.nombre_completo ?? '—'}.`,
+    sol.id,
+  )
 }
 
-/** Email a admin y técnico cuando el cliente da conformidad final (Paso 5 del backlog). */
+/** Email + notificación in-app a admin y técnico cuando el cliente da conformidad final (Paso 5 del backlog). */
 export async function notificarConformidad(supabase: SupabaseClient, solicitudId: string): Promise<void> {
   const sol = await fetchSolicitudNotif(supabase, solicitudId)
   if (!sol) return
 
-  const cliente = sol.usuarios
-  const tecnico = sol.tecnicos?.usuarios ?? null
-  const monto   = sol.total_estimado != null ? `$${sol.total_estimado.toLocaleString('es-AR')}` : 'a confirmar'
+  const cliente   = sol.usuarios
+  const tecnico   = sol.tecnicos?.usuarios ?? null
+  const tecnicoId = sol.tecnicos?.usuario_id ?? null
+  const monto     = sol.total_estimado != null ? `$${sol.total_estimado.toLocaleString('es-AR')}` : 'a confirmar'
 
   await enviarEmail({
     to:      ADMIN_EMAIL,
@@ -178,16 +266,30 @@ export async function notificarConformidad(supabase: SupabaseClient, solicitudId
       <p>Monto a registrar: <strong>${monto}</strong>.</p>
     `,
   })
+  await crearNotificacionesAdmin(
+    supabase,
+    `Conformidad recibida: ${sol.titulo}`,
+    `Monto: ${monto}.`,
+    sol.id,
+  )
 
-  if (tecnico?.email) {
-    await enviarEmail({
-      to:      tecnico.email,
-      subject: `Conformidad recibida: ${sol.titulo}`,
-      html: `
-        <p>Hola ${tecnico.nombre_completo},</p>
-        <p>El cliente dio conformidad sobre <strong>${sol.titulo}</strong>. El pago se va a reflejar
-        próximamente en la cuenta que declaraste.</p>
-      `,
-    })
+  if (tecnico && tecnicoId) {
+    if (tecnico.email) {
+      await enviarEmail({
+        to:      tecnico.email,
+        subject: `Conformidad recibida: ${sol.titulo}`,
+        html: `
+          <p>Hola ${tecnico.nombre_completo},</p>
+          <p>El cliente dio conformidad sobre <strong>${sol.titulo}</strong>. El pago se va a reflejar
+          próximamente en la cuenta que declaraste.</p>
+        `,
+      })
+    }
+    await crearNotificacion(
+      supabase, tecnicoId,
+      `Conformidad recibida: ${sol.titulo}`,
+      'El pago se va a reflejar próximamente en tu cuenta.',
+      sol.id,
+    )
   }
 }
