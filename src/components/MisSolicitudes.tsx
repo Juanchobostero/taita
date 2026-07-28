@@ -101,12 +101,15 @@ export default function MisSolicitudes({ userId, initialData, initialTotal }: Pr
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'solicitudes', filter: `cliente_id=eq.${userId}` },
-        () => {
+        (payload) => {
+          console.log('[mis-solicitudes] evento realtime recibido:', payload)
           setSynced(true)
           fetchPage(pageRef.current, { silent: true })
         },
       )
-      .subscribe()
+      .subscribe((status, err) => {
+        console.log('[mis-solicitudes] estado de suscripción:', status, err)
+      })
 
     return () => { supabase.removeChannel(channel) }
   }, [userId, instanceId])
