@@ -89,27 +89,28 @@ export default function MisSolicitudes({ userId, initialData, initialTotal }: Pr
     await fetchPage(next)
   }
 
-  // Tiempo real: si algo cambia en una solicitud de este cliente (nueva, estado, técnico
-  // asignado, etc.) en cualquier lado de la app, se re-trae la página actual sola, sin recargar.
-  // Es un refetch de la página completa (5 filas) en vez de un merge campo a campo porque el
-  // payload de Realtime trae solo columnas crudas de `solicitudes`, no los joins (técnico,
-  // categoría) que ya vienen resueltos en esta lista — así evitamos mostrar datos a medio
-  // actualizar mientras llega el resto.
+  // Tiempo real: escucha la tabla `notificaciones` (no `solicitudes` directo) como disparador de
+  // refresco. La tabla `solicitudes` tiene, además de la política del cliente, políticas de
+  // técnico y admin que hacen JOIN contra otras tablas — y ese tipo de política rompe Realtime
+  // para TODA la tabla, no solo para el rol afectado (probado en la práctica: ni siquiera la
+  // política simple del cliente recibía eventos). `notificaciones` en cambio tiene una política
+  // simple (`usuario_id = auth.uid()`) que sí funciona, y el cliente ya recibe una notificación
+  // para cada evento relevante de sus solicitudes (nueva, pendiente, aceptada, en_curso,
+  // completada, cancelada — ver AVISAR_CLIENTE en notificaciones.ts), así que sirve igual de bien
+  // como señal de "algo cambió, refrescá". Se hace un refetch de la página completa (5 filas) en
+  // vez de un merge campo a campo porque no tenemos los joins (técnico, categoría) resueltos acá.
   useEffect(() => {
     const channel = supabase
       .channel(`mis-solicitudes-${userId}-${instanceId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'solicitudes', filter: `cliente_id=eq.${userId}` },
-        (payload) => {
-          console.log('[mis-solicitudes] evento realtime recibido:', payload)
+        { event: 'INSERT', schema: 'public', table: 'notificaciones', filter: `usuario_id=eq.${userId}` },
+        () => {
           setSynced(true)
           fetchPage(pageRef.current, { silent: true })
         },
       )
-      .subscribe((status, err) => {
-        console.log('[mis-solicitudes] estado de suscripción:', status, err)
-      })
+      .subscribe()
 
     return () => { supabase.removeChannel(channel) }
   }, [userId, instanceId])

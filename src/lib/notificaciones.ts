@@ -13,8 +13,12 @@ const ESTADO_LABEL: Record<string, string> = {
   cancelada:  'Cancelada',
 }
 
-// Estados en los que el cliente recibe email de aviso.
-const AVISAR_CLIENTE = new Set(['aceptada', 'en_curso', 'completada', 'cancelada'])
+// Estados en los que el cliente recibe email de aviso. "pendiente" se agregó porque ese estado
+// solo se re-dispara cuando el admin desasigna un técnico ya asignado (ver comentario más abajo) —
+// nunca en la creación de la solicitud — así que avisarle tiene sentido, y de paso la lista de
+// solicitudes del cliente (in-app, tiempo real) usa estas notificaciones como disparador para
+// refrescarse sola.
+const AVISAR_CLIENTE = new Set(['pendiente', 'aceptada', 'en_curso', 'completada', 'cancelada'])
 // Estados en los que el técnico asignado recibe email de aviso. "aceptada" es cuando le asignan
 // el trabajo — antes no estaba (el técnico solo se enteraba mirando su panel), agregado a pedido
 // de Agustín para que le llegue aviso (mail + notificación in-app) apenas le asignan algo.
