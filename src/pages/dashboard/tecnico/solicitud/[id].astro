@@ -1,0 +1,271 @@
+---
+import Layout from '../../../../layouts/Layout.astro'
+import Navbar from '../../../../components/Navbar'
+import GaleriaFotos from '../../../../components/GaleriaFotos'
+import CompletarTrabajo from '../../../../components/CompletarTrabajo'
+import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
+
+const { id } = Astro.params
+if (!id) return Astro.redirect('/dashboard/tecnico')
+
+const supabase = createSupabaseAdmin()
+const userId   = Astro.locals.user!.id
+
+const { data: tecnico } = await supabase
+  .from('tecnicos')
+  .select('id')
+  .eq('usuario_id', userId)
+  .single()
+
+if (!tecnico) return Astro.redirect('/dashboard/cliente')
+
+const { data: sol } = await supabase
+  .from('solicitudes')
+  .select(`
+    id, titulo, descripcion, estado, creado_en, tecnico_id,
+    precio_base, tasa_aplicada, total_estimado,
+    gastos_extra, descripcion_gastos, imagenes_trabajo,
+    conformidad_cliente, conformidad_en,
+    fecha_solicitada, hora_solicitada, direccion,
+    usuarios!cliente_id ( nombre_completo, telefono ),
+    categorias ( nombre, icono )
+  `)
+  .eq('id', id)
+  .single()
+
+// Solo el técnico asignado a esta solicitud puede verla — evita que un técnico vea la de otro adivinando el id.
+if (!sol || sol.tecnico_id !== tecnico.id) return Astro.redirect('/dashboard/tecnico')
+
+const { data: rawHistorial } = await supabase
+  .from('solicitud_historial_estados')
+  .select('estado, creado_en')
+  .eq('solicitud_id', id)
+  .order('creado_en', { ascending: true })
+
+const cliente   = sol.usuarios as any
+const categoria = sol.categorias as any
+
+const precioBase      = sol.precio_base        as number | null
+const tasa            = sol.tasa_aplicada      as number | null
+const total           = sol.total_estimado     as number | null
+const gastosExtra     = sol.gastos_extra       as number | null
+const descGastos      = sol.descripcion_gastos as string | null
+const imagenesTrabajo = (sol.imagenes_trabajo  as string[] | null) ?? []
+
+const estadoLabel: Record<string, string> = {
+  pendiente:  'Pendiente',
+  aceptada:   'Aceptada',
+  en_curso:   'En curso',
+  completada: 'Completada',
+  cancelada:  'Cancelada',
+}
+const estadoColor: Record<string, string> = {
+  pendiente:  'bg-amber-100 text-amber-800',
+  aceptada:   'bg-blue-100 text-blue-800',
+  en_curso:   'bg-blue-100 text-blue-800',
+  completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
+  cancelada:  'bg-red-100 text-red-700',
+}
+const estadoDot: Record<string, string> = {
+  pendiente:  'bg-amber-400',
+  aceptada:   'bg-blue-400',
+  en_curso:   'bg-blue-400',
+  completada: 'bg-primary',
+  cancelada:  'bg-red-400',
+}
+
+// El historial (Tanda 2) arranca desde el primer cambio real — "pendiente" no queda registrado
+// porque la solicitud se crea directo en ese estado. Se agrega acá como primer paso del timeline.
+const timeline = [
+  { estado: 'pendiente', creado_en: sol.creado_en },
+  ...(rawHistorial ?? []),
+]
+
+const puedeCompletar = sol.estado === 'aceptada' || sol.estado === 'en_curso' ||
+  (sol.estado === 'completada' && !imagenesTrabajo.length && gastosExtra == null)
+
+const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0 })}`
+const fmtFechaHora = (iso: string) =>
+  new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+---
+
+<Layout title={`Solicitud — ${sol.titulo}`}>
+  <Navbar client:load />
+
+  <div class="bg-cream min-h-screen py-8 px-4">
+    <div class="max-w-4xl mx-auto flex flex-col gap-6">
+
+      <!-- Encabezado -->
+      <div>
+        <a href="/dashboard/tecnico" class="text-primary hover:text-primary-hover text-sm font-medium flex items-center gap-1 w-fit mb-4">
+          ← Volver al panel
+        </a>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex flex-col gap-1">
+            <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl">{sol.titulo}</h1>
+            <p class="text-gray-400 text-sm">
+              {categoria?.icono} {categoria?.nombre} ·
+              Creada el {new Date(sol.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+          <span class={`text-sm font-semibold px-4 py-1.5 rounded-full w-fit ${estadoColor[sol.estado]}`}>
+            {estadoLabel[sol.estado]}
+          </span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Col izquierda (2/3) -->
+        <div class="lg:col-span-2 flex flex-col gap-6">
+
+          <!-- Timeline de estados -->
+          <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
+            <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Seguimiento</h2>
+            <div class="flex flex-col">
+              {timeline.map((t, idx) => (
+                <div class="flex gap-3">
+                  <div class="flex flex-col items-center">
+                    <span class={`w-3 h-3 rounded-full shrink-0 ${estadoDot[t.estado] ?? 'bg-gray-300'} ${idx === timeline.length - 1 ? 'ring-4 ring-primary-pale/50' : ''}`} />
+                    {idx < timeline.length - 1 && <span class="w-px flex-1 bg-cream-dark my-1" />}
+                  </div>
+                  <div class={`flex flex-col ${idx < timeline.length - 1 ? 'pb-4' : ''}`}>
+                    <span class="text-sm font-semibold text-gray-800">{estadoLabel[t.estado] ?? t.estado}</span>
+                    <span class="text-xs text-gray-400">{fmtFechaHora(t.creado_en)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <!-- Cliente -->
+          <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
+            <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Cliente</h2>
+            {cliente ? (
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-sm shrink-0">
+                  {cliente.nombre_completo?.split(' ').slice(0, 2).map((p: string) => p[0]).join('')}
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <p class="font-semibold text-gray-900 text-sm">{cliente.nombre_completo}</p>
+                  {cliente.telefono && <p class="text-xs text-gray-400">📞 {cliente.telefono}</p>}
+                </div>
+              </div>
+            ) : (
+              <p class="text-sm text-gray-400">—</p>
+            )}
+          </div>
+
+          <!-- Detalles del trabajo -->
+          <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
+            <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Detalles del trabajo</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              {sol.descripcion && (
+                <div class="sm:col-span-2 flex flex-col gap-1">
+                  <span class="text-gray-400 text-xs uppercase tracking-wide">Descripción</span>
+                  <p class="text-gray-700 leading-relaxed">{sol.descripcion}</p>
+                </div>
+              )}
+              <div class="flex flex-col gap-1">
+                <span class="text-gray-400 text-xs uppercase tracking-wide">Dirección</span>
+                <p class="text-gray-800 font-medium">📍 {sol.direccion ?? '—'}</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <span class="text-gray-400 text-xs uppercase tracking-wide">Fecha y hora preferida</span>
+                <p class="text-gray-800 font-medium">
+                  📅 {sol.fecha_solicitada
+                    ? new Date(sol.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
+                    : '—'}
+                  {sol.hora_solicitada && ` · ${(sol.hora_solicitada as string).slice(0, 5)} hs`}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cierre del trabajo (fotos + gastos) -->
+          {sol.estado === 'completada' && (imagenesTrabajo.length > 0 || (gastosExtra != null && gastosExtra > 0)) && (
+            <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
+              <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Cierre del trabajo</h2>
+
+              {imagenesTrabajo.length > 0 && (
+                <div class="flex flex-col gap-2">
+                  <span class="text-xs text-gray-400 uppercase tracking-wide">Fotos del trabajo</span>
+                  <GaleriaFotos urls={imagenesTrabajo} client:load />
+                </div>
+              )}
+
+              {gastosExtra != null && gastosExtra > 0 && (
+                <div class="flex flex-col gap-2">
+                  <span class="text-xs text-gray-400 uppercase tracking-wide">Gastos extras declarados</span>
+                  <div class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 flex flex-col gap-1">
+                    <p class="font-semibold text-amber-800 text-sm">${gastosExtra.toLocaleString('es-AR')}</p>
+                    {descGastos && <p class="text-xs text-amber-700">{descGastos}</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+        </div>
+
+        <!-- Col derecha (1/3) -->
+        <div class="flex flex-col gap-6">
+
+          <!-- Ganancia -->
+          <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
+            <div class="px-6 py-4 border-b border-cream">
+              <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Tu ganancia</h2>
+            </div>
+
+            {precioBase == null ? (
+              <div class="px-6 py-5 text-sm text-gray-400 text-center">
+                Tarifa a convenir — sin cálculo automático
+              </div>
+            ) : (
+              <div class="px-6 py-5 flex flex-col gap-3 text-sm">
+                <div class="flex justify-between text-gray-600">
+                  <span>Precio base</span>
+                  <span class="font-medium text-gray-800">{fmt(precioBase)}</span>
+                </div>
+                <div class="flex justify-between text-gray-400 text-xs">
+                  <span>Tasa plataforma</span>
+                  <span>{tasa ?? 0}%</span>
+                </div>
+                {gastosExtra != null && gastosExtra > 0 && (
+                  <div class="flex justify-between text-amber-700">
+                    <span>Gastos extras</span>
+                    <span class="font-medium">+ {fmt(gastosExtra)}</span>
+                  </div>
+                )}
+                <div class="border-t border-cream pt-3 flex justify-between">
+                  <span class="font-semibold text-gray-900">Vas a recibir</span>
+                  <span class="font-bold text-gray-900">{fmt(precioBase)}</span>
+                </div>
+              </div>
+            )}
+
+            {sol.estado === 'completada' && sol.conformidad_cliente && (
+              <div class="mx-6 mb-5 bg-primary-soft border border-primary-pale rounded-xl px-4 py-3 text-xs text-[#1B4D2E]">
+                ✅ El cliente dio conformidad — el pago se va a reflejar próximamente en tu cuenta.
+              </div>
+            )}
+          </div>
+
+          <!-- Completar trabajo -->
+          {puedeCompletar && (
+            <div class="bg-white rounded-2xl border border-cream-dark p-6">
+              <CompletarTrabajo
+                client:load
+                solicitudId={sol.id}
+                tecnicoId={tecnico.id}
+                precioBase={precioBase}
+                tasa={tasa}
+              />
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>

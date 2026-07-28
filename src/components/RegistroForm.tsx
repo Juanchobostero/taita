@@ -96,7 +96,7 @@ function ClienteForm() {
 
   const onSubmit = async (data: ClienteData) => {
     setServerError('')
-    const { error } = await supabase.auth.signUp({
+    const { data: authData, error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
       options: {
@@ -109,7 +109,11 @@ function ClienteForm() {
       },
     })
     if (error) { setServerError(error.message); return }
-    window.location.href = `/verificar-email?email=${encodeURIComponent(data.email)}`
+    if (authData.user?.identities?.length === 0) {
+      setServerError('Este mail ya está registrado, ¿ya tenés cuenta?')
+      return
+    }
+    window.location.href = '/dashboard/cliente'
   }
 
   const err = (f: keyof ClienteData) => errors[f]?.message
@@ -220,6 +224,10 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
       },
     })
     if (error) { setServerError(error.message); return }
+    if (authData.user?.identities?.length === 0) {
+      setServerError('Este mail ya está registrado, ¿ya tenés cuenta?')
+      return
+    }
 
     if (authData.user) {
       const res = await fetch('/api/registro-tecnico', {

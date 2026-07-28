@@ -71,7 +71,7 @@ export default function DarConformidad({ solicitudId, titulo, total, yaConfirmad
           type="button"
           disabled={loading}
           onClick={confirmar}
-          className="font-semibold underline disabled:opacity-50"
+          className="font-semibold bg-primary hover:bg-primary-hover text-white px-3 py-1.5 rounded-full transition-colors disabled:opacity-50"
         >
           {loading ? 'Confirmando...' : 'Sí, confirmar'}
         </button>

@@ -132,7 +132,7 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
             {solicitudes.map(s => (
               <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div class="flex flex-col gap-1">
-                  <p class="font-semibold text-gray-900 text-sm">{s.titulo}</p>
+                  <a href={`/dashboard/tecnico/solicitud/${s.id}`} class="font-semibold text-gray-900 text-sm hover:text-primary transition-colors w-fit">{s.titulo}</a>
                   <p class="text-xs text-gray-400">
                     {s.categorias?.icono} {s.categorias?.nombre}
                     {s.usuarios?.nombre_completo && ` · 👤 ${s.usuarios.nombre_completo}`}
@@ -159,6 +159,12 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
                       ${Number(s.total_estimado).toLocaleString('es-AR')}
                     </span>
                   )}
+                  <a
+                    href={`/dashboard/tecnico/solicitud/${s.id}`}
+                    class="inline-flex items-center gap-1 text-xs font-semibold bg-primary-soft hover:bg-primary text-[#1B4D2E] hover:text-white px-3 py-1.5 rounded-full transition-colors whitespace-nowrap"
+                  >
+                    Ver detalle →
+                  </a>
                   {(s.estado === 'aceptada' || s.estado === 'en_curso' ||
                     (s.estado === 'completada' && !(s.imagenes_trabajo?.length) && s.gastos_extra == null)) && (
                     <CompletarTrabajo
@@ -180,7 +186,7 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
       <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
         <div class="flex items-center justify-between">
           <h2 class="font-serif font-bold text-[#1B4D2E] text-lg">Mi perfil público</h2>
-          <a href={`/tecnicos/${tecnico.id}`} class="text-sm text-[#1B4D2E] hover:text-primary-hover font-medium">
+          <a href={`/tecnicos/${tecnico.id}`} class="inline-flex items-center gap-1 text-xs font-semibold bg-primary-soft hover:bg-primary text-[#1B4D2E] hover:text-white px-3 py-1.5 rounded-full transition-colors">
             Ver perfil →
           </a>
         </div>

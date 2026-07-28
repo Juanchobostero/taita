@@ -3,7 +3,8 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-07-28
+**Última actualización:** 2026-07-28 (sesión de tarde — ver "Issues abiertos" para el detalle de
+qué quedó implementado hoy pero todavía sin probar)
 
 ---
 
@@ -12,10 +13,14 @@
 Plataforma operativa con registro de clientes/técnicos, flujo completo de solicitud de
 servicio, panel admin/cliente/técnico, y páginas legales. **Ya publicada en el dominio propio**
 (`taitasoluciones.com.ar`, vía Vercel + Cloudflare) **con envío de email real funcionando**
-(Resend). Pendiente: WhatsApp, cron externo para producción, Mercado Pago al final, y 4 issues
-abiertos de las primeras pruebas en producción (registro/verificación de mail, responsividad,
-botones poco visibles, notificaciones in-app) — ver sección "Issues abiertos" más abajo, con plan
-armado pero sin implementar todavía.
+(Resend). Pendiente: WhatsApp, cron externo para producción, Mercado Pago al final.
+
+De los 4 issues abiertos de las primeras pruebas en producción (ver sección "Issues abiertos" más
+abajo), **3 ya están implementados en código (1, 2 y 3) pero todavía sin probar** — se armaron en
+una PC sin las variables de entorno de Supabase cargadas (`SUPABASE_SERVICE_ROLE_KEY` en
+particular), así que quedaron para probar al pullear estos cambios en el entorno con las envs
+completas. El 4to (notificaciones in-app) sigue sin arrancar — falta confirmar el diseño antes de
+escribir código.
 
 ---
 
@@ -42,13 +47,22 @@ cuando haya tiempo, cada uno a su ritmo. El detalle de cada uno está más abajo
 
 ---
 
-## Issues abiertos — sesión 2026-07-28 (plan armado, falta implementar)
+## Issues abiertos — sesión 2026-07-28
 
 Reportados por Jota después de las primeras pruebas en producción. Investigados y con causa raíz
-encontrada para los primeros 3; el 4to es un pedido nuevo de Agustín. **Nada de esto está
-implementado todavía** — quedó en plan para retomar. Orden sugerido: 1 → 2 → 3 → 4.
+encontrada para los primeros 3; el 4to es un pedido nuevo de Agustín. Orden de trabajo: 1 → 2 → 3 → 4.
+
+**Estado:** 1, 2 y 3 con el código ya escrito y commiteado, **pero sin probar todavía** — se
+implementaron en una PC que no tenía cargada `SUPABASE_SERVICE_ROLE_KEY` (ni el resto de envs no
+críticas: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `CRON_SECRET`), así que no se pudo levantar
+`npm run dev` para probar en el momento. Al pullear en el entorno con las envs completas, probar
+los 3 siguiendo el checklist de la sección "Cómo probar" más abajo antes de dar por cerrado el
+issue. El 4 sigue sin arrancar (falta confirmar diseño).
 
 ### 1. Registro: sacar verificación de mail + validar duplicados
+
+**✅ Código implementado + configuración de Supabase hecha (2026-07-28). Falta probar de punta a
+punta** (registro cliente, registro técnico, y el caso de mail repetido).
 
 **Causas raíz encontradas (investigado el 2026-07-28):**
 - La verificación de mail **no bloquea nada en el código** — no hay ningún lugar (middleware, API,
@@ -68,39 +82,107 @@ implementado todavía** — quedó en plan para retomar. Orden sugerido: 1 → 2
   código asume éxito y sigue igual, sin insertar nada nuevo ni avisar al usuario.
 
 **Plan:**
-- [ ] `ClienteForm`: sacar el redirect a `/verificar-email` → mandar directo a `/dashboard/cliente`
-      (igual que ya hace `TecnicoForm`).
-- [ ] Agregar chequeo de `identities.length === 0` en ambos formularios → mostrar error claro
-      ("Este mail ya está registrado, ¿ya tenés cuenta?") en vez de seguir como si nada.
-- [ ] Borrar `verificar-email.astro` y `ResendVerification.tsx` (código muerto después del punto
-      anterior — confirmado que no los usa nadie más en el proyecto).
-- [ ] **Externo (Jota/Agustín, en el dashboard de Supabase, no es código):**
-      1. Authentication → URL Configuration → cambiar **Site URL** a `https://taitasoluciones.com.ar`
-         y agregar esa URL a **Redirect URLs**.
-      2. A confirmar: ¿desactivar **"Confirm email"** en Auth Settings? Así ni se manda el mail de
-         confirmación (hoy se manda igual aunque no se use para nada). Coherente con sacar la
-         verificación del todo, pero es una decisión de cuenta a confirmar antes de tocarlo.
+- [x] `ClienteForm`: sacar el redirect a `/verificar-email` → manda directo a `/dashboard/cliente`
+      (igual que ya hacía `TecnicoForm`).
+- [x] Chequeo de `identities.length === 0` agregado en ambos formularios (`ClienteForm` y
+      `TecnicoForm`) → muestra "Este mail ya está registrado, ¿ya tenés cuenta?" en vez de seguir
+      como si nada.
+- [x] Borrados `verificar-email.astro` y `ResendVerification.tsx` (código muerto, confirmado que
+      no los usaba nadie más en el proyecto).
+- [x] **Externo, en Supabase (hecho 2026-07-28):** se desactivó **"Confirm email"** en
+      Authentication → Sign In / Providers → Email. Ya no se manda ningún mail de confirmación al
+      registrarse, ni cliente ni técnico.
+      - **Site URL / Redirect URLs**: se dejaron **sin cambiar** (siguen en `localhost:4321`), a
+        propósito — con "Confirm email" desactivado no hay ningún flujo activo que las use hoy (el
+        link de "¿Olvidaste tu contraseña?" en el login es un `href="#"` sin implementar todavía).
+        Si en el futuro se agrega recuperar contraseña, magic link, o se reactiva la confirmación
+        de mail, hay que volver a esta pantalla y cargar `https://taitasoluciones.com.ar` como
+        Site URL + Redirect URL antes de que ese flujo dependa de ahí.
+
+**Falta probar (checklist para retomar en casa):**
+- [ ] Registrar un cliente nuevo con un mail que no exista → tiene que crear la cuenta y mandar
+      directo a `/dashboard/cliente`, sin pantalla de "revisá tu correo" ni mail de confirmación.
+- [ ] Registrar un técnico nuevo con un mail que no exista → mismo resultado, manda a
+      `/dashboard/tecnico` (ya lo hacía así antes, no debería haber cambiado).
+- [ ] Intentar registrarse (cliente o técnico) con un mail que **ya existe** → tiene que aparecer
+      el error "Este mail ya está registrado, ¿ya tenés cuenta?" y no crear nada nuevo ni duplicar
+      la fila en `usuarios`/`tecnicos`.
+- [ ] Confirmar que no queda ninguna referencia rota a `/verificar-email` (no debería, ya se
+      verificó por código, pero vale un click manual).
 
 ### 2. Responsividad
 
+**✅ Código implementado (2026-07-28). Falta probar** (achicar ventana / celular).
+
 **Causa raíz encontrada:** en `admin.astro`, el header (título + botones "Categorías/T&C/Usuarios")
-usa `flex items-center gap-2` **sin** `flex-wrap` ni breakpoint, y cada botón tiene `shrink-0`
-(le prohíbe achicarse) — se amontonan y desbordan en mobile. El panel del cliente y del técnico
-**ya tienen el patrón correcto** (`flex-col sm:flex-row`); el admin quedó desactualizado respecto
-a esos dos.
+usaba `flex items-center gap-2` **sin** `flex-wrap` ni breakpoint, y cada botón tenía `shrink-0`
+(le prohibía achicarse) — se amontonaban y desbordaban en mobile. El panel del cliente y del
+técnico **ya tenían el patrón correcto** (`flex-col sm:flex-row`); el admin había quedado
+desactualizado respecto a esos dos.
 
 **Plan:**
-- [ ] Aplicar en `admin.astro` el mismo patrón `flex-col sm:flex-row` que ya usan `cliente.astro` y
-      `tecnico.astro`, y agregar `flex-wrap` a la fila de botones de acceso rápido.
+- [x] Aplicado en `admin.astro` el mismo patrón `flex-col sm:flex-row` que ya usan `cliente.astro`
+      y `tecnico.astro`, y agregado `flex-wrap` a la fila de botones de acceso rápido.
+- [ ] **Falta probar:** entrar a `/dashboard/admin` con la ventana angosta o desde el celular →
+      el título y los 3 botones (Categorías/T&C/Usuarios) tienen que acomodarse en columna (o
+      envolver en varias líneas) en vez de desbordar horizontalmente.
 - [ ] Resto de bugs de responsividad: no se pueden encontrar solo leyendo código — revisar
       página por página (Jota prueba en el celular / ventana angosta, manda captura de lo que se
       vea mal, se arregla de a una).
 
 ### 3. Botones más destacados (links poco visibles como acción)
 
-Pendiente de acotar alcance — a definir con Jota qué pantallas/links priorizar antes de salir a
-cambiar cosas por toda la app (candidatos: "Ver perfil" de técnicos en el form de solicitud, "Ver
-detalle" en la tabla del admin, entre otros).
+**✅ Código implementado (2026-07-28). Falta probar** (visual, en cada pantalla listada abajo).
+
+Alcance acordado con Jota: convertir a botón píldora (mismo
+patrón que ya usaba "Ver detalle" en `MisSolicitudes.tsx`) todos los links de acción real que
+eran texto plano sin fondo:
+- `FormSolicitud.tsx` — "Ver perfil" en cards de técnicos candidatos.
+- `TablaSolicitudesAdmin.tsx` — "Ver detalle" en la tabla del admin.
+- `dashboard/tecnico.astro` — "Ver perfil" del perfil público propio, y nuevo "Ver detalle →" por
+  solicitud (ver punto siguiente).
+- `CancelarSolicitud.tsx` — "Cancelar solicitud" (disparador) y "Sí, cancelar" (confirmación).
+- `DarConformidad.tsx` — "Sí, confirmar".
+- `ResenaForm.tsx` — "⭐ Dejar reseña a…".
+- `MisSolicitudes.tsx` — "Solicitá un servicio →" (estado vacío).
+- `admin/solicitud/[id].astro` — botones de reagendar/asignar en conflicto de horario, y
+  "Sí, cancelar".
+
+Quedaron afuera a propósito (acciones secundarias tipo "Cancelar/Volver" que acompañan a un botón
+primario, y la inconsistencia menor entre "← Panel admin" / "← Volver al panel") — se pueden
+retomar más adelante si molesta en el uso real.
+
+**De paso, gap encontrado y resuelto:** el técnico no tenía ninguna vista de detalle con timeline
+de estados (a diferencia de cliente y admin, que sí la tienen desde la Tanda 5). Se agregó
+`src/pages/dashboard/tecnico/solicitud/[id].astro`, mismo patrón que la vista del cliente:
+timeline vía `solicitud_historial_estados`, datos del cliente, detalle del trabajo, cierre
+(fotos/gastos si ya está completada), desglose de "tu ganancia" (precio base, tasa, gastos extra,
+total a recibir) y el botón "Completar trabajo" cuando corresponde. Seguridad: valida
+`solicitud.tecnico_id === tecnico.id` del usuario logueado antes de mostrar nada, mismo criterio
+que la vista del cliente. Enlazada desde `dashboard/tecnico.astro` (título de la solicitud +
+botón "Ver detalle →").
+
+**Falta probar (checklist para retomar en casa):**
+- [ ] `/solicitud` (con técnico puntual) → "Ver perfil" de cada candidato ahora se ve como botón
+      con fondo, no texto suelto.
+- [ ] Panel admin, tabla de solicitudes → "Ver detalle" ídem.
+- [ ] Panel técnico → "Ver perfil" (perfil público propio) ídem.
+- [ ] Panel cliente → "Cancelar solicitud" y su confirmación "Sí, cancelar" se ven como botones,
+      y el flujo de cancelar sigue funcionando igual que antes (no se tocó la lógica, solo estilos).
+- [ ] Vista de detalle del cliente, solicitud completada → "Sí, confirmar" (dar conformidad) ídem,
+      confirmar que el flujo de conformidad sigue funcionando.
+- [ ] Panel cliente, solicitud completada sin reseña → "⭐ Dejar reseña a…" ídem.
+- [ ] Panel cliente sin ninguna solicitud → "Solicitá un servicio →" (estado vacío) ídem.
+- [ ] Admin, detalle de una solicitud con conflicto de horario → los botones de
+      "Reagendar a ese horario y asignar" / "Asignar igual" se ven como píldora ámbar, y el
+      "Sí, cancelar" del admin como píldora roja.
+- [ ] **Nuevo — panel técnico:** entrar a `/dashboard/tecnico`, click en el título de una
+      solicitud o en "Ver detalle →" → tiene que abrir `/dashboard/tecnico/solicitud/[id]` con el
+      timeline, datos del cliente, detalle del trabajo, "tu ganancia", y el botón "Completar
+      trabajo" cuando corresponda (mismos casos que ya tenía en la lista: aceptada/en_curso, o
+      completada sin cierre cargado).
+- [ ] Entrar a esa URL nueva con el id de una solicitud de **otro técnico** → tiene que redirigir
+      a `/dashboard/tecnico` (mismo chequeo de seguridad que la vista del cliente).
 
 ### 4. Notificaciones in-app (pedido nuevo de Agustín — 2026-07-28)
 

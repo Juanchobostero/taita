@@ -32,7 +32,7 @@ export default function CancelarSolicitud({ solicitudId, titulo }: Props) {
       <button
         type="button"
         onClick={() => setAbierto(true)}
-        className="text-xs text-red-500 hover:text-red-600 hover:underline font-medium w-fit"
+        className="text-xs font-semibold bg-red-50 hover:bg-red-500 text-red-600 hover:text-white px-3 py-1.5 rounded-full transition-colors w-fit"
       >
         Cancelar solicitud
       </button>
@@ -52,7 +52,7 @@ export default function CancelarSolicitud({ solicitudId, titulo }: Props) {
           type="button"
           disabled={loading}
           onClick={confirmar}
-          className="font-semibold underline disabled:opacity-50"
+          className="font-semibold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-full transition-colors disabled:opacity-50"
         >
           {loading ? 'Cancelando...' : 'Sí, cancelar'}
         </button>

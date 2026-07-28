@@ -109,7 +109,7 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal }: Pro
                   <td className="px-4 py-3">
                     <a
                       href={`/dashboard/admin/solicitud/${s.id}`}
-                      className="text-xs text-[#1B4D2E] hover:opacity-70 font-medium whitespace-nowrap"
+                      className="inline-flex items-center gap-1 text-xs font-semibold bg-primary-soft hover:bg-primary text-[#1B4D2E] hover:text-white px-3 py-1.5 rounded-full transition-colors whitespace-nowrap"
                     >
                       Ver detalle →
                     </a>

@@ -83,7 +83,7 @@ export default function MisSolicitudes({ initialData, initialTotal }: Props) {
       <div className="px-6 py-12 text-center text-gray-400 text-sm flex flex-col items-center gap-3">
         <span className="text-3xl">🔍</span>
         <p>Todavía no hiciste ninguna solicitud.</p>
-        <a href="/solicitud" className="text-[#1B4D2E] hover:text-primary-hover font-medium">
+        <a href="/solicitud" className="inline-flex items-center gap-1 text-xs font-semibold bg-primary-soft hover:bg-primary text-primary hover:text-white px-3 py-1.5 rounded-full transition-colors">
           Solicitá un servicio →
         </a>
       </div>

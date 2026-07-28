@@ -242,7 +242,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
                     {c.zona && <p className="text-xs text-gray-400 leading-tight line-clamp-1">{c.zona}</p>}
                     <a
                       href={`/tecnicos/${c.id}`}
-                      className="text-xs text-primary hover:underline font-medium mt-0.5"
+                      className="inline-flex items-center gap-1 text-xs font-semibold bg-primary-soft hover:bg-primary text-primary hover:text-white px-3 py-1.5 rounded-full transition-colors mt-0.5"
                     >
                       Ver perfil
                     </a>

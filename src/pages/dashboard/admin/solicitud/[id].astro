@@ -261,12 +261,12 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                             <>
                               <input type="hidden" name="nuevaFecha" value={conflictoSugFecha} />
                               <input type="hidden" name="nuevaHora" value={conflictoSugHora} />
-                              <button type="submit" class="text-xs font-semibold text-amber-900 underline">
+                              <button type="submit" class="text-xs font-semibold bg-amber-100 hover:bg-amber-600 text-amber-900 hover:text-white px-3 py-1.5 rounded-full transition-colors">
                                 Reagendar a ese horario y asignar
                               </button>
                             </>
                           ) : (
-                            <button type="submit" class="text-xs font-semibold text-amber-900 underline">
+                            <button type="submit" class="text-xs font-semibold bg-amber-100 hover:bg-amber-600 text-amber-900 hover:text-white px-3 py-1.5 rounded-full transition-colors">
                               Asignar igual en el horario original (el admin decide)
                             </button>
                           )}
@@ -393,7 +393,7 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                   asignado, va a ser notificado.
                 </p>
                 <div class="flex items-center gap-4">
-                  <button type="submit" class="font-semibold underline">Sí, cancelar</button>
+                  <button type="submit" class="font-semibold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-full transition-colors">Sí, cancelar</button>
                   <button type="button" id="btn-volver-cancelar" class="text-gray-500 hover:text-gray-700">Volver</button>
                 </div>
               </div>

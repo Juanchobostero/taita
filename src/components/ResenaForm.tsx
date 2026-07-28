@@ -67,7 +67,7 @@ export default function ResenaForm({ solicitudId, tecnicoId, tecnicoNombre }: Pr
       {!open ? (
         <button
           onClick={() => setOpen(true)}
-          className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
+          className="inline-flex items-center gap-1 text-xs font-semibold bg-primary-soft hover:bg-primary text-primary hover:text-white px-3 py-1.5 rounded-full transition-colors"
         >
           ⭐ Dejar reseña a {tecnicoNombre}
         </button>
