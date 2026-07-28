@@ -3,7 +3,7 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-07-25
+**Última actualización:** 2026-07-28
 
 ---
 
@@ -12,8 +12,10 @@
 Plataforma operativa con registro de clientes/técnicos, flujo completo de solicitud de
 servicio, panel admin/cliente/técnico, y páginas legales. **Ya publicada en el dominio propio**
 (`taitasoluciones.com.ar`, vía Vercel + Cloudflare) **con envío de email real funcionando**
-(Resend). Pendiente: WhatsApp, cron externo para producción, conformidad+pago ya implementados,
-Mercado Pago al final.
+(Resend). Pendiente: WhatsApp, cron externo para producción, Mercado Pago al final, y 4 issues
+abiertos de las primeras pruebas en producción (registro/verificación de mail, responsividad,
+botones poco visibles, notificaciones in-app) — ver sección "Issues abiertos" más abajo, con plan
+armado pero sin implementar todavía.
 
 ---
 
@@ -37,6 +39,93 @@ cuando haya tiempo, cada uno a su ritmo. El detalle de cada uno está más abajo
       funciona bien (✅ ya validado). Se puede encarar cuando haya tiempo.
 - [ ] **Mercado Pago** — credenciales de Agustín, se coordina al llegar a la Tanda 7 (al final,
       a propósito).
+
+---
+
+## Issues abiertos — sesión 2026-07-28 (plan armado, falta implementar)
+
+Reportados por Jota después de las primeras pruebas en producción. Investigados y con causa raíz
+encontrada para los primeros 3; el 4to es un pedido nuevo de Agustín. **Nada de esto está
+implementado todavía** — quedó en plan para retomar. Orden sugerido: 1 → 2 → 3 → 4.
+
+### 1. Registro: sacar verificación de mail + validar duplicados
+
+**Causas raíz encontradas (investigado el 2026-07-28):**
+- La verificación de mail **no bloquea nada en el código** — no hay ningún lugar (middleware, API,
+  página) que chequee `email_confirmed_at` o similar. `/verificar-email` es solo una pantalla
+  estática de "revisá tu correo" que nunca vuelve a consultar nada; el técnico ya se saltea este
+  paso por completo y accede igual a su dashboard. Sacarla para el cliente es de bajo riesgo.
+- El link del mail de confirmación apuntando a `localhost:4321` en producción es un tema de
+  **configuración de Supabase**, no de código: el código ya arma `emailRedirectTo` dinámicamente
+  con `window.location.origin`, pero el **Site URL** del proyecto en Supabase (Authentication →
+  URL Configuration) probablemente sigue apuntando a `localhost:4321` de cuando se armó el
+  proyecto, y si la URL pedida no está en la lista de "Redirect URLs", Supabase cae al Site URL
+  por default.
+- El bug de "deja registrar el mismo mail 2 veces sin avisar nada": en `RegistroForm.tsx`
+  (`ClienteForm` y `TecnicoForm`), el `supabase.auth.signUp(...)` nunca revisa
+  `data.user.identities`. Si el mail ya existe, Supabase **no tira error** — devuelve un usuario
+  con `identities: []` vacío (a propósito, para no filtrar qué mails están registrados) y el
+  código asume éxito y sigue igual, sin insertar nada nuevo ni avisar al usuario.
+
+**Plan:**
+- [ ] `ClienteForm`: sacar el redirect a `/verificar-email` → mandar directo a `/dashboard/cliente`
+      (igual que ya hace `TecnicoForm`).
+- [ ] Agregar chequeo de `identities.length === 0` en ambos formularios → mostrar error claro
+      ("Este mail ya está registrado, ¿ya tenés cuenta?") en vez de seguir como si nada.
+- [ ] Borrar `verificar-email.astro` y `ResendVerification.tsx` (código muerto después del punto
+      anterior — confirmado que no los usa nadie más en el proyecto).
+- [ ] **Externo (Jota/Agustín, en el dashboard de Supabase, no es código):**
+      1. Authentication → URL Configuration → cambiar **Site URL** a `https://taitasoluciones.com.ar`
+         y agregar esa URL a **Redirect URLs**.
+      2. A confirmar: ¿desactivar **"Confirm email"** en Auth Settings? Así ni se manda el mail de
+         confirmación (hoy se manda igual aunque no se use para nada). Coherente con sacar la
+         verificación del todo, pero es una decisión de cuenta a confirmar antes de tocarlo.
+
+### 2. Responsividad
+
+**Causa raíz encontrada:** en `admin.astro`, el header (título + botones "Categorías/T&C/Usuarios")
+usa `flex items-center gap-2` **sin** `flex-wrap` ni breakpoint, y cada botón tiene `shrink-0`
+(le prohíbe achicarse) — se amontonan y desbordan en mobile. El panel del cliente y del técnico
+**ya tienen el patrón correcto** (`flex-col sm:flex-row`); el admin quedó desactualizado respecto
+a esos dos.
+
+**Plan:**
+- [ ] Aplicar en `admin.astro` el mismo patrón `flex-col sm:flex-row` que ya usan `cliente.astro` y
+      `tecnico.astro`, y agregar `flex-wrap` a la fila de botones de acceso rápido.
+- [ ] Resto de bugs de responsividad: no se pueden encontrar solo leyendo código — revisar
+      página por página (Jota prueba en el celular / ventana angosta, manda captura de lo que se
+      vea mal, se arregla de a una).
+
+### 3. Botones más destacados (links poco visibles como acción)
+
+Pendiente de acotar alcance — a definir con Jota qué pantallas/links priorizar antes de salir a
+cambiar cosas por toda la app (candidatos: "Ver perfil" de técnicos en el form de solicitud, "Ver
+detalle" en la tabla del admin, entre otros).
+
+### 4. Notificaciones in-app (pedido nuevo de Agustín — 2026-07-28)
+
+**Objetivo:** que cada usuario (cliente, técnico, admin) vea dentro de la web un historial de los
+sucesos que le corresponden — mismo contenido que ya recibe por mail, pero también visible adentro
+de la app (tipo campanita de Facebook/Instagram), para que no dependa solo de revisar el correo.
+
+**Diseño propuesto (a confirmar antes de implementar):**
+- Tabla nueva `notificaciones` (`usuario_id` destinatario, `solicitud_id` opcional para poder
+  linkear al detalle, `titulo`, `mensaje`, `leida boolean`, `creado_en`).
+- Se inserta una fila ahí en **los mismos puntos donde ya se manda uno de los 12 mails** — mismo
+  destinatario, mismo evento. Reusa `notificarCambioEstado()`, `notificarNuevaSolicitud()` y
+  `notificarConformidad()` en `src/lib/notificaciones.ts` (punto único ya existente) — no se
+  inventan sucesos nuevos, espeja uno a uno lo que ya se manda por correo.
+- Campanita en el `Navbar` (logueado, los 3 roles) con contador de no leídas, dropdown con la
+  lista más reciente primero, click → marca como leída y navega al detalle de esa solicitud.
+- Sin tiempo real por ahora (nada de WebSockets/Supabase Realtime) — se actualiza al cargar la
+  página o al abrir la campanita. Se puede sumar tiempo real más adelante si hace falta.
+
+**Plan:**
+- [ ] Confirmar el diseño de arriba con Jota/Agustín antes de escribir código.
+- [ ] SQL: tabla `notificaciones` + políticas RLS (mismo patrón que `solicitud_historial_estados`).
+- [ ] Extender las 3 funciones de `notificaciones.ts` para insertar también la notificación in-app.
+- [ ] Componente `NotificacionesBell.tsx` + API para listar/marcar como leídas.
+- [ ] Sumar la campanita al `Navbar` en los 3 dashboards.
 
 ---
 
