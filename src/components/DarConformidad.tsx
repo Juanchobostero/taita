@@ -6,9 +6,14 @@ interface Props {
   total:         number | null
   yaConfirmado:  boolean
   conformidadEn: string | null
+  pagoEstado:    string | null
+  initPoint:     string | null
+  reciboUrl:     string | null
 }
 
-export default function DarConformidad({ solicitudId, titulo, total, yaConfirmado, conformidadEn }: Props) {
+export default function DarConformidad({
+  solicitudId, titulo, total, yaConfirmado, conformidadEn, pagoEstado, initPoint, reciboUrl,
+}: Props) {
   const [abierto, setAbierto] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
@@ -36,13 +41,47 @@ export default function DarConformidad({ solicitudId, titulo, total, yaConfirmad
     const fecha = conformidadEn
       ? new Date(conformidadEn).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
       : null
+
     return (
-      <div className="bg-primary-soft border border-primary-pale rounded-xl p-4 flex flex-col gap-1 text-sm text-[#1B4D2E]">
+      <div className="bg-primary-soft border border-primary-pale rounded-xl p-4 flex flex-col gap-2 text-sm text-[#1B4D2E]">
         <p className="font-semibold">✅ Diste conformidad{fecha ? ` el ${fecha}` : ''}</p>
-        <p className="text-xs">
-          Pago registrado{total != null ? ` por ${fmt(total)}` : ''} — pendiente de acreditación.
-          Cuando esté activo Mercado Pago vas a poder completarlo directamente acá.
-        </p>
+
+        {pagoEstado === 'pagado' ? (
+          <>
+            <p className="text-xs">
+              ✅ Pago acreditado{total != null ? ` por ${fmt(total)}` : ''}. Gracias por confiar en Taita.
+            </p>
+            {reciboUrl && (
+              <a
+                href={reciboUrl}
+                className="inline-flex items-center gap-1 w-fit text-xs font-semibold bg-primary-soft hover:bg-primary text-[#1B4D2E] hover:text-white px-3 py-1.5 rounded-full transition-colors"
+              >
+                📄 Descargar recibo
+              </a>
+            )}
+          </>
+        ) : pagoEstado === 'pendiente_pago' && initPoint ? (
+          <>
+            <p className="text-xs">
+              Pago{total != null ? ` de ${fmt(total)}` : ''} pendiente — completalo con Mercado Pago
+              cuando quieras.
+            </p>
+            <a
+              href={initPoint}
+              className="w-full text-center bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-xl transition-colors text-sm"
+            >
+              Pagar con Mercado Pago
+            </a>
+          </>
+        ) : pagoEstado === 'rechazado' ? (
+          <p className="text-xs text-red-600">
+            El pago fue rechazado. Escribinos a taitasoluciones@gmail.com para coordinarlo de otra forma.
+          </p>
+        ) : (
+          <p className="text-xs">
+            Pago registrado{total != null ? ` por ${fmt(total)}` : ''} — pendiente de acreditación.
+          </p>
+        )}
       </div>
     )
   }

@@ -145,7 +145,8 @@ const { data: sol } = await supabase
     fecha_solicitada, hora_solicitada, direccion,
     usuarios!cliente_id ( nombre_completo, telefono, email ),
     tecnicos ( tarifa_hora, usuarios ( nombre_completo, telefono ) ),
-    categorias ( nombre, icono, porcentaje_tasa )
+    categorias ( nombre, icono, porcentaje_tasa ),
+    pagos ( estado, monto, creado_en )
   `)
   .eq('id', id)
   .single()
@@ -174,6 +175,14 @@ const total              = sol.total_estimado       as number | null
 const gananciaPlataforma = (precioBase != null && total != null) ? total - precioBase : null
 const cobrarAlTecnico    = precioBase
 const gastosExtra        = sol.gastos_extra         as number | null
+const pagoRow            = (sol.pagos as unknown as { estado: string; monto: number; creado_en: string }[] | null)?.[0] ?? null
+
+const pagoInfo: Record<string, { texto: string; clase: string }> = {
+  pagado:         { texto: 'Pago acreditado',                         clase: 'bg-primary-soft border-primary-pale text-[#1B4D2E]' },
+  pendiente_pago: { texto: 'Conformidad dada — pago pendiente',        clase: 'bg-amber-50 border-amber-200 text-amber-700' },
+  rechazado:      { texto: 'El intento de pago del cliente fue rechazado', clase: 'bg-red-50 border-red-200 text-red-700' },
+  registrado:     { texto: 'Conformidad dada — pago registrado (mock)', clase: 'bg-primary-soft border-primary-pale text-[#1B4D2E]' },
+}
 const descGastos         = sol.descripcion_gastos   as string | null
 const imagenesTrabajo    = (sol.imagenes_trabajo    as string[] | null) ?? []
 
@@ -524,17 +533,22 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
             )}
           </div>
 
-          <!-- Conformidad del cliente -->
+          <!-- Conformidad del cliente + estado real del pago -->
           {sol.estado === 'completada' && (
-            <div class={`rounded-2xl border p-4 text-sm ${sol.conformidad_cliente ? 'bg-primary-soft border-primary-pale text-[#1B4D2E]' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+            <div class={`rounded-2xl border p-4 text-sm flex flex-col gap-1 ${sol.conformidad_cliente ? 'bg-primary-soft border-primary-pale text-[#1B4D2E]' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
               {sol.conformidad_cliente ? (
                 <p>
                   ✅ El cliente dio conformidad
                   {sol.conformidad_en && ` el ${new Date(sol.conformidad_en).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`}.
-                  Pago registrado.
                 </p>
               ) : (
                 <p>⏳ Todavía no dio conformidad el cliente.</p>
+              )}
+              {pagoRow && pagoInfo[pagoRow.estado] && (
+                <p class={`text-xs font-medium px-2.5 py-1 rounded-full w-fit ${pagoInfo[pagoRow.estado].clase}`}>
+                  {pagoInfo[pagoRow.estado].texto}
+                  {pagoRow.estado === 'pagado' && ` — $${pagoRow.monto.toLocaleString('es-AR')}`}
+                </p>
               )}
             </div>
           )}

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { enviarEmail } from './email'
+import { generarReciboPDF } from './recibo'
 
 const ADMIN_EMAIL = 'taitasoluciones@gmail.com'
 
@@ -344,4 +345,181 @@ export async function notificarConformidad(supabase: SupabaseClient, solicitudId
       sol.id,
     )
   }
+}
+
+/**
+ * Se llama cuando `pagos.estado` pasa a 'pagado' (Mercado Pago, Fase 1) — nunca antes de
+ * reconsultar el pago real contra la API de MP (ver `actualizarPagoDesdeMP` en mercadopago.ts).
+ * Genera el recibo en PDF, lo sube a Storage, y avisa a cliente, técnico y admin.
+ */
+export async function notificarPagoConfirmado(
+  supabase:    SupabaseClient,
+  solicitudId: string,
+  paymentId:   string,
+): Promise<void> {
+  const { data: sol } = await supabase
+    .from('solicitudes')
+    .select(`
+      id, titulo, precio_base, gastos_extra, total_estimado,
+      usuarios!cliente_id ( id, nombre_completo, email ),
+      tecnicos ( usuario_id, usuarios ( nombre_completo, email ) ),
+      categorias ( nombre )
+    `)
+    .eq('id', solicitudId)
+    .single()
+  if (!sol) return
+
+  const cliente   = sol.usuarios as unknown as { id: string; nombre_completo: string; email: string | null } | null
+  const tecnicoRel = sol.tecnicos as unknown as { usuario_id: string; usuarios: { nombre_completo: string; email: string | null } | null } | null
+  const tecnico    = tecnicoRel?.usuarios ?? null
+  const tecnicoId  = tecnicoRel?.usuario_id ?? null
+  const categoria  = (sol.categorias as unknown as { nombre: string } | null)?.nombre ?? null
+  const total      = sol.total_estimado ?? 0
+  const montoTxt   = `$${total.toLocaleString('es-AR')}`
+
+  // El recibo es "mejor esfuerzo": si falla la generación o la subida, el pago igual queda
+  // acreditado y se avisa igual — el cliente puede pedirlo por otro medio si hace falta.
+  let reciboUrl: string | null = null
+  try {
+    const pdf = await generarReciboPDF({
+      solicitudId,
+      titulo:        sol.titulo,
+      categoria,
+      clienteNombre: cliente?.nombre_completo ?? '—',
+      tecnicoNombre: tecnico?.nombre_completo ?? null,
+      precioBase:    sol.precio_base,
+      gastosExtra:   sol.gastos_extra,
+      total,
+      paymentId,
+      fechaPago:     new Date(),
+    })
+    const path = `${solicitudId}/recibo-${paymentId}.pdf`
+    const { error: upErr } = await supabase.storage.from('recibos').upload(path, pdf, {
+      contentType: 'application/pdf',
+      upsert:      true,
+    })
+    if (upErr) {
+      console.error('[notificarPagoConfirmado] error subiendo recibo:', upErr.message)
+    } else {
+      await supabase.from('pagos').update({ recibo_path: path }).eq('solicitud_id', solicitudId)
+      const { data: signed } = await supabase.storage.from('recibos')
+        .createSignedUrl(path, 60 * 60 * 24 * 7) // 7 días — se puede volver a generar desde el panel cuando venza
+      reciboUrl = signed?.signedUrl ?? null
+    }
+  } catch (err) {
+    console.error('[notificarPagoConfirmado] error generando recibo:', err)
+  }
+
+  if (cliente) {
+    if (cliente.email) {
+      await enviarEmail({
+        to:      cliente.email,
+        subject: `Pago acreditado — ${sol.titulo}`,
+        html: `
+          <p>Hola ${cliente.nombre_completo},</p>
+          <p>Confirmamos que tu pago de <strong>${montoTxt}</strong> por <strong>${sol.titulo}</strong>
+          fue acreditado. ¡Gracias por confiar en Taita!</p>
+          ${reciboUrl ? `<p><a href="${reciboUrl}">Descargar recibo (PDF)</a></p>` : ''}
+        `,
+      })
+    }
+    await crearNotificacion(
+      supabase, cliente.id,
+      `Pago acreditado — ${sol.titulo}`,
+      `Se acreditó tu pago de ${montoTxt}.`,
+      solicitudId,
+    )
+  }
+
+  if (tecnico && tecnicoId) {
+    if (tecnico.email) {
+      await enviarEmail({
+        to:      tecnico.email,
+        subject: `Pago del cliente acreditado — ${sol.titulo}`,
+        html: `
+          <p>Hola ${tecnico.nombre_completo},</p>
+          <p>El cliente pagó <strong>${montoTxt}</strong> por <strong>${sol.titulo}</strong>. Tu parte se
+          va a acreditar según lo acordado.</p>
+        `,
+      })
+    }
+    await crearNotificacion(
+      supabase, tecnicoId,
+      `Pago del cliente acreditado — ${sol.titulo}`,
+      `El cliente pagó ${montoTxt}.`,
+      solicitudId,
+    )
+  }
+
+  await enviarEmail({
+    to:      ADMIN_EMAIL,
+    subject: `Pago acreditado — ${sol.titulo}`,
+    html: `
+      <p>Se acreditó el pago de <strong>${montoTxt}</strong> para <strong>${sol.titulo}</strong>
+      (cliente: ${cliente?.nombre_completo ?? '—'}).</p>
+    `,
+  })
+  await crearNotificacionesAdmin(
+    supabase,
+    `Pago acreditado — ${sol.titulo}`,
+    `Monto: ${montoTxt}.`,
+    solicitudId,
+  )
+}
+
+/**
+ * Se llama cuando Mercado Pago informa un pago rechazado. Solo el cliente recibe mail (es quien
+ * puede reintentar) — técnico y admin se enteran solo por la campanita in-app, sin llenarles la
+ * bandeja de algo que no pueden accionar.
+ */
+export async function notificarPagoRechazado(supabase: SupabaseClient, solicitudId: string): Promise<void> {
+  const { data: sol } = await supabase
+    .from('solicitudes')
+    .select(`
+      id, titulo,
+      usuarios!cliente_id ( id, nombre_completo, email ),
+      tecnicos ( usuario_id )
+    `)
+    .eq('id', solicitudId)
+    .single()
+  if (!sol) return
+
+  const cliente   = sol.usuarios as unknown as { id: string; nombre_completo: string; email: string | null } | null
+  const tecnicoId = (sol.tecnicos as unknown as { usuario_id: string } | null)?.usuario_id ?? null
+
+  if (cliente) {
+    if (cliente.email) {
+      await enviarEmail({
+        to:      cliente.email,
+        subject: `No pudimos procesar tu pago — ${sol.titulo}`,
+        html: `
+          <p>Hola ${cliente.nombre_completo},</p>
+          <p>El pago de <strong>${sol.titulo}</strong> no pudo procesarse. Podés reintentarlo desde el
+          detalle de la solicitud en tu panel.</p>
+        `,
+      })
+    }
+    await crearNotificacion(
+      supabase, cliente.id,
+      `No pudimos procesar tu pago — ${sol.titulo}`,
+      'Podés reintentarlo desde el detalle de la solicitud.',
+      solicitudId,
+    )
+  }
+
+  if (tecnicoId) {
+    await crearNotificacion(
+      supabase, tecnicoId,
+      `Pago rechazado — ${sol.titulo}`,
+      'El intento de pago del cliente no pudo procesarse.',
+      solicitudId,
+    )
+  }
+
+  await crearNotificacionesAdmin(
+    supabase,
+    `Pago rechazado — ${sol.titulo}`,
+    'El intento de pago del cliente no pudo procesarse.',
+    solicitudId,
+  )
 }

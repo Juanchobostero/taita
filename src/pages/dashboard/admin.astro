@@ -214,6 +214,7 @@ const ingresos = (completadas ?? []).reduce((sum, s) => sum + ((s.total_estimado
           client:load
           initialData={recientes}
           initialTotal={totalSolicitudes ?? 0}
+          usuarioId={userId}
         />
       </div>
 

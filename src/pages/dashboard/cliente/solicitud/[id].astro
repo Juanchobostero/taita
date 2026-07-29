@@ -6,6 +6,7 @@ import CancelarSolicitud from '../../../../components/CancelarSolicitud'
 import DarConformidad from '../../../../components/DarConformidad'
 import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
+import { actualizarPagoDesdeMP, obtenerLinkPago } from '../../../../lib/mercadopago'
 
 const { id } = Astro.params
 if (!id) return Astro.redirect('/dashboard/cliente')
@@ -29,6 +30,38 @@ const { data: sol } = await supabase
 
 // Solo el dueño de la solicitud puede verla — evita que un cliente vea la de otro adivinando el id.
 if (!sol || sol.cliente_id !== userId) return Astro.redirect('/dashboard/cliente')
+
+// Al volver del checkout de Mercado Pago, la URL trae `payment_id` — se usa solo para saber QUÉ
+// pago reconsultar (nunca se confía en el `status` que venga por query param, eso lo falsifica
+// cualquiera cambiando la URL a mano). El webhook hace lo mismo de forma normal; esto es un
+// refuerzo para que la vista ya se vea actualizada aunque el webhook todavía no haya llegado
+// (por ejemplo en local, donde Mercado Pago no puede alcanzar `localhost`).
+const paymentIdVuelta = Astro.url.searchParams.get('payment_id')
+if (paymentIdVuelta) {
+  try {
+    await actualizarPagoDesdeMP(supabase, paymentIdVuelta)
+  } catch (err) {
+    console.error('[solicitud/[id]] error reconciliando pago al volver de MP:', err)
+  }
+}
+
+const { data: pagoRow } = await supabase
+  .from('pagos')
+  .select('estado, mp_preference_id, recibo_path')
+  .eq('solicitud_id', id)
+  .order('creado_en', { ascending: false })
+  .limit(1)
+  .maybeSingle()
+
+const pagoEstado = pagoRow?.estado ?? null
+const pagoInitPoint = (pagoEstado === 'pendiente_pago' && pagoRow?.mp_preference_id)
+  ? await obtenerLinkPago(pagoRow.mp_preference_id).catch(() => null)
+  : null
+
+// Link firmado temporal (bucket privado) — se regenera en cada visita, no queda un link fijo dando vueltas.
+const pagoReciboUrl = (pagoEstado === 'pagado' && pagoRow?.recibo_path)
+  ? (await supabase.storage.from('recibos').createSignedUrl(pagoRow.recibo_path, 60 * 60)).data?.signedUrl ?? null
+  : null
 
 const { data: rawHistorial } = await supabase
   .from('solicitud_historial_estados')
@@ -248,6 +281,9 @@ const fmtFechaHora = (iso: string) =>
                 total={total}
                 yaConfirmado={sol.conformidad_cliente ?? false}
                 conformidadEn={sol.conformidad_en}
+                pagoEstado={pagoEstado}
+                initPoint={pagoInitPoint}
+                reciboUrl={pagoReciboUrl}
               />
             </div>
           )}

@@ -15,6 +15,7 @@ interface SolicitudRow {
 interface Props {
   initialData:  SolicitudRow[]
   initialTotal: number
+  usuarioId:    string
 }
 
 const PAGE_SIZE = 10
@@ -38,7 +39,7 @@ function pageNumbers(current: number, total: number): (number | '...')[] {
   return pages
 }
 
-export default function TablaSolicitudesAdmin({ initialData, initialTotal }: Props) {
+export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuarioId }: Props) {
   const [rows,    setRows]    = useState<SolicitudRow[]>(initialData)
   const [total,   setTotal]   = useState(initialTotal)
   const [page,    setPage]    = useState(1)
@@ -71,8 +72,14 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal }: Pro
     await fetchPage(next)
   }
 
-  // Tiempo real: el admin ve todas las solicitudes, así que no hace falta filtro — cualquier
-  // insert/update en la tabla re-trae la página actual (silencioso, sin el dimming de loading).
+  // Tiempo real: el admin ve todas las solicitudes, así que no hace falta filtro por `solicitudes`
+  // — pero esa policy resuelve "es admin" con un JOIN/EXISTS contra `usuarios`, y ese tipo de
+  // policy no le llega bien a Supabase Realtime (mismo hallazgo que con técnico/cliente, ver
+  // notificaciones.ts). Además, un pago confirmado por Mercado Pago solo toca la tabla `pagos`,
+  // nunca `solicitudes` — así que escuchar solo esa tabla no alcanzaría igual. Se agrega
+  // `notificaciones` (política simple, sin JOIN) como disparador adicional: el admin recibe una
+  // notificación para todo evento relevante (nueva solicitud, conformidad, pago, vuelta a
+  // pendiente), así que sirve como señal confiable de "algo cambió, refrescá".
   useEffect(() => {
     const channel = supabase
       .channel(`tabla-solicitudes-admin-${instanceId}`)
@@ -84,11 +91,19 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal }: Pro
           fetchPage(pageRef.current, { silent: true })
         },
       )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notificaciones', filter: `usuario_id=eq.${usuarioId}` },
+        () => {
+          setSynced(true)
+          fetchPage(pageRef.current, { silent: true })
+        },
+      )
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instanceId])
+  }, [instanceId, usuarioId])
 
   return (
     <div className={`transition-opacity duration-150 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>

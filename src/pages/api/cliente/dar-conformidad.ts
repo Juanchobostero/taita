@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro'
 import { createSupabaseServer } from '@/lib/supabase-server'
 import { createSupabaseAdmin }  from '@/lib/supabase-admin'
 import { notificarConformidad } from '@/lib/notificaciones'
+import { crearPreferencia }     from '@/lib/mercadopago'
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   try {
@@ -15,7 +16,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const supabase = createSupabaseAdmin()
     const { data: sol } = await supabase
       .from('solicitudes')
-      .select('id, estado, cliente_id, total_estimado, conformidad_cliente')
+      .select('id, titulo, estado, cliente_id, total_estimado, conformidad_cliente')
       .eq('id', solicitudId)
       .single()
 
@@ -39,10 +40,24 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       .eq('id', solicitudId)
     if (updError) throw updError
 
+    const monto = sol.total_estimado ?? 0
+
+    // Si Mercado Pago está configurado, se crea la preferencia de pago real antes de guardar el
+    // registro — así queda directo con el `mp_preference_id` y el estado correcto, sin un update
+    // aparte. Si no está configurado (falta MP_ACCESS_TOKEN), se cae al mock de siempre
+    // ('registrado'), igual que Resend cuando falta su API key: no rompe nada.
+    let preferencia: Awaited<ReturnType<typeof crearPreferencia>> = null
+    try {
+      preferencia = await crearPreferencia({ solicitudId, titulo: sol.titulo, monto })
+    } catch (err) {
+      console.error('[dar-conformidad] error creando preferencia de Mercado Pago:', err)
+    }
+
     const { error: pagoError } = await supabase.from('pagos').insert({
-      solicitud_id: solicitudId,
-      monto:        sol.total_estimado ?? 0,
-      estado:       'registrado',
+      solicitud_id:     solicitudId,
+      monto,
+      estado:           preferencia ? 'pendiente_pago' : 'registrado',
+      mp_preference_id: preferencia?.preferenceId ?? null,
     })
     if (pagoError) console.error('[dar-conformidad] error registrando pago:', pagoError.message)
 
@@ -52,7 +67,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       console.error('[dar-conformidad] error notificando:', err)
     }
 
-    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    return new Response(JSON.stringify({ ok: true, initPoint: preferencia?.initPoint ?? null }), { status: 200 })
   } catch (err) {
     console.error('[api/cliente/dar-conformidad]', err)
     return new Response(JSON.stringify({ error: 'Error interno' }), { status: 500 })

@@ -103,8 +103,80 @@ que el cliente pague), `pagado` (confirmado por webhook + reconsulta a la API de
 ## Cómo probar (sandbox)
 
 Mercado Pago permite crear "usuarios de prueba" (comprador y vendedor) desde el panel de
-desarrolladores, para simular el flujo de pago completo sin plata real. Se documenta el paso a
-paso acá una vez que se llegue a esa etapa.
+desarrolladores, para simular el flujo de pago completo sin plata real. Las cuentas de prueba
+**no están atadas a una aplicación en particular** — son sandbox users de la cuenta de
+desarrollador, se pueden reusar entre proyectos.
+
+### Cuentas de prueba (reutilizadas de otro proyecto, 2026-07-29)
+
+**Vendedor de prueba**
+- User ID: `1180488044`
+- Usuario: `TESTVKNDVYMZ`
+- Contraseña: `qatest4788`
+
+**Comprador de prueba**
+- User ID: `1180493422`
+- Usuario: `TETE1322835`
+- Contraseña: `qatest5034`
+
+**Credenciales de prueba del Vendedor** (app "TEST TAITA SOLUCIONES", creada logueado como el
+Vendedor de prueba de arriba — confirmado que el Access Token termina en `-1180488044`, el mismo
+User ID del vendedor, así que está bien aislado de la cuenta real):
+- Access Token: `APP_USR-8632599657503852-072910-f691368b0cdb77351887432547366b54-1180488044`
+- Public Key: `APP_USR-5d3169ec-392b-4b15-a50c-5e92787b2b54`
+- Estas son las que están cargadas en `MP_ACCESS_TOKEN` / `MP_PUBLIC_KEY` del `.env` local mientras
+  se prueba en sandbox.
+
+### Paso a paso para probar un pago de punta a punta
+
+1. **Usar las credenciales del Vendedor de prueba, no las de la cuenta personal real** — aunque
+   las que ya cargamos en `.env` (`APP_USR-...`) aparecían bajo la pestaña "Prueba" del panel,
+   corresponden a la cuenta real del desarrollador, no a un usuario de prueba aislado. Para
+   aislar de verdad:
+   1. Ventana incógnito → loguearse en `mercadopago.com.ar` con el **Vendedor de prueba** de
+      arriba.
+   2. Entrar a `developers/panel` con esa sesión — va a tener su propia sección de
+      aplicaciones (crear una si no tiene ninguna, mismo flujo: Pagos online → Con desarrollo
+      propio → Checkout Pro).
+   3. Copiar el Access Token y Public Key de "Credenciales de prueba" de esa app — son los que
+      hay que cargar en `MP_ACCESS_TOKEN` / `MP_PUBLIC_KEY` mientras se prueba en sandbox.
+2. En otra ventana (incógnito aparte), loguearse en Mercado Pago con el **Comprador de prueba**
+   antes de completar el checkout — así el pago sale de esa cuenta sandbox, no de una real.
+3. Al pagar, usar una tarjeta de prueba (panel de MP → menú "Tarjetas de prueba"), eligiendo el
+   nombre de titular según qué resultado se quiere simular (aprobado / rechazado / pendiente).
+4. Como se prueba en `localhost`, Mercado Pago no redirige solo al terminar (`auto_return`
+   requiere HTTPS público) — hay que clickear "Volver al sitio" a mano en la pantalla de
+   resultado del checkout.
+
+### Tarjetas de prueba
+
+No son específicas de la cuenta vendedor ni comprador — son un recurso genérico de Mercado Pago
+(mismos números para cualquier integración en Argentina), visible desde el panel de cualquiera de
+las dos cuentas ("Tarjetas de prueba" en el menú lateral de developers).
+
+Si el comprador de prueba no tiene saldo suficiente en "Dinero en cuenta" para el monto que se
+está probando, elegir **tarjeta de crédito/débito** como medio de pago en el checkout en vez de
+dinero en cuenta.
+
+Confirmadas en el panel (2026-07-29):
+
+| Tarjeta | Número | CVV | Vencimiento |
+|---|---|---|---|
+| Mastercard | `5031 7557 3453 0604` | `123` | `11/30` |
+| Visa | `4509 9535 6623 3704` | `123` | `11/30` |
+| American Express | `3711 803032 57522` | `1234` | `11/30` |
+| Mastercard Débito | `5287 3383 1025 3304` | `123` | `11/30` |
+| Visa Débito | `4002 7686 9439 5619` | `123` | `11/30` |
+
+**Titular** (define el resultado simulado; DNI puede ser cualquiera, ej. `12345678`):
+- `APRO` → aprobado
+- `OTHE` → rechazado (error general)
+- `CONT` → pendiente
+- `FUND` → rechazado (fondos insuficientes)
+- `SECU` → rechazado (código de seguridad inválido)
+
+Si alguno de estos números deja de funcionar, Mercado Pago los rota de tanto en tanto —
+confirmarlos en el panel → "Tarjetas de prueba" antes de asumir que hay un bug en el código.
 
 ---
 

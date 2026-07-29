@@ -19,6 +19,14 @@ interface SolicitudRow {
   direccion:           string | null
   usuarios:            { nombre_completo: string; telefono: string | null } | null
   categorias:          { nombre: string; icono: string | null } | null
+  pagos:               { estado: string }[] | null
+}
+
+const pagoInfo: Record<string, { texto: string; clase: string }> = {
+  pagado:          { texto: '✅ Pago acreditado',                          clase: 'text-primary' },
+  pendiente_pago:  { texto: '🕓 El cliente todavía no completó el pago',    clase: 'text-amber-600' },
+  rechazado:       { texto: '⚠️ El pago del cliente fue rechazado',        clase: 'text-red-600' },
+  registrado:      { texto: '✅ El cliente dio conformidad — pago registrado', clase: 'text-primary' },
 }
 
 interface Props {
@@ -111,11 +119,10 @@ export default function SolicitudesTecnico({ tecnicoId, usuarioId, initialData }
                   {s.usuarios?.nombre_completo && ` · 👤 ${s.usuarios.nombre_completo}`}
                 </p>
                 {s.direccion && <p className="text-xs text-gray-400">📍 {s.direccion}</p>}
-                {s.estado === 'completada' && s.conformidad_cliente && (
-                  <p className="text-xs text-primary font-medium">
-                    ✅ El cliente dio conformidad — el pago se va a reflejar próximamente en tu cuenta.
-                  </p>
-                )}
+                {s.estado === 'completada' && s.conformidad_cliente && (() => {
+                  const info = pagoInfo[s.pagos?.[0]?.estado ?? '']
+                  return info ? <p className={`text-xs font-medium ${info.clase}`}>{info.texto}</p> : null
+                })()}
                 <p className="text-xs text-gray-400">
                   📅 {s.fecha_solicitada
                     ? new Date(s.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
