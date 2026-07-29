@@ -42,8 +42,11 @@ cuando haya tiempo, cada uno a su ritmo. El detalle de cada uno está más abajo
       quedó pausado a propósito, no depende de esto — ver "Sacar horas estimadas".)
 - [ ] **WhatsApp** — cuenta Twilio/WhatsApp Cloud API, después de validar que el email ya
       funciona bien (✅ ya validado). Se puede encarar cuando haya tiempo.
-- [ ] **Mercado Pago** — credenciales de Agustín, se coordina al llegar a la Tanda 7 (al final,
-      a propósito).
+- [ ] **Mercado Pago** — 🟡 Fase 1 en planificación desde el 2026-07-29 (link de pago tras
+      conformidad). Ver documento dedicado `docs/mercadopago-integracion.md` para el plan
+      completo, checklist de progreso y qué falta de cuentas/credenciales externas. Credenciales
+      reales de Agustín solo hacen falta para producción, no para desarrollar/probar (se usan
+      credenciales de prueba de Mercado Pago mientras tanto).
 
 ---
 
@@ -693,7 +696,10 @@ Agustín pueda probar y dar feedback antes de seguir.
         si más adelante se define una métrica). La transición **Aceptada → En curso** sigue andando
         igual que antes, por fecha/hora de inicio. El paso a "Completada" ahora es siempre manual:
         el técnico lo hace vía "Completar trabajo" (no depende del cron) o el admin lo cambia a mano.
-- [ ] **Tanda 7** — Integración Mercado Pago (al final, requiere credenciales de Agustín)
+- [ ] **Tanda 7** — Integración Mercado Pago. 🟡 Fase 1 (link de pago tras conformidad) en
+      planificación desde el 2026-07-29 — ver `docs/mercadopago-integracion.md` para el detalle
+      completo (plan técnico, checklist, qué se necesita de Agustín). Fase 2 (split automático al
+      técnico vía OAuth) queda documentada ahí como alcance futuro, sin arrancar.
 
 WhatsApp (parte del Paso 2 del backlog) se encara después de validar el email con Agustín —
 requiere cuenta Twilio/WhatsApp Cloud API y, para producción, verificación de Meta.
