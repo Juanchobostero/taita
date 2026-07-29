@@ -42,11 +42,12 @@ cuando haya tiempo, cada uno a su ritmo. El detalle de cada uno está más abajo
       quedó pausado a propósito, no depende de esto — ver "Sacar horas estimadas".)
 - [ ] **WhatsApp** — cuenta Twilio/WhatsApp Cloud API, después de validar que el email ya
       funciona bien (✅ ya validado). Se puede encarar cuando haya tiempo.
-- [ ] **Mercado Pago** — 🟡 Fase 1 en planificación desde el 2026-07-29 (link de pago tras
-      conformidad). Ver documento dedicado `docs/mercadopago-integracion.md` para el plan
-      completo, checklist de progreso y qué falta de cuentas/credenciales externas. Credenciales
-      reales de Agustín solo hacen falta para producción, no para desarrollar/probar (se usan
-      credenciales de prueba de Mercado Pago mientras tanto).
+- [ ] **Mercado Pago** — 🟢 Fase 1 implementada y probada de punta a punta en local (2026-07-29,
+      con credenciales de prueba). Falta: ampliar el manejo de algunos estados de pago
+      (reembolso/contracargo) y cargar las credenciales de **prueba** en Vercel (Production) para
+      que Agustín la pruebe en el dominio real — todavía sin credenciales reales, a propósito. Ver
+      `docs/mercadopago-integracion.md` para el detalle completo, el checklist de progreso, y una
+      guía paso a paso pensada para pasarle directo a Agustín.
 
 ---
 
@@ -579,7 +580,7 @@ Para que se note el conflicto hace falta que el técnico ya tenga **una solicitu
 | Notificaciones in-app en tiempo real (campanita) | ✅ Operativo y probado (2026-07-28/29) |
 | Confirmación del técnico (asignada → aceptada/rechazo) | ✅ Operativo y probado (2026-07-29) |
 | Estilo de marca (logo + colores) en los emails | ✅ Operativo (2026-07-29) |
-| Integración Mercado Pago | ⏳ Pendiente (Tanda 7, al final) |
+| Integración Mercado Pago (Fase 1 — link de pago) | 🟢 Implementada y probada en local (2026-07-29) — falta probar en el dominio real con credenciales de prueba |
 
 ---
 
@@ -696,10 +697,13 @@ Agustín pueda probar y dar feedback antes de seguir.
         si más adelante se define una métrica). La transición **Aceptada → En curso** sigue andando
         igual que antes, por fecha/hora de inicio. El paso a "Completada" ahora es siempre manual:
         el técnico lo hace vía "Completar trabajo" (no depende del cron) o el admin lo cambia a mano.
-- [ ] **Tanda 7** — Integración Mercado Pago. 🟡 Fase 1 (link de pago tras conformidad) en
-      planificación desde el 2026-07-29 — ver `docs/mercadopago-integracion.md` para el detalle
-      completo (plan técnico, checklist, qué se necesita de Agustín). Fase 2 (split automático al
-      técnico vía OAuth) queda documentada ahí como alcance futuro, sin arrancar.
+- [ ] **Tanda 7** — Integración Mercado Pago. 🟢 Fase 1 (link de pago tras conformidad)
+      implementada y probada de punta a punta en local el 2026-07-29 (preferencia real, pago en
+      sandbox, reconciliación, recibo en PDF, notificaciones). Ver `docs/mercadopago-integracion.md`
+      para el detalle completo, el checklist de progreso, y qué falta (ampliar estados de
+      reembolso/contracargo, cargar credenciales de prueba en Vercel Production, probar con
+      Agustín). Fase 2 (split automático al técnico vía OAuth) queda documentada ahí como alcance
+      futuro, sin arrancar.
 
 WhatsApp (parte del Paso 2 del backlog) se encara después de validar el email con Agustín —
 requiere cuenta Twilio/WhatsApp Cloud API y, para producción, verificación de Meta.
