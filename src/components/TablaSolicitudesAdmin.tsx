@@ -21,6 +21,7 @@ const PAGE_SIZE = 10
 
 const estadoColor: Record<string, string> = {
   pendiente:  'bg-amber-100 text-amber-800',
+  asignada:   'bg-purple-100 text-purple-700',
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-[#E8F5E9] text-[#1B4D2E]',

@@ -3,6 +3,7 @@ import Layout from '../../../../layouts/Layout.astro'
 import Navbar from '../../../../components/Navbar'
 import GaleriaFotos from '../../../../components/GaleriaFotos'
 import CompletarTrabajo from '../../../../components/CompletarTrabajo'
+import ResponderAsignacion from '../../../../components/ResponderAsignacion'
 import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
 
@@ -55,6 +56,7 @@ const imagenesTrabajo = (sol.imagenes_trabajo  as string[] | null) ?? []
 
 const estadoLabel: Record<string, string> = {
   pendiente:  'Pendiente',
+  asignada:   'Esperando tu confirmación',
   aceptada:   'Aceptada',
   en_curso:   'En curso',
   completada: 'Completada',
@@ -62,6 +64,7 @@ const estadoLabel: Record<string, string> = {
 }
 const estadoColor: Record<string, string> = {
   pendiente:  'bg-amber-100 text-amber-800',
+  asignada:   'bg-purple-100 text-purple-700',
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
@@ -69,6 +72,7 @@ const estadoColor: Record<string, string> = {
 }
 const estadoDot: Record<string, string> = {
   pendiente:  'bg-amber-400',
+  asignada:   'bg-purple-400',
   aceptada:   'bg-blue-400',
   en_curso:   'bg-blue-400',
   completada: 'bg-primary',
@@ -252,6 +256,13 @@ const fmtFechaHora = (iso: string) =>
               </div>
             )}
           </div>
+
+          <!-- Confirmar / rechazar asignación -->
+          {sol.estado === 'asignada' && (
+            <div class="bg-white rounded-2xl border border-cream-dark p-6">
+              <ResponderAsignacion client:load solicitudId={sol.id} titulo={sol.titulo} />
+            </div>
+          )}
 
           <!-- Completar trabajo -->
           {puedeCompletar && (

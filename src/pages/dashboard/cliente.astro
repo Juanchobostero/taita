@@ -35,7 +35,7 @@ const [
     .order('actualizado_en', { ascending: false })
     .range(0, PAGE_SIZE - 1),
   supabase.from('solicitudes').select('*', { count: 'exact', head: true })
-    .eq('cliente_id', userId).eq('estado', 'pendiente'),
+    .eq('cliente_id', userId).in('estado', ['pendiente', 'asignada']),
   supabase.from('solicitudes').select('*', { count: 'exact', head: true })
     .eq('cliente_id', userId).in('estado', ['aceptada', 'en_curso']),
   supabase.from('solicitudes').select('*', { count: 'exact', head: true })

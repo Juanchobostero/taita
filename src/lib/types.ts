@@ -1,6 +1,6 @@
 // ── Enums ─────────────────────────────────────────────────────────────────
 export type UserTipo        = 'cliente' | 'tecnico' | 'admin'
-export type SolicitudEstado = 'pendiente' | 'aceptada' | 'en_curso' | 'completada' | 'cancelada'
+export type SolicitudEstado = 'pendiente' | 'asignada' | 'aceptada' | 'en_curso' | 'completada' | 'cancelada'
 
 // ── Tablas base ───────────────────────────────────────────────────────────
 export interface Usuario {

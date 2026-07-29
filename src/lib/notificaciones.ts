@@ -14,18 +14,19 @@ const ESTADO_LABEL: Record<string, string> = {
 }
 
 // Estados en los que el cliente recibe email de aviso. "pendiente" se agregó porque ese estado
-// solo se re-dispara cuando el admin desasigna un técnico ya asignado (ver comentario más abajo) —
+// se re-dispara cuando el admin desasigna un técnico ya confirmado (ver comentario más abajo) —
 // nunca en la creación de la solicitud — así que avisarle tiene sentido, y de paso la lista de
 // solicitudes del cliente (in-app, tiempo real) usa estas notificaciones como disparador para
-// refrescarse sola.
+// refrescarse sola. La excepción es cuando "pendiente" viene de un técnico que RECHAZÓ una
+// asignación todavía no confirmada (ver `estadoAnterior` más abajo) — ahí no se avisa al cliente
+// porque nunca llegó a enterarse de que se le había asignado alguien.
 const AVISAR_CLIENTE = new Set(['pendiente', 'aceptada', 'en_curso', 'completada', 'cancelada'])
-// Estados en los que el técnico asignado recibe email de aviso. "aceptada" es cuando le asignan
-// el trabajo — antes no estaba (el técnico solo se enteraba mirando su panel), agregado a pedido
-// de Agustín para que le llegue aviso (mail + notificación in-app) apenas le asignan algo.
-// "en_curso"/"completada" se sumaron después: la lista de solicitudes del técnico (in-app, tiempo
-// real) usa estas notificaciones como disparador para refrescarse sola — sin esto, no se enteraba
-// de esos dos cambios.
-const AVISAR_TECNICO  = new Set(['aceptada', 'en_curso', 'completada', 'cancelada'])
+// Estados en los que el técnico asignado recibe email de aviso. "asignada" es cuando el admin le
+// asigna el trabajo y queda esperando que lo confirme o lo rechace — el técnico ya no se entera
+// recién en "aceptada" (que ahora es una acción del propio técnico, no hace falta avisarle de su
+// propia acción). "en_curso"/"completada"/"cancelada" además sirven como disparador para que la
+// lista de solicitudes del técnico (in-app, tiempo real) se refresque sola.
+const AVISAR_TECNICO  = new Set(['asignada', 'en_curso', 'completada', 'cancelada'])
 
 interface SolicitudNotif {
   id:               string
@@ -99,16 +100,52 @@ export async function notificarMensajeAdmin(supabase: SupabaseClient, titulo: st
 }
 
 /**
+ * Avisa a un técnico que ya no está asignado a una solicitud (el admin la volvió a Pendiente y lo
+ * desasignó). Se llama aparte de `notificarCambioEstado` porque para ese momento el `tecnico_id`
+ * ya se puso en null, así que el técnico afectado no se puede resolver desde la propia solicitud —
+ * hay que pasarlo explícitamente. Además de avisarle, esta notificación es la que hace que la
+ * lista de solicitudes del técnico (in-app, tiempo real) se refresque sola y deje de mostrar un
+ * trabajo que ya no es suyo.
+ */
+export async function notificarDesasignacion(
+  supabase:         SupabaseClient,
+  tecnicoUsuarioId: string,
+  tecnicoEmail:     string | null,
+  tecnicoNombre:    string,
+  tituloSolicitud:  string,
+  solicitudId:      string,
+): Promise<void> {
+  if (tecnicoEmail) {
+    await enviarEmail({
+      to:      tecnicoEmail,
+      subject: `Ya no estás asignado a "${tituloSolicitud}"`,
+      html: `
+        <p>Hola ${tecnicoNombre},</p>
+        <p>La solicitud <strong>${tituloSolicitud}</strong> ya no está asignada a vos — volvió a quedar
+        disponible para asignarse a otro técnico.</p>
+      `,
+    })
+  }
+  await crearNotificacion(
+    supabase, tecnicoUsuarioId,
+    `Ya no estás asignado a "${tituloSolicitud}"`,
+    'Volvió a quedar disponible para asignarse a otro técnico.',
+    solicitudId,
+  )
+}
+
+/**
  * Cambia el estado de una solicitud, deja registro en el historial (para el timeline del
  * cliente) y dispara los emails y notificaciones in-app correspondientes. Punto único de cambio
  * de estado — no hacer `update({ estado })` directo en otro lado para no perder el
  * historial/las notificaciones.
  */
 export async function notificarCambioEstado(
-  supabase:    SupabaseClient,
-  solicitudId: string,
-  estadoNuevo: string,
-  cambiadoPor: string | null,
+  supabase:      SupabaseClient,
+  solicitudId:   string,
+  estadoNuevo:   string,
+  cambiadoPor:   string | null,
+  estadoAnterior?: string,
 ): Promise<void> {
   const { error } = await supabase
     .from('solicitudes')
@@ -131,10 +168,17 @@ export async function notificarCambioEstado(
   const tecnicoId = sol.tecnicos?.usuario_id ?? null
   const categoria = sol.categorias
   const label     = ESTADO_LABEL[estadoNuevo] ?? estadoNuevo
-  const link      = `${SITE_URL}/dashboard/cliente`
+  const fechaHora = formatearFechaHora(sol)
+  const linkCliente = `${SITE_URL}/dashboard/cliente`
+  const linkTecnico = `${SITE_URL}/dashboard/tecnico`
 
-  if (cliente && AVISAR_CLIENTE.has(estadoNuevo)) {
-    const fechaHora = estadoNuevo === 'aceptada' ? formatearFechaHora(sol) : null
+  // El técnico rechazó una asignación que todavía no había confirmado — el cliente nunca se
+  // enteró de que se le había asignado alguien, así que no corresponde avisarle de que "volvió"
+  // a pendiente (para él nunca dejó de estarlo).
+  const esRechazoSinAvisoCliente = estadoNuevo === 'pendiente' && estadoAnterior === 'asignada'
+
+  if (cliente && AVISAR_CLIENTE.has(estadoNuevo) && !esRechazoSinAvisoCliente) {
+    const mostrarHorario = estadoNuevo === 'aceptada'
 
     if (cliente.email) {
       await enviarEmail({
@@ -144,8 +188,8 @@ export async function notificarCambioEstado(
           <p>Hola ${cliente.nombre_completo},</p>
           <p>Tu solicitud <strong>${sol.titulo}</strong> (${categoria?.nombre ?? 'servicio'}) cambió de estado a
           <strong>${label}</strong>.</p>
-          ${fechaHora ? `<p>Horario confirmado: <strong>${fechaHora}</strong>.</p>` : ''}
-          <p><a href="${link}">Ver el detalle en tu panel</a></p>
+          ${mostrarHorario && fechaHora ? `<p>Horario confirmado: <strong>${fechaHora}</strong>.</p>` : ''}
+          <p><a href="${linkCliente}">Ver el detalle en tu panel</a></p>
         `,
       })
     }
@@ -153,17 +197,25 @@ export async function notificarCambioEstado(
     await crearNotificacion(
       supabase, cliente.id,
       `Tu solicitud "${sol.titulo}" — ${label}`,
-      fechaHora ? `Horario confirmado: ${fechaHora}.` : `Cambió de estado a ${label}.`,
+      mostrarHorario && fechaHora ? `Horario confirmado: ${fechaHora}.` : `Cambió de estado a ${label}.`,
       sol.id,
     )
   }
 
   if (tecnico && tecnicoId && AVISAR_TECNICO.has(estadoNuevo)) {
+    const esAsignacion = estadoNuevo === 'asignada'
+
     if (tecnico.email) {
       await enviarEmail({
         to:      tecnico.email,
-        subject: `Solicitud "${sol.titulo}" — ${label}`,
-        html: `
+        subject: esAsignacion ? `Nuevo trabajo asignado: "${sol.titulo}"` : `Solicitud "${sol.titulo}" — ${label}`,
+        html: esAsignacion ? `
+          <p>Hola ${tecnico.nombre_completo},</p>
+          <p>Te asignaron la solicitud <strong>${sol.titulo}</strong> (${categoria?.nombre ?? 'servicio'}).</p>
+          ${fechaHora ? `<p>Horario propuesto: <strong>${fechaHora}</strong>.</p>` : ''}
+          <p>Entrá a tu panel para confirmarla o rechazarla.</p>
+          <p><a href="${linkTecnico}">Ver en mi panel</a></p>
+        ` : `
           <p>Hola ${tecnico.nombre_completo},</p>
           <p>La solicitud <strong>${sol.titulo}</strong> pasó a estado <strong>${label}</strong>.</p>
         `,
@@ -172,14 +224,14 @@ export async function notificarCambioEstado(
 
     await crearNotificacion(
       supabase, tecnicoId,
-      `Solicitud "${sol.titulo}" — ${label}`,
-      `La solicitud pasó a estado ${label}.`,
+      esAsignacion ? `Nuevo trabajo asignado: "${sol.titulo}"` : `Solicitud "${sol.titulo}" — ${label}`,
+      esAsignacion ? 'Confirmalo o rechazalo desde tu panel.' : `La solicitud pasó a estado ${label}.`,
       sol.id,
     )
   }
 
-  // La solicitud volvió a Pendiente (hoy siempre por acción del admin desde el dropdown de
-  // estado) → avisarle que quedó libre para reasignar.
+  // La solicitud volvió a Pendiente (por acción del admin desde el dropdown de estado, o porque
+  // el técnico rechazó una asignación) → avisarle al admin que quedó libre para (re)asignar.
   if (estadoNuevo === 'pendiente' && cambiadoPor) {
     await enviarEmail({
       to:      ADMIN_EMAIL,

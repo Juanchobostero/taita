@@ -29,8 +29,12 @@ interface Props {
 
 const PAGE_SIZE = 5
 
+// "asignada" (técnico asignado pero todavía sin confirmar) se muestra igual que "pendiente" acá
+// — el cliente no ve nada distinto hasta que el técnico confirma de verdad, para no mostrar un
+// estado intermedio que no puede accionar.
 const estadoLabel: Record<string, string> = {
   pendiente:  'Pendiente',
+  asignada:   'Pendiente',
   aceptada:   'Aceptada',
   en_curso:   'En curso',
   completada: 'Completada',
@@ -38,6 +42,7 @@ const estadoLabel: Record<string, string> = {
 }
 const estadoColor: Record<string, string> = {
   pendiente:  'bg-amber-100 text-amber-800',
+  asignada:   'bg-amber-100 text-amber-800',
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
@@ -177,9 +182,9 @@ export default function MisSolicitudes({ userId, initialData, initialTotal }: Pr
               {/* Grid de detalles */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
 
-                {/* Técnico */}
+                {/* Técnico — oculto mientras está en "asignada" (todavía sin confirmar) */}
                 <div className="flex items-start gap-2.5">
-                  {tec?.usuarios ? (
+                  {tec?.usuarios && s.estado !== 'asignada' ? (
                     <>
                       <div className="w-8 h-8 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-xs shrink-0 mt-0.5 overflow-hidden">
                         {tec.usuarios.foto_url
@@ -228,7 +233,7 @@ export default function MisSolicitudes({ userId, initialData, initialTotal }: Pr
               )}
 
               {/* Cancelar — solo en solicitudes que todavía no terminaron */}
-              {['pendiente', 'aceptada', 'en_curso'].includes(s.estado) && (
+              {['pendiente', 'asignada', 'aceptada', 'en_curso'].includes(s.estado) && (
                 <CancelarSolicitud solicitudId={s.id} titulo={s.titulo} />
               )}
 

@@ -3,7 +3,7 @@ import Layout from '../../../../layouts/Layout.astro'
 import Navbar from '../../../../components/Navbar'
 import GaleriaFotos from '../../../../components/GaleriaFotos'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
-import { notificarCambioEstado } from '../../../../lib/notificaciones'
+import { notificarCambioEstado, notificarDesasignacion } from '../../../../lib/notificaciones'
 import { chequearDisponibilidad } from '../../../../lib/disponibilidad'
 import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 
@@ -25,16 +25,38 @@ if (Astro.request.method === 'POST') {
     const validos = ['pendiente', 'aceptada', 'en_curso', 'completada', 'cancelada']
     const requiereTecnico = ['aceptada', 'en_curso', 'completada']
     if (estado && validos.includes(estado)) {
-      // No permitir avanzar si no hay técnico asignado
+      // No permitir avanzar si no hay técnico asignado, o si el técnico todavía no confirmó la
+      // asignación ("asignada") — ese paso solo lo puede destrabar el propio técnico aceptando.
       if (requiereTecnico.includes(estado)) {
         const { data: check } = await supabase
-          .from('solicitudes').select('tecnico_id').eq('id', id).single()
-        if (!check?.tecnico_id) return Astro.redirect(`/dashboard/admin/solicitud/${id}`)
+          .from('solicitudes').select('tecnico_id, estado').eq('id', id).single()
+        if (!check?.tecnico_id || check.estado === 'pendiente' || check.estado === 'asignada') {
+          return Astro.redirect(`/dashboard/admin/solicitud/${id}`)
+        }
       }
       // "Pendiente" siempre significa "sin técnico" — si se vuelve a este estado, desasignar
       // también, para no dejar la agenda del técnico con una reserva fantasma.
       if (estado === 'pendiente') {
+        const { data: solPrevia } = await supabase
+          .from('solicitudes')
+          .select('titulo, tecnicos ( usuario_id, usuarios ( nombre_completo, email ) )')
+          .eq('id', id)
+          .single()
+        const tecnicoPrevio = (solPrevia?.tecnicos as any)?.usuarios ?? null
+        const tecnicoPrevioUsuarioId = (solPrevia?.tecnicos as any)?.usuario_id ?? null
+
         await supabase.from('solicitudes').update({ tecnico_id: null }).eq('id', id)
+
+        if (tecnicoPrevioUsuarioId && tecnicoPrevio) {
+          try {
+            await notificarDesasignacion(
+              supabase, tecnicoPrevioUsuarioId, tecnicoPrevio.email, tecnicoPrevio.nombre_completo,
+              solPrevia!.titulo, id,
+            )
+          } catch (err) {
+            console.error('[cambiar-estado] error notificando desasignación:', err)
+          }
+        }
       }
       try {
         await notificarCambioEstado(supabase, id, estado, userId)
@@ -89,7 +111,7 @@ if (Astro.request.method === 'POST') {
         console.error('[asignar-tecnico]', error.message)
       } else {
         try {
-          await notificarCambioEstado(supabase, id, 'aceptada', userId)
+          await notificarCambioEstado(supabase, id, 'asignada', userId)
         } catch (err) {
           console.error('[asignar-tecnico] error notificando:', err)
         }
@@ -157,6 +179,7 @@ const imagenesTrabajo    = (sol.imagenes_trabajo    as string[] | null) ?? []
 
 const estadoLabel: Record<string, string> = {
   pendiente:  'Pendiente',
+  asignada:   'Esperando confirmación del técnico',
   aceptada:   'Aceptada',
   en_curso:   'En curso',
   completada: 'Completada',
@@ -164,6 +187,7 @@ const estadoLabel: Record<string, string> = {
 }
 const estadoColor: Record<string, string> = {
   pendiente:  'bg-amber-100 text-amber-800',
+  asignada:   'bg-purple-100 text-purple-700',
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-primary-soft text-[#1B4D2E]',
@@ -230,18 +254,25 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                 {reagendadoFecha && reagendadoHora && (
                   <div class="bg-primary-soft border border-primary-pale text-[#1B4D2E] text-xs rounded-xl px-3 py-2.5">
                     ✅ La solicitud se reagendó al {new Date(`${reagendadoFecha}T00:00:00`).toLocaleDateString('es-AR')} a
-                    las {reagendadoHora} y se asignó el técnico. El cliente fue notificado con el nuevo horario.
+                    las {reagendadoHora} y se le asignó al técnico, que fue notificado para que confirme.
                   </div>
                 )}
                 {tecnico ? (
-                  <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                      {tecnico.usuarios?.nombre_completo?.split(' ').slice(0,2).map((p: string) => p[0]).join('') ?? '?'}
+                  <div class="flex flex-col gap-2">
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-10 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-sm shrink-0">
+                        {tecnico.usuarios?.nombre_completo?.split(' ').slice(0,2).map((p: string) => p[0]).join('') ?? '?'}
+                      </div>
+                      <div class="flex flex-col gap-0.5">
+                        <p class="font-semibold text-gray-900 text-sm">{tecnico.usuarios?.nombre_completo ?? '—'}</p>
+                        {tecnico.usuarios?.telefono && <p class="text-xs text-gray-400">📞 {tecnico.usuarios.telefono}</p>}
+                      </div>
                     </div>
-                    <div class="flex flex-col gap-0.5">
-                      <p class="font-semibold text-gray-900 text-sm">{tecnico.usuarios?.nombre_completo ?? '—'}</p>
-                      {tecnico.usuarios?.telefono && <p class="text-xs text-gray-400">📞 {tecnico.usuarios.telefono}</p>}
-                    </div>
+                    {sol.estado === 'asignada' && (
+                      <p class="text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-xl px-3 py-2">
+                        ⏳ Esperando que el técnico confirme o rechace esta asignación.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <form method="POST" class="flex flex-col gap-2">
@@ -376,9 +407,14 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                 name="estado"
                 class="w-full border border-cream-dark rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary bg-white"
               >
-                {(['pendiente','aceptada','en_curso','completada','cancelada'] as const).map(e => {
+                {(['pendiente','asignada','aceptada','en_curso','completada','cancelada'] as const).map(e => {
+                  // "asignada" no se puede elegir a mano — solo se llega ahí asignando un técnico,
+                  // y solo se sale respondiendo (aceptar/rechazar) desde el panel del técnico.
+                  if (e === 'asignada') {
+                    return <option value={e} selected={sol.estado === e} disabled>{estadoLabel[e]}</option>
+                  }
                   const requiereTecnico = ['aceptada','en_curso','completada'].includes(e)
-                  const disabled = requiereTecnico && !sol.tecnico_id
+                  const disabled = requiereTecnico && (!sol.tecnico_id || sol.estado === 'pendiente' || sol.estado === 'asignada')
                   return (
                     <option value={e} selected={sol.estado === e} disabled={disabled}>
                       {estadoLabel[e]}{disabled ? ' (requiere técnico)' : ''}
@@ -388,6 +424,9 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
               </select>
               {!sol.tecnico_id && (
                 <p class="text-xs text-amber-600">Asigná un técnico para poder avanzar el estado.</p>
+              )}
+              {sol.tecnico_id && sol.estado === 'asignada' && (
+                <p class="text-xs text-purple-700">Esperando que el técnico confirme la asignación para poder avanzar el estado.</p>
               )}
               <div id="confirmar-cancelar" class="hidden bg-red-50 border border-red-200 rounded-xl p-3 flex-col gap-2 text-xs text-red-700">
                 <p>

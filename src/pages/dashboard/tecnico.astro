@@ -48,7 +48,10 @@ const { data: rawSolicitudes } = await supabase
 const solicitudes = (rawSolicitudes ?? []) as SolicitudParaTecnico[]
 
 const stats = {
-  pendientes:  solicitudes.filter(s => s.estado === 'pendiente').length,
+  // "pendientes" acá son las solicitudes recién asignadas que todavía no confirmó el técnico
+  // ("asignada") — el estado "pendiente" (sin técnico) nunca aparece en esta lista, porque ya
+  // viene filtrada por `tecnico_id = tecnico.id`.
+  pendientes:  solicitudes.filter(s => s.estado === 'asignada').length,
   en_curso:    solicitudes.filter(s => ['aceptada', 'en_curso'].includes(s.estado)).length,
   completadas: solicitudes.filter(s => s.estado === 'completada').length,
   ganancias:   solicitudes

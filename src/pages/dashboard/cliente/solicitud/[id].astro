@@ -46,8 +46,11 @@ const gastosExtra      = sol.gastos_extra       as number | null
 const descGastos       = sol.descripcion_gastos as string | null
 const imagenesTrabajo  = (sol.imagenes_trabajo  as string[] | null) ?? []
 
+// "asignada" (técnico asignado pero todavía sin confirmar) se muestra igual que "pendiente" acá
+// — el cliente no ve nada distinto hasta que el técnico confirma de verdad.
 const estadoLabel: Record<string, string> = {
   pendiente:  'Pendiente',
+  asignada:   'Pendiente',
   aceptada:   'Aceptada',
   en_curso:   'En curso',
   completada: 'Completada',
@@ -55,6 +58,7 @@ const estadoLabel: Record<string, string> = {
 }
 const estadoColor: Record<string, string> = {
   pendiente:  'bg-amber-100 text-amber-800',
+  asignada:   'bg-amber-100 text-amber-800',
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
@@ -62,6 +66,7 @@ const estadoColor: Record<string, string> = {
 }
 const estadoDot: Record<string, string> = {
   pendiente:  'bg-amber-400',
+  asignada:   'bg-amber-400',
   aceptada:   'bg-blue-400',
   en_curso:   'bg-blue-400',
   completada: 'bg-primary',
@@ -133,7 +138,7 @@ const fmtFechaHora = (iso: string) =>
           <!-- Técnico asignado -->
           <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
             <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Técnico asignado</h2>
-            {tecnico?.usuarios ? (
+            {tecnico?.usuarios && sol.estado !== 'asignada' ? (
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-sm shrink-0">
                   {tecnico.usuarios.nombre_completo?.split(' ').slice(0, 2).map((p: string) => p[0]).join('')}
@@ -248,7 +253,7 @@ const fmtFechaHora = (iso: string) =>
           )}
 
           <!-- Cancelar — solo en solicitudes que todavía no terminaron -->
-          {['pendiente', 'aceptada', 'en_curso'].includes(sol.estado) && (
+          {['pendiente', 'asignada', 'aceptada', 'en_curso'].includes(sol.estado) && (
             <div class="bg-white rounded-2xl border border-cream-dark p-6">
               <CancelarSolicitud client:load solicitudId={sol.id} titulo={sol.titulo} />
             </div>

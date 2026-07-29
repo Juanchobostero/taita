@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useId } from 'react'
 import { supabase } from '@/lib/supabase'
 import CompletarTrabajo from '@/components/CompletarTrabajo'
+import ResponderAsignacion from '@/components/ResponderAsignacion'
 
 interface SolicitudRow {
   id:                  string
@@ -28,6 +29,7 @@ interface Props {
 
 const estadoLabel: Record<string, string> = {
   pendiente:  'Pendiente',
+  asignada:   'Esperando tu confirmación',
   aceptada:   'Aceptada',
   en_curso:   'En curso',
   completada: 'Completada',
@@ -35,6 +37,7 @@ const estadoLabel: Record<string, string> = {
 }
 const estadoColor: Record<string, string> = {
   pendiente:  'bg-amber-100 text-amber-800',
+  asignada:   'bg-purple-100 text-purple-700',
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-primary-soft text-[#1B4D2E]',
@@ -120,7 +123,7 @@ export default function SolicitudesTecnico({ tecnicoId, usuarioId, initialData }
                   {s.hora_solicitada && ` ${s.hora_solicitada.slice(0, 5)} hs`}
                 </p>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-3 flex-wrap shrink-0">
                 <span className={`text-xs font-medium px-3 py-1 rounded-full ${estadoColor[s.estado]}`}>
                   {estadoLabel[s.estado] ?? s.estado}
                 </span>
@@ -135,6 +138,9 @@ export default function SolicitudesTecnico({ tecnicoId, usuarioId, initialData }
                 >
                   Ver detalle →
                 </a>
+                {s.estado === 'asignada' && (
+                  <ResponderAsignacion solicitudId={s.id} titulo={s.titulo} />
+                )}
                 {(s.estado === 'aceptada' || s.estado === 'en_curso' ||
                   (s.estado === 'completada' && !(s.imagenes_trabajo?.length) && s.gastos_extra == null)) && (
                   <CompletarTrabajo
