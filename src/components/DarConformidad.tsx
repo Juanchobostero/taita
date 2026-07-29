@@ -14,11 +14,30 @@ interface Props {
 export default function DarConformidad({
   solicitudId, titulo, total, yaConfirmado, conformidadEn, pagoEstado, initPoint, reciboUrl,
 }: Props) {
-  const [abierto, setAbierto] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState('')
+  const [abierto,     setAbierto]     = useState(false)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState('')
+  const [regenerando, setRegenerando] = useState(false)
+  const [errorReintento, setErrorReintento] = useState('')
 
   const fmt = (n: number) => `$${n.toLocaleString('es-AR')}`
+
+  const reintentarPago = async () => {
+    setRegenerando(true)
+    setErrorReintento('')
+    const res = await fetch('/api/cliente/reintentar-pago', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ solicitudId }),
+    })
+    if (res.ok) {
+      window.location.reload()
+      return
+    }
+    const json = await res.json().catch(() => ({}))
+    setErrorReintento(json.error ?? 'No se pudo generar un nuevo link de pago')
+    setRegenerando(false)
+  }
 
   const confirmar = async () => {
     setLoading(true)
@@ -74,8 +93,26 @@ export default function DarConformidad({
             </a>
           </>
         ) : pagoEstado === 'rechazado' ? (
+          <>
+            <p className="text-xs text-red-600">El pago no pudo procesarse — podés intentarlo de nuevo.</p>
+            {errorReintento && <p className="text-xs text-red-600 font-semibold">{errorReintento}</p>}
+            <button
+              type="button"
+              disabled={regenerando}
+              onClick={reintentarPago}
+              className="w-full text-center bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-xl transition-colors text-sm disabled:opacity-50"
+            >
+              {regenerando ? 'Generando link...' : 'Pagar con Mercado Pago'}
+            </button>
+          </>
+        ) : pagoEstado === 'reembolsado' ? (
+          <p className="text-xs">
+            💸 Este pago fue reembolsado{total != null ? ` (${fmt(total)})` : ''}. Cualquier duda,
+            escribinos a taitasoluciones@gmail.com.
+          </p>
+        ) : pagoEstado === 'contracargo' ? (
           <p className="text-xs text-red-600">
-            El pago fue rechazado. Escribinos a taitasoluciones@gmail.com para coordinarlo de otra forma.
+            Hay una disputa bancaria abierta sobre este pago. Nos vamos a poner en contacto para resolverlo.
           </p>
         ) : (
           <p className="text-xs">

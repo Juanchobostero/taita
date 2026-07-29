@@ -523,3 +523,111 @@ export async function notificarPagoRechazado(supabase: SupabaseClient, solicitud
     solicitudId,
   )
 }
+
+/**
+ * Se llama cuando Mercado Pago informa que un pago ya acreditado fue reembolsado. Llega siempre
+ * después de 'pagado' — nunca es el primer estado de un pago.
+ */
+export async function notificarPagoReembolsado(supabase: SupabaseClient, solicitudId: string): Promise<void> {
+  const { data: sol } = await supabase
+    .from('solicitudes')
+    .select(`
+      id, titulo, total_estimado,
+      usuarios!cliente_id ( id, nombre_completo, email ),
+      tecnicos ( usuario_id )
+    `)
+    .eq('id', solicitudId)
+    .single()
+  if (!sol) return
+
+  const cliente   = sol.usuarios as unknown as { id: string; nombre_completo: string; email: string | null } | null
+  const tecnicoId = (sol.tecnicos as unknown as { usuario_id: string } | null)?.usuario_id ?? null
+  const montoTxt  = sol.total_estimado != null ? `$${sol.total_estimado.toLocaleString('es-AR')}` : 'el monto'
+
+  if (cliente) {
+    if (cliente.email) {
+      await enviarEmail({
+        to:      cliente.email,
+        subject: `Pago reembolsado — ${sol.titulo}`,
+        html: `
+          <p>Hola ${cliente.nombre_completo},</p>
+          <p>Te reembolsamos ${montoTxt} correspondiente a <strong>${sol.titulo}</strong>.</p>
+        `,
+      })
+    }
+    await crearNotificacion(
+      supabase, cliente.id,
+      `Pago reembolsado — ${sol.titulo}`,
+      `Se te reembolsó ${montoTxt}.`,
+      solicitudId,
+    )
+  }
+
+  if (tecnicoId) {
+    await crearNotificacion(
+      supabase, tecnicoId,
+      `Pago reembolsado — ${sol.titulo}`,
+      'El pago del cliente fue reembolsado.',
+      solicitudId,
+    )
+  }
+
+  // El reembolso siempre implica una decisión/acción manual (plata que sale) — el admin lo tiene
+  // que saber por mail sí o sí, no solo por la campanita.
+  await enviarEmail({
+    to:      ADMIN_EMAIL,
+    subject: `Pago reembolsado — ${sol.titulo}`,
+    html: `<p>Se reembolsó ${montoTxt} de la solicitud <strong>${sol.titulo}</strong>.</p>`,
+  })
+  await crearNotificacionesAdmin(
+    supabase,
+    `Pago reembolsado — ${sol.titulo}`,
+    `Monto: ${montoTxt}.`,
+    solicitudId,
+  )
+}
+
+/**
+ * Se llama cuando Mercado Pago informa un contracargo (disputa con el banco del cliente) — el
+ * caso más grave, requiere atención del admin cuanto antes.
+ */
+export async function notificarPagoContracargo(supabase: SupabaseClient, solicitudId: string): Promise<void> {
+  const { data: sol } = await supabase
+    .from('solicitudes')
+    .select(`
+      id, titulo, total_estimado,
+      usuarios!cliente_id ( id, nombre_completo ),
+      tecnicos ( usuario_id )
+    `)
+    .eq('id', solicitudId)
+    .single()
+  if (!sol) return
+
+  const tecnicoId = (sol.tecnicos as unknown as { usuario_id: string } | null)?.usuario_id ?? null
+  const montoTxt  = sol.total_estimado != null ? `$${sol.total_estimado.toLocaleString('es-AR')}` : 'el monto'
+
+  if (tecnicoId) {
+    await crearNotificacion(
+      supabase, tecnicoId,
+      `Contracargo — ${sol.titulo}`,
+      'El cliente inició una disputa bancaria sobre este pago.',
+      solicitudId,
+    )
+  }
+
+  await enviarEmail({
+    to:      ADMIN_EMAIL,
+    subject: `⚠️ Contracargo — ${sol.titulo}`,
+    html: `
+      <p>El cliente <strong>${(sol.usuarios as unknown as { nombre_completo: string } | null)?.nombre_completo ?? '—'}</strong>
+      inició una disputa bancaria (contracargo) por ${montoTxt} sobre <strong>${sol.titulo}</strong>.
+      Requiere atención cuanto antes.</p>
+    `,
+  })
+  await crearNotificacionesAdmin(
+    supabase,
+    `⚠️ Contracargo — ${sol.titulo}`,
+    `Disputa bancaria por ${montoTxt} — requiere atención.`,
+    solicitudId,
+  )
+}

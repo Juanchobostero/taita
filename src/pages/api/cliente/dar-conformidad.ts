@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { APIRoute } from 'astro'
 import { createSupabaseServer } from '@/lib/supabase-server'
 import { createSupabaseAdmin }  from '@/lib/supabase-admin'
@@ -40,7 +41,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       .eq('id', solicitudId)
     if (updError) throw updError
 
-    const monto = sol.total_estimado ?? 0
+    const monto  = sol.total_estimado ?? 0
+    const pagoId = randomUUID() // generado antes de crear la preferencia — se usa como external_reference (ver crearPreferencia)
 
     // Si Mercado Pago está configurado, se crea la preferencia de pago real antes de guardar el
     // registro — así queda directo con el `mp_preference_id` y el estado correcto, sin un update
@@ -48,12 +50,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     // ('registrado'), igual que Resend cuando falta su API key: no rompe nada.
     let preferencia: Awaited<ReturnType<typeof crearPreferencia>> = null
     try {
-      preferencia = await crearPreferencia({ solicitudId, titulo: sol.titulo, monto })
+      preferencia = await crearPreferencia({ pagoId, solicitudId, titulo: sol.titulo, monto })
     } catch (err) {
       console.error('[dar-conformidad] error creando preferencia de Mercado Pago:', err)
     }
 
     const { error: pagoError } = await supabase.from('pagos').insert({
+      id:               pagoId,
       solicitud_id:     solicitudId,
       monto,
       estado:           preferencia ? 'pendiente_pago' : 'registrado',

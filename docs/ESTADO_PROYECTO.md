@@ -42,10 +42,11 @@ cuando haya tiempo, cada uno a su ritmo. El detalle de cada uno está más abajo
       quedó pausado a propósito, no depende de esto — ver "Sacar horas estimadas".)
 - [ ] **WhatsApp** — cuenta Twilio/WhatsApp Cloud API, después de validar que el email ya
       funciona bien (✅ ya validado). Se puede encarar cuando haya tiempo.
-- [ ] **Mercado Pago** — 🟢 Fase 1 implementada y probada de punta a punta en local (2026-07-29,
-      con credenciales de prueba). Falta: ampliar el manejo de algunos estados de pago
-      (reembolso/contracargo) y cargar las credenciales de **prueba** en Vercel (Production) para
-      que Agustín la pruebe en el dominio real — todavía sin credenciales reales, a propósito. Ver
+- [ ] **Mercado Pago** — 🟢 Fase 1 completa en código: link de pago, reintento de pago rechazado, y
+      manejo de todos los estados (pagado/rechazado/reembolsado/contracargo), cada uno con su
+      notificación. **Falta re-probar en local** el tramo de reintento/rechazo antes de cerrar
+      (2026-07-29). Después: cargar las credenciales de **prueba** en Vercel (Production) para que
+      Agustín la pruebe en el dominio real — todavía sin credenciales reales, a propósito. Ver
       `docs/mercadopago-integracion.md` para el detalle completo, el checklist de progreso, y una
       guía paso a paso pensada para pasarle directo a Agustín.
 

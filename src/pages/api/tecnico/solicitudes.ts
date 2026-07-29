@@ -22,7 +22,7 @@ export const GET: APIRoute = async ({ request, cookies }) => {
         fecha_solicitada, hora_solicitada, creado_en, direccion,
         usuarios!cliente_id ( nombre_completo, telefono ),
         categorias ( nombre, icono ),
-        pagos ( estado )
+        pagos ( estado, creado_en )
       `)
       .eq('tecnico_id', tecnico.id)
       .order('actualizado_en', { ascending: false })

@@ -19,13 +19,22 @@ interface SolicitudRow {
   direccion:           string | null
   usuarios:            { nombre_completo: string; telefono: string | null } | null
   categorias:          { nombre: string; icono: string | null } | null
-  pagos:               { estado: string }[] | null
+  pagos:               { estado: string; creado_en: string }[] | null
+}
+
+// Puede haber más de un intento de pago por solicitud (reintentos tras un rechazo) — se toma el
+// más reciente por fecha, no el primero del array (el orden que devuelve Supabase no está garantizado).
+function ultimoPago(pagos: SolicitudRow['pagos']): { estado: string } | null {
+  if (!pagos?.length) return null
+  return pagos.reduce((a, b) => (a.creado_en > b.creado_en ? a : b))
 }
 
 const pagoInfo: Record<string, { texto: string; clase: string }> = {
   pagado:          { texto: '✅ Pago acreditado',                          clase: 'text-primary' },
   pendiente_pago:  { texto: '🕓 El cliente todavía no completó el pago',    clase: 'text-amber-600' },
   rechazado:       { texto: '⚠️ El pago del cliente fue rechazado',        clase: 'text-red-600' },
+  reembolsado:     { texto: '💸 El pago fue reembolsado',                  clase: 'text-red-600' },
+  contracargo:     { texto: '⚠️ Hay una disputa bancaria sobre este pago', clase: 'text-red-600' },
   registrado:      { texto: '✅ El cliente dio conformidad — pago registrado', clase: 'text-primary' },
 }
 
@@ -120,7 +129,7 @@ export default function SolicitudesTecnico({ tecnicoId, usuarioId, initialData }
                 </p>
                 {s.direccion && <p className="text-xs text-gray-400">📍 {s.direccion}</p>}
                 {s.estado === 'completada' && s.conformidad_cliente && (() => {
-                  const info = pagoInfo[s.pagos?.[0]?.estado ?? '']
+                  const info = pagoInfo[ultimoPago(s.pagos)?.estado ?? '']
                   return info ? <p className={`text-xs font-medium ${info.clase}`}>{info.texto}</p> : null
                 })()}
                 <p className="text-xs text-gray-400">

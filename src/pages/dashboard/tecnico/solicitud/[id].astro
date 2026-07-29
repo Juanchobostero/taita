@@ -31,7 +31,7 @@ const { data: sol } = await supabase
     fecha_solicitada, hora_solicitada, direccion,
     usuarios!cliente_id ( nombre_completo, telefono ),
     categorias ( nombre, icono ),
-    pagos ( estado )
+    pagos ( estado, creado_en )
   `)
   .eq('id', id)
   .single()
@@ -54,12 +54,19 @@ const total           = sol.total_estimado     as number | null
 const gastosExtra     = sol.gastos_extra       as number | null
 const descGastos      = sol.descripcion_gastos as string | null
 const imagenesTrabajo = (sol.imagenes_trabajo  as string[] | null) ?? []
-const pagoEstado      = (sol.pagos as unknown as { estado: string }[] | null)?.[0]?.estado ?? null
+// Puede haber más de un intento de pago (reintentos tras un rechazo) — se toma el más reciente
+// por fecha, el orden del array embebido de Supabase no está garantizado.
+const pagosSolicitud  = (sol.pagos as unknown as { estado: string; creado_en: string }[] | null) ?? []
+const pagoEstado      = pagosSolicitud.length
+  ? pagosSolicitud.reduce((a, b) => (a.creado_en > b.creado_en ? a : b)).estado
+  : null
 
 const pagoInfo: Record<string, { texto: string; clase: string }> = {
   pagado:         { texto: '✅ El cliente pagó — el pago se acreditó',       clase: 'bg-primary-soft border-primary-pale text-[#1B4D2E]' },
   pendiente_pago: { texto: '🕓 El cliente dio conformidad, todavía no completó el pago', clase: 'bg-amber-50 border-amber-200 text-amber-700' },
   rechazado:      { texto: '⚠️ El intento de pago del cliente fue rechazado', clase: 'bg-red-50 border-red-200 text-red-700' },
+  reembolsado:    { texto: '💸 El pago fue reembolsado al cliente',          clase: 'bg-red-50 border-red-200 text-red-700' },
+  contracargo:    { texto: '⚠️ Hay una disputa bancaria abierta sobre este pago', clase: 'bg-red-50 border-red-200 text-red-700' },
   registrado:     { texto: '✅ El cliente dio conformidad — pago registrado', clase: 'bg-primary-soft border-primary-pale text-[#1B4D2E]' },
 }
 

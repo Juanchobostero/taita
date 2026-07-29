@@ -3,11 +3,13 @@
 > Documento vivo, específico de esta integración (separado de `ESTADO_PROYECTO.md` para no
 > saturarlo). Se actualiza a medida que avanza cada fase.
 
-**Estado actual (2026-07-29):** 🟢 Fase 1 implementada y probada de punta a punta en local con
-credenciales de prueba (conformidad → preferencia real → pago en sandbox → reconciliación →
-recibo PDF → notificaciones). Falta: ampliar el manejo de algunos estados de pago (ver más abajo)
-y cargar las credenciales de prueba en Vercel (Production) para que Agustín pueda probarlo en el
-dominio real. Todavía **no** se cargaron credenciales reales — todo sigue en modo test a propósito.
+**Estado actual (2026-07-29, tarde):** 🟢 Fase 1 completa: conformidad → preferencia real → pago en
+sandbox → reconciliación → recibo PDF → notificaciones, **más** el manejo de todos los estados de
+pago (rechazado/reembolsado/contracargo) y reintento de pago rechazado. Código escrito y
+consistente — **falta re-probar en local** este último tramo (reintentar pago, y los 2 estados
+nuevos) antes de dar por cerrada la fase. Después: cargar las credenciales de prueba en Vercel
+(Production) para que Agustín pueda probarlo en el dominio real. Todavía **no** se cargaron
+credenciales reales — todo sigue en modo test a propósito.
 
 ---
 
@@ -183,38 +185,45 @@ confirmarlos en el panel → "Tarjetas de prueba" antes de asumir que hay un bug
 
 ---
 
-## Pendiente — manejo completo de todos los estados de pago (análisis 2026-07-29, sin implementar aún)
+## Manejo completo de todos los estados de pago (✅ implementado 2026-07-29)
 
-`actualizarPagoDesdeMP()` (en `src/lib/mercadopago.ts`) hoy solo distingue `approved` → `pagado` y
-`rejected` → `rechazado`; todo lo demás cae en `pendiente_pago`. Eso está bien para los estados que
-genuinamente son "todavía no terminó" (`pending`, `in_process`, `authorized`), pero está mal para
-otros tres que Mercado Pago también puede informar:
+`actualizarPagoDesdeMP()` (en `src/lib/mercadopago.ts`) ahora mapea todos los estados relevantes
+de Mercado Pago:
 
-| Estado de Mercado Pago | Mapeo correcto | Por qué |
+| Estado de Mercado Pago | Mapeo | Notificación |
 |---|---|---|
-| `cancelled` | `rechazado` | mismo tratamiento que un rechazo — el cliente puede reintentar |
-| `refunded` | nuevo estado `reembolsado` | se le devolvió la plata al cliente — el admin tiene que enterarse sí o sí |
-| `charged_back` | nuevo estado `contracargo` | disputa con el banco del cliente — el caso más grave, alerta clara al admin |
+| `approved` | `pagado` | `notificarPagoConfirmado` — recibo PDF a cliente, mail a técnico y admin |
+| `rejected` / `cancelled` | `rechazado` | `notificarPagoRechazado` — mail al cliente (reintentar), in-app a técnico/admin |
+| `refunded` | `reembolsado` | `notificarPagoReembolsado` — mail a cliente, técnico y admin |
+| `charged_back` | `contracargo` | `notificarPagoContracargo` — mail urgente al admin, in-app al técnico |
+| cualquier otro (`pending`, `in_process`, `authorized`) | `pendiente_pago` | — |
 
-**Falta implementar:**
-- [ ] Verificar constraint de `pagos.estado` antes de sumar `reembolsado`/`contracargo` (mismo
-      chequeo que se hizo para `solicitudes.estado` — `pagado`/`pendiente_pago`/`rechazado` ya se
-      confirmó que entran sin problema, pero no probamos valores nuevos todavía).
-- [ ] Ampliar el mapeo en `actualizarPagoDesdeMP()`.
-- [ ] Nuevas funciones `notificarPagoReembolsado()` / `notificarPagoContracargo()` en
-      `notificaciones.ts` (mismo patrón que `notificarPagoConfirmado`/`notificarPagoRechazado` ya
-      existentes) — el contracargo en particular tiene que dejar bien claro en el mail/notificación
-      al admin que es urgente.
-- [ ] Sumar los mensajes correspondientes en `DarConformidad.tsx` (cliente) y en el `pagoInfo` de
-      `SolicitudesTecnico.tsx` (técnico).
-- [ ] Mostrar el estado de pago también en el panel admin (`TablaSolicitudesAdmin.tsx` / detalle) —
-      hoy no se ve ahí, y es justo donde más importa que se note un reembolso/contracargo.
+`pagos.estado` no tiene CHECK constraint (confirmado el 2026-07-29), así que estos dos valores
+nuevos (`reembolsado`, `contracargo`) entran sin problema, igual que los anteriores.
+
+Mostrado en las 3 vistas (cliente, técnico, admin) — ninguna se quedó mostrando algo genérico.
+
+**Reintentar un pago rechazado:** nuevo endpoint `POST /api/cliente/reintentar-pago` — genera una
+preferencia nueva y un registro nuevo en `pagos` (no se pisa el rechazado, queda el historial de
+intentos). En la UI es indistinguible del flujo normal: mismo botón "Pagar con Mercado Pago" (a
+pedido de Jota, sin mencionar que hubo un rechazo previo).
+
+**Fix de robustez importante:** como ahora puede haber más de un registro en `pagos` por
+solicitud (uno por intento), `external_reference` de la preferencia dejó de ser el `solicitud_id`
+y pasó a ser el **id de la fila de `pagos`** (generado con `randomUUID()` antes de crear la
+preferencia, ver `dar-conformidad.ts` y `reintentar-pago.ts`). Así, `actualizarPagoDesdeMP` siempre
+reconcilia el intento exacto por su id, sin ambigüedad de "cuál es el último" si las notificaciones
+de Mercado Pago llegaran fuera de orden entre dos intentos distintos. Las vistas de lectura
+(cliente/técnico/admin) sí siguen tomando "el más reciente por fecha" entre varios `pagos` — ahí
+es lo correcto, porque es justamente lo que el usuario necesita ver.
 
 **Nota, no bloqueante:** Mercado Pago puede mandar los contracargos como un tópico de webhook
-**separado** (`chargebacks`, no `payment`) — el webhook actual (`api/webhooks/mercadopago.ts`)
-ignora todo lo que no sea `type === 'payment'`. Los contracargos tardan días/semanas en aparecer
-(no son parte del flujo normal de compra), así que no frena el uso normal de la app, pero hay que
-revisar el payload real de ese tópico cuando se implemente esto.
+**separado** (`chargebacks`, no `payment`) además de la actualización normal del `payment`. El
+webhook actual (`api/webhooks/mercadopago.ts`) ignora todo lo que no sea `type === 'payment'` — el
+mapeo de arriba igual cubre el caso porque `charged_back` también aparece como `status` del pago
+en sí (lo que trae `consultarPago()`), no solo en ese tópico aparte. Los contracargos tardan
+días/semanas en aparecer (no son parte del flujo normal de compra), así que no frena el uso normal
+de la app.
 
 ---
 
@@ -276,8 +285,14 @@ hace falta usar una cuenta de prueba de Mercado Pago, no la cuenta real de Agust
 - [x] Probado de punta a punta en sandbox local (usuario de prueba paga con "Dinero disponible",
       reconciliado vía `?payment_id=` al volver — en local el webhook no puede llegar a
       `localhost`, se usó ese respaldo; en producción el webhook real debería andar solo)
-- [ ] Ampliar manejo de estados `cancelled`/`refunded`/`charged_back` (ver sección de arriba)
-- [ ] Mostrar estado de pago en el panel admin
+- [x] Ampliar manejo de estados `cancelled`/`refunded`/`charged_back` (ver sección de arriba)
+- [x] Mostrar estado de pago en el panel admin (detalle de la solicitud)
+- [x] Reintentar pago rechazado (`POST /api/cliente/reintentar-pago`, mismo botón que el pago normal)
+- [x] Fix de robustez: `external_reference` pasó a ser el id de la fila de `pagos` (no el de la
+      solicitud), para reconciliar el intento exacto cuando hay reintentos
+- [ ] **Falta probar en local:** reintentar un pago rechazado (tarjeta titular `OTHE`), confirmar
+      que aparece el botón para pagar de nuevo y que genera un intento nuevo sin perder el
+      rechazado anterior
 - [ ] Credenciales de **test** cargadas en Vercel (Production) para que Agustín pueda probar en
       el dominio real
 - [ ] Probado en producción (dominio real) con credenciales de test — Agustín como comprador

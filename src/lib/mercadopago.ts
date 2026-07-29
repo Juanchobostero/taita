@@ -1,7 +1,12 @@
 import { createHmac } from 'node:crypto'
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { notificarPagoConfirmado, notificarPagoRechazado } from './notificaciones'
+import {
+  notificarPagoConfirmado,
+  notificarPagoRechazado,
+  notificarPagoReembolsado,
+  notificarPagoContracargo,
+} from './notificaciones'
 
 const accessToken = import.meta.env.MP_ACCESS_TOKEN
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null
@@ -11,6 +16,7 @@ function siteUrl(): string {
 }
 
 interface CrearPreferenciaParams {
+  pagoId:      string
   solicitudId: string
   titulo:      string
   monto:       number
@@ -27,7 +33,7 @@ function esUrlLocal(url: string): boolean {
 }
 
 export async function crearPreferencia(
-  { solicitudId, titulo, monto }: CrearPreferenciaParams,
+  { pagoId, solicitudId, titulo, monto }: CrearPreferenciaParams,
 ): Promise<{ preferenceId: string; initPoint: string | null } | null> {
   if (!client) return null
 
@@ -43,7 +49,11 @@ export async function crearPreferencia(
         unit_price:  monto,
         currency_id: 'ARS',
       }],
-      external_reference: solicitudId,
+      // Se usa el id de la fila de `pagos` (no el de la solicitud) como external_reference —
+      // como puede haber más de un intento de pago por solicitud (reintentos tras un rechazo),
+      // esto permite reconciliar cada pago exactamente contra SU fila, sin ambigüedad de "cuál es
+      // el último intento" si las notificaciones de Mercado Pago llegan fuera de orden.
+      external_reference: pagoId,
       back_urls: {
         success: volverA,
         pending: volverA,
@@ -77,6 +87,7 @@ export async function obtenerLinkPago(preferenceId: string): Promise<string | nu
 interface PagoMP {
   id:                string
   status:            string
+  /** El `external_reference` que Mercado Pago devuelve — en este proyecto es el id de la fila de `pagos`, no el de la solicitud. */
   externalReference: string | null
 }
 
@@ -120,8 +131,9 @@ export function validarFirmaWebhook(
 
 /**
  * Reconsulta el pago real a la API de Mercado Pago (nunca confiar en lo que venga del webhook o
- * de la URL de vuelta) y actualiza el registro de `pagos` correspondiente por `external_reference`
- * (= solicitud_id). Idempotente: si ya estaba en 'pagado', no vuelve a procesar.
+ * de la URL de vuelta) y actualiza el registro de `pagos` correspondiente. `pago.externalReference`
+ * es el id de la fila de `pagos` (ver `crearPreferencia`), así que apunta siempre al intento
+ * exacto — no "el último" — sin importar el orden en que lleguen las notificaciones de MP.
  */
 export async function actualizarPagoDesdeMP(supabase: SupabaseClient, paymentId: string): Promise<void> {
   const pago = await consultarPago(paymentId)
@@ -129,19 +141,22 @@ export async function actualizarPagoDesdeMP(supabase: SupabaseClient, paymentId:
 
   const { data: pagoDb } = await supabase
     .from('pagos')
-    .select('id, estado')
-    .eq('solicitud_id', pago.externalReference)
-    .order('creado_en', { ascending: false })
-    .limit(1)
+    .select('id, solicitud_id, estado')
+    .eq('id', pago.externalReference)
     .maybeSingle()
 
-  // 'pagado' es un estado final — una vez ahí, no se vuelve a tocar (defensivo, no debería pasar
-  // que MP informe otra cosa después de 'approved', pero mejor no arriesgar).
-  if (!pagoDb || pagoDb.estado === 'pagado') return
+  if (!pagoDb) return
 
+  // 'approved'/'rejected'/'cancelled' cubren el ciclo de vida normal de un intento de pago.
+  // 'refunded'/'charged_back' solo pueden pasar DESPUÉS de haber estado 'pagado' — llegan como una
+  // actualización posterior del mismo pago (MP notifica de nuevo cuando el estado cambia), nunca
+  // como primer estado.
   const nuevoEstado =
-    pago.status === 'approved' ? 'pagado' :
-    pago.status === 'rejected' ? 'rechazado' :
+    pago.status === 'approved'     ? 'pagado' :
+    pago.status === 'rejected'     ? 'rechazado' :
+    pago.status === 'cancelled'    ? 'rechazado' :
+    pago.status === 'refunded'     ? 'reembolsado' :
+    pago.status === 'charged_back' ? 'contracargo' :
     'pendiente_pago'
 
   // Sin cambio real de estado — no volver a escribir ni a notificar (MP reintenta el webhook
@@ -159,9 +174,13 @@ export async function actualizarPagoDesdeMP(supabase: SupabaseClient, paymentId:
 
   try {
     if (nuevoEstado === 'pagado') {
-      await notificarPagoConfirmado(supabase, pago.externalReference, pago.id)
+      await notificarPagoConfirmado(supabase, pagoDb.solicitud_id, pago.id)
     } else if (nuevoEstado === 'rechazado') {
-      await notificarPagoRechazado(supabase, pago.externalReference)
+      await notificarPagoRechazado(supabase, pagoDb.solicitud_id)
+    } else if (nuevoEstado === 'reembolsado') {
+      await notificarPagoReembolsado(supabase, pagoDb.solicitud_id)
+    } else if (nuevoEstado === 'contracargo') {
+      await notificarPagoContracargo(supabase, pagoDb.solicitud_id)
     }
   } catch (err) {
     console.error('[actualizarPagoDesdeMP] error notificando:', err)
