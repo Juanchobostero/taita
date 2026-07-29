@@ -2,7 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { enviarEmail } from './email'
 
 const ADMIN_EMAIL = 'taitasoluciones@gmail.com'
-const SITE_URL    = import.meta.env.PUBLIC_SITE_URL || 'https://taita-nu.vercel.app'
 
 const ESTADO_LABEL: Record<string, string> = {
   pendiente:  'Pendiente',
@@ -169,8 +168,6 @@ export async function notificarCambioEstado(
   const categoria = sol.categorias
   const label     = ESTADO_LABEL[estadoNuevo] ?? estadoNuevo
   const fechaHora = formatearFechaHora(sol)
-  const linkCliente = `${SITE_URL}/dashboard/cliente`
-  const linkTecnico = `${SITE_URL}/dashboard/tecnico`
 
   // El técnico rechazó una asignación que todavía no había confirmado — el cliente nunca se
   // enteró de que se le había asignado alguien, así que no corresponde avisarle de que "volvió"
@@ -189,7 +186,7 @@ export async function notificarCambioEstado(
           <p>Tu solicitud <strong>${sol.titulo}</strong> (${categoria?.nombre ?? 'servicio'}) cambió de estado a
           <strong>${label}</strong>.</p>
           ${mostrarHorario && fechaHora ? `<p>Horario confirmado: <strong>${fechaHora}</strong>.</p>` : ''}
-          <p><a href="${linkCliente}">Ver el detalle en tu panel</a></p>
+          <p>Revisá tu panel para ver el detalle.</p>
         `,
       })
     }
@@ -214,7 +211,6 @@ export async function notificarCambioEstado(
           <p>Te asignaron la solicitud <strong>${sol.titulo}</strong> (${categoria?.nombre ?? 'servicio'}).</p>
           ${fechaHora ? `<p>Horario propuesto: <strong>${fechaHora}</strong>.</p>` : ''}
           <p>Entrá a tu panel para confirmarla o rechazarla.</p>
-          <p><a href="${linkTecnico}">Ver en mi panel</a></p>
         ` : `
           <p>Hola ${tecnico.nombre_completo},</p>
           <p>La solicitud <strong>${sol.titulo}</strong> pasó a estado <strong>${label}</strong>.</p>

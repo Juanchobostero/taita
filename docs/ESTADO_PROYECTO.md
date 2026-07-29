@@ -3,24 +3,24 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-07-28 (sesión de tarde — ver "Issues abiertos" para el detalle de
-qué quedó implementado hoy pero todavía sin probar)
+**Última actualización:** 2026-07-29 — flujo de confirmación del técnico (asignada → aceptada/
+rechazo), fix definitivo del Realtime del panel del cliente, y estilo de marca en los emails. Todo
+implementado, probado por Jota en local y pusheado. Ver sección correspondiente más abajo.
 
 ---
 
 ## Resumen
 
 Plataforma operativa con registro de clientes/técnicos, flujo completo de solicitud de
-servicio, panel admin/cliente/técnico, y páginas legales. **Ya publicada en el dominio propio**
-(`taitasoluciones.com.ar`, vía Vercel + Cloudflare) **con envío de email real funcionando**
-(Resend). Pendiente: WhatsApp, cron externo para producción, Mercado Pago al final.
+servicio (incluyendo confirmación del técnico antes de comprometerse a un trabajo), panel
+admin/cliente/técnico con notificaciones in-app en tiempo real, y páginas legales. **Ya publicada
+en el dominio propio** (`taitasoluciones.com.ar`, vía Vercel + Cloudflare) **con envío de email
+real funcionando** (Resend, con estilo de marca propio). Pendiente: WhatsApp, cron externo para
+producción, y **Mercado Pago — el próximo frente de trabajo**.
 
-De los 4 issues abiertos de las primeras pruebas en producción (ver sección "Issues abiertos" más
-abajo), **3 ya están implementados en código (1, 2 y 3) pero todavía sin probar** — se armaron en
-una PC sin las variables de entorno de Supabase cargadas (`SUPABASE_SERVICE_ROLE_KEY` en
-particular), así que quedaron para probar al pullear estos cambios en el entorno con las envs
-completas. El 4to (notificaciones in-app) sigue sin arrancar — falta confirmar el diseño antes de
-escribir código.
+Los 4 issues de la sesión 2026-07-28 (ver sección "Issues abiertos" más abajo) quedaron todos
+implementados y probados. Ver también la sección "Confirmación del técnico + fix definitivo de
+Realtime + estilo de emails" (2026-07-29) para lo más reciente.
 
 ---
 
@@ -390,6 +390,109 @@ para nada de esto.
 
 ---
 
+## Confirmación del técnico + fix definitivo de Realtime + estilo de emails — sesión 2026-07-29
+
+**✅ Implementado, probado en local por Jota y pusheado.**
+
+### 1. Nuevo estado "asignada" — el técnico confirma o rechaza el trabajo
+
+**Pedido de Agustín:** que asignar un técnico no lo comprometa automáticamente — tiene que poder
+aceptar o rechazar el trabajo antes de que la solicitud pase a "Aceptada" de verdad.
+
+**Flujo nuevo:** `pendiente` → (admin asigna técnico) → **`asignada`** (esperando que el técnico
+responda) → el técnico **acepta** → `aceptada` (igual que antes: mail al cliente con horario
+confirmado, bloquea la agenda) — o **rechaza** → vuelve a `pendiente` y se desasigna, reutilizando
+el aviso al admin que ya existía para "solicitud volvió a pendiente".
+
+- `tecnico_id` se asigna igual que antes, pero ya no dispara `aceptada` directo — dispara
+  `asignada`, y le llega un mail + notificación in-app al técnico ("Nuevo trabajo asignado,
+  confirmalo o rechazalo"). El cliente **no** se entera todavía en este paso.
+- Nuevo endpoint `POST /api/tecnico/responder-asignacion` (`{ solicitudId, accion: 'aceptar' |
+  'rechazar' }`), nuevo componente `ResponderAsignacion.tsx` (botones en la lista y en el detalle
+  del técnico).
+- **Vista del cliente sin cambios visuales:** mientras el estado es `asignada`, el cliente ve
+  exactamente lo mismo que en `pendiente` (mismo badge, no se muestra el técnico todavía) — decisión
+  tomada con Jota para no mostrar un estado a medio confirmar. Recién en `aceptada` ve el cambio real.
+- El admin no puede reasignar mientras espera respuesta (el formulario de asignar solo aparece
+  cuando no hay técnico asignado) y el dropdown manual de "Cambiar estado" no deja saltar a
+  `aceptada`/`en_curso`/`completada` sin que el técnico haya confirmado al menos una vez.
+- Si el admin desasigna manualmente (vuelve a "Pendiente" con un técnico ya confirmado), ahora se
+  le avisa al técnico afectado (`notificarDesasignacion()`, nueva función) — antes no se enteraba
+  de nada y su lista quedaba mostrando un trabajo que ya no era suyo hasta recargar.
+- `disponibilidad.ts` ya traía `'asignada'` contemplado en los estados que ocupan la agenda del
+  técnico desde antes (quedó preparado sin usarse) y la policy RLS `"solicitudes: tecnico actualiza
+  estado"` ya mencionaba "aceptar/rechazar" en su comentario — este flujo ya estaba parcialmente
+  previsto en el diseño original, solo faltaba conectarlo.
+
+**⚠️ SQL obligatorio (ya corrido por Jota, dejar documentado):** la columna `estado` tenía un
+`CHECK constraint` que no incluía `'asignada'` — sin este paso, asignar un técnico fallaba en
+silencio (el técnico quedaba asignado pero el estado no cambiaba, sin mail ni notificación, sin
+error visible para el admin). Si se clona el proyecto en otro entorno, correr:
+
+```sql
+ALTER TABLE solicitudes DROP CONSTRAINT solicitudes_estado_check;
+ALTER TABLE solicitudes ADD CONSTRAINT solicitudes_estado_check
+  CHECK (estado = ANY (ARRAY['pendiente'::text, 'asignada'::text, 'aceptada'::text, 'en_curso'::text, 'completada'::text, 'cancelada'::text]));
+```
+
+No es aditivo en el sentido estricto (se borra y recrea el constraint), pero es seguro: solo amplía
+los valores permitidos, no toca ninguna fila existente.
+
+### 2. Fix definitivo — "Mis solicitudes" del cliente no se actualizaba en tiempo real
+
+Extiende el hallazgo de la sesión anterior (técnico). Se confirmó con Jota, probando en limpio
+(consola sin errores, suscripción en estado `SUBSCRIBED`, tabla `solicitudes` sí está en la
+publicación de Realtime, permisos y `REPLICA IDENTITY` iguales a `notificaciones` que sí funciona)
+que el problema **no es exclusivo de policies con JOIN afectando solo al rol dueño de esa policy**:
+la tabla `solicitudes` tiene, además de la policy simple del cliente, las de técnico y admin que
+hacen `EXISTS`/JOIN contra otras tablas — y alcanza con que **una sola** policy de la tabla use
+JOIN para que Supabase Realtime deje de entregar eventos de esa tabla **a nadie**, ni siquiera a
+roles cuya propia policy es simple. Queda actualizado el hallazgo en
+`docs/guia-notificaciones-realtime-supabase.md` con esto.
+
+**Fix aplicado (mismo patrón ya probado con el técnico):** `MisSolicitudes.tsx` dejó de escuchar
+`solicitudes` directo y ahora escucha inserts en `notificaciones` (policy simple, sin JOIN) como
+disparador de refresco. Para que cubra todos los casos relevantes del cliente, se agregó
+`'pendiente'` a `AVISAR_CLIENTE` en `notificaciones.ts` — con una excepción: si el `'pendiente'`
+viene de un **rechazo del técnico sobre una asignación todavía no confirmada**, no se le avisa al
+cliente (nunca llegó a enterarse de que se le había asignado alguien, así que no corresponde
+decirle que "volvió" a pendiente). Esto se resuelve con un parámetro nuevo y opcional
+`estadoAnterior` en `notificarCambioEstado()` — los demás llamados no lo pasan, así que su
+comportamiento no cambió.
+
+**Pendiente de verificar (no confirmado en esta sesión, mismo tipo de policy con JOIN):**
+`TablaSolicitudesAdmin.tsx` sigue escuchando `solicitudes` directo sin filtro — por la misma causa
+raíz, es probable que tampoco reciba eventos en tiempo real. No reportado como roto todavía por
+nadie; si se confirma, el fix sería análogo (escuchar `notificaciones`), pero ahí el admin no tiene
+hoy una notificación para *todos* los eventos relevantes (solo nueva solicitud, conformidad, y
+vuelta a pendiente) — habría que ampliar qué le llega antes de poder usarlo como disparador
+confiable.
+
+### 3. Estilo de marca en los emails
+
+Pedido de Agustín: que los mails salgan con el logo y la identidad visual de Taita, no en texto
+plano. Se resolvió en **un solo lugar** (`src/lib/email.ts`, función `plantillaEmail()`) que envuelve
+el contenido de cada mail con header (logo + "Taita Soluciones" sobre fondo verde), fondo crema, y
+footer — así ningún llamado a `enviarEmail()` en el resto del código necesitó tocarse. Layout con
+tablas (no flex/grid) por compatibilidad con clientes de correo como Outlook.
+
+- El logo (`public/images/taita-avatar.webp`) se referencia con la **URL fija de producción**
+  (`https://taitasoluciones.com.ar/...`), no con `PUBLIC_SITE_URL` — ese último apunta a
+  `localhost:4321` en el `.env` local (a propósito, para que los links internos funcionen en
+  pruebas), y un cliente de correo externo no puede alcanzar `localhost` para mostrar la imagen.
+- Se sacaron los links "Ver el detalle en tu panel" / "Ver en mi panel" de los mails de cambio de
+  estado (quedan como texto simple) — encontrado por Jota que ese link llevaba siempre a
+  `/dashboard/cliente` o `/dashboard/tecnico` genérico, sin importar qué sesión estuviera activa en
+  el navegador donde se abriera, lo que podía llevar a una pantalla inconsistente (ej. abrir el
+  link de un mail de cliente estando logueado como técnico). Se sacó la constante `SITE_URL` de
+  `notificaciones.ts`, que quedó sin uso.
+- **Pendiente, de baja prioridad, no es código:** el avatar que Gmail muestra al lado del
+  remitente en la bandeja de entrada (distinto del logo de adentro del mail) requeriría Gravatar
+  (simple, no garantizado en Gmail) o BIMI (requiere DNS + probablemente certificado VMC pago).
+  Queda anotado, sin encarar por ahora.
+
+---
+
 ## Cómo probar cada tanda (manual, en local o en el preview de Vercel)
 
 ### Tanda 1 — Link de técnico + mail de contacto
@@ -470,7 +573,9 @@ Para que se note el conflicto hace falta que el técnico ya tenga **una solicitu
 | Cancelación con confirmación inline | ✅ Operativo (Tanda 4) |
 | Timeline de estados para el cliente | ✅ Operativo y probado (Tanda 5) |
 | Conformidad del cliente + registro de pago (sin cobro real) | ✅ Operativo y probado (Tanda 6) |
-| Notificaciones in-app en tiempo real (campanita) | ✅ Implementado (2026-07-28) — falta correr el SQL, habilitar Realtime y probar |
+| Notificaciones in-app en tiempo real (campanita) | ✅ Operativo y probado (2026-07-28/29) |
+| Confirmación del técnico (asignada → aceptada/rechazo) | ✅ Operativo y probado (2026-07-29) |
+| Estilo de marca (logo + colores) en los emails | ✅ Operativo (2026-07-29) |
 | Integración Mercado Pago | ⏳ Pendiente (Tanda 7, al final) |
 
 ---
