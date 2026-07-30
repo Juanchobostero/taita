@@ -11,9 +11,20 @@ const { data: categoriasDB } = await supabase
   .eq('activa', true)
   .order('nombre')
   .limit(9)
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'Taita Soluciones',
+  url: 'https://taitasoluciones.com.ar',
+  logo: 'https://taitasoluciones.com.ar/images/taita-avatar.webp',
+  description: 'Encontrá al técnico ideal para tu hogar en Argentina',
+  areaServed: 'Argentina',
+}
 ---
 
 <Layout>
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
   <Navbar client:load />
 
   <!-- HERO -->

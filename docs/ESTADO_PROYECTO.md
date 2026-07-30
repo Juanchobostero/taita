@@ -3,9 +3,11 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-07-29 — flujo de confirmación del técnico (asignada → aceptada/
-rechazo), fix definitivo del Realtime del panel del cliente, y estilo de marca en los emails. Todo
-implementado, probado por Jota en local y pusheado. Ver sección correspondiente más abajo.
+**Última actualización:** 2026-07-30 — mejoras de SEO (sitemap, robots.txt, Open Graph, datos
+estructurados). Antes, el 2026-07-29: Mercado Pago Fase 1 probada en producción con credenciales
+de test, flujo de confirmación del técnico (asignada → aceptada/rechazo), fix definitivo del
+Realtime del panel del cliente, y estilo de marca en los emails. Todo implementado, probado por
+Jota, y pusheado. Ver secciones correspondientes más abajo.
 
 ---
 
@@ -495,6 +497,46 @@ tablas (no flex/grid) por compatibilidad con clientes de correo como Outlook.
   remitente en la bandeja de entrada (distinto del logo de adentro del mail) requeriría Gravatar
   (simple, no garantizado en Gmail) o BIMI (requiere DNS + probablemente certificado VMC pago).
   Queda anotado, sin encarar por ahora.
+
+---
+
+## SEO — sitemap, robots.txt, Open Graph y datos estructurados — sesión 2026-07-30
+
+**✅ Implementado y probado en local (`/robots.txt` y `/sitemap.xml` cargan bien). Pendiente de
+probar en producción después del deploy.**
+
+**Objetivo:** que el sitio indexe más rápido en Google y se vea mejor al compartirse por WhatsApp,
+aprovechando que todavía está en etapa de prueba para "ganar terreno" antes del lanzamiento
+público. Los 3 cambios son 100% aditivos — no tocan lógica ni UI existente, solo agregan archivos
+nuevos y tags de `<head>`/`<script>` que el usuario final ni nota.
+
+- **`public/robots.txt`** (nuevo) — permite todo, bloquea `/dashboard/*` y `/api/*` (privado, sin
+  valor de indexación), apunta al sitemap.
+- **`src/pages/sitemap.xml.ts`** (nuevo) — endpoint propio, no el plugin genérico
+  `@astrojs/sitemap`. El sitio corre en modo SSR (`output: 'server'`), y ese plugin solo lista
+  rutas estáticas conocidas en build time — no se entera de las páginas dinámicas (un perfil por
+  técnico). El endpoint propio consulta los técnicos activos en cada request, así el sitemap
+  siempre está al día sin depender de un redeploy cuando se suma o desactiva un técnico.
+- **`astro.config.mjs`** — agregado `site: 'https://taitasoluciones.com.ar'` (Astro lo necesita
+  para resolver URLs absolutas en el canonical/Open Graph).
+- **`src/layouts/Layout.astro`** — nuevo prop opcional `image` (default `taita-avatar.webp`),
+  agregado `<link rel="canonical">` + tags de Open Graph y Twitter Card. Todas las páginas que ya
+  pasaban `title`/`description` siguen funcionando igual, sin cambios de código en ellas.
+- **`src/pages/tecnicos/[id].astro`** — JSON-LD (`Service` + `Person` + `AggregateRating` cuando
+  ya tiene servicios calificados), y la foto del técnico como imagen de Open Graph si tiene (si no,
+  cae al avatar de Taita por default).
+- **`src/pages/index.astro`** — JSON-LD `Organization`.
+
+**Beneficios (para referencia futura, no todos son medibles de inmediato):**
+- Sitemap → indexación más rápida (Google no tiene que descubrir las páginas solo siguiendo links).
+- Open Graph/Twitter → vista previa con título/descripción/imagen al compartir un link por
+  WhatsApp — antes probablemente no generaba ninguna preview.
+- JSON-LD → Google puede llegar a mostrar la calificación con estrellitas directo en el resultado
+  de búsqueda de cada técnico, lo que históricamente mejora el click-through.
+
+**Pendiente, externo, no es código:** dar de alta el sitio en **Google Search Console** (verificar
+dominio + enviar el sitemap manualmente para no esperar el rastreo orgánico) — Jota lo revisa
+aparte.
 
 ---
 

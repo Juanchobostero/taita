@@ -6,6 +6,7 @@ import vercel from '@astrojs/vercel';
 import path from 'path';
 
 export default defineConfig({
+  site: 'https://taitasoluciones.com.ar',
   output: 'server',
   adapter: vercel(),
   integrations: [react()],

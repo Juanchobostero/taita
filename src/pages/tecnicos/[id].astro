@@ -44,9 +44,36 @@ const mostrarNombre  = (tecnico as any).mostrar_nombre as boolean ?? true
 const nombreDisplay  = nick || tecnico.usuarios.nombre_completo
 const iniciales      = nombreDisplay.split(' ').slice(0, 2).map((p: string) => p[0]).join('')
 const especialidades = tecnico.especialidades_tecnico.map(e => e.categorias?.nombre).filter(Boolean)
+
+// Datos estructurados para que Google pueda mostrar la calificación en el resultado de búsqueda.
+// Solo se incluye aggregateRating si ya hay servicios calificados — Google penaliza/ignora un
+// rating sin reseñas reales detrás.
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Service',
+  serviceType: especialidades[0] ?? 'Servicio técnico a domicilio',
+  provider: {
+    '@type': 'Person',
+    name: nombreDisplay,
+    ...(tecnico.usuarios.foto_url ? { image: tecnico.usuarios.foto_url } : {}),
+  },
+  areaServed: tecnico.zona_cobertura ?? 'Argentina',
+  ...(tecnico.total_servicios > 0 ? {
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: Number(tecnico.calificacion_promedio).toFixed(1),
+      reviewCount: tecnico.total_servicios,
+    },
+  } : {}),
+}
 ---
 
-<Layout title={`${tecnico.usuarios.nombre_completo} — Taita Soluciones`} description={tecnico.descripcion ?? ''}>
+<Layout
+  title={`${tecnico.usuarios.nombre_completo} — Taita Soluciones`}
+  description={tecnico.descripcion ?? ''}
+  image={tecnico.usuarios.foto_url ?? undefined}
+>
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
   <Navbar client:load />
 
   <div class="bg-gray-50 min-h-screen py-10 px-4">
