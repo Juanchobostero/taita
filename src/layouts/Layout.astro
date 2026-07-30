@@ -10,7 +10,7 @@ interface Props {
 const {
   title = 'Taita Soluciones — Servicios técnicos a domicilio',
   description = 'Encontrá al técnico ideal para tu hogar en Argentina',
-  image = '/images/taita-avatar.webp',
+  image = '/images/og-banner.webp',
 } = Astro.props
 
 const imagenAbsoluta = new URL(image, Astro.site ?? Astro.url).href
@@ -32,7 +32,7 @@ const imagenAbsoluta = new URL(image, Astro.site ?? Astro.url).href
     <meta property="og:image" content={imagenAbsoluta} />
     <meta property="og:locale" content="es_AR" />
     <meta property="og:site_name" content="Taita Soluciones" />
-    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={imagenAbsoluta} />
