@@ -10,6 +10,7 @@ interface SolicitudRow {
   usuarios: { nombre_completo: string } | null
   tecnicos: { id: string; usuarios: { nombre_completo: string } } | null
   categorias: { nombre: string } | null
+  pagos: { estado: string; creado_en: string }[] | null
 }
 
 interface Props {
@@ -27,6 +28,22 @@ const estadoColor: Record<string, string> = {
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
   cancelada:  'bg-gray-100 text-gray-500',
+}
+
+// Puede haber más de un intento de pago (reintentos tras un rechazo) — se toma el más reciente
+// por fecha, el orden del array embebido de Supabase no está garantizado.
+function ultimoPago(pagos: SolicitudRow['pagos']): { estado: string } | null {
+  if (!pagos?.length) return null
+  return pagos.reduce((a, b) => (a.creado_en > b.creado_en ? a : b))
+}
+
+const pagoInfo: Record<string, { texto: string; clase: string }> = {
+  pagado:         { texto: 'Pagado',       clase: 'bg-primary-soft text-[#1B4D2E]' },
+  pendiente_pago: { texto: 'Pago pendiente', clase: 'bg-amber-50 text-amber-700' },
+  rechazado:      { texto: 'Pago rechazado', clase: 'bg-red-50 text-red-700' },
+  reembolsado:    { texto: 'Reembolsado',  clase: 'bg-red-50 text-red-700' },
+  contracargo:    { texto: '⚠️ Contracargo', clase: 'bg-red-50 text-red-700' },
+  registrado:     { texto: 'Registrado (mock)', clase: 'bg-primary-soft text-[#1B4D2E]' },
 }
 
 function pageNumbers(current: number, total: number): (number | '...')[] {
@@ -129,12 +146,15 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500">Cliente</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500">Técnico</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500">Estado</th>
+                <th className="px-6 py-3 text-xs font-semibold text-gray-500">Pago</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500">Fecha</th>
                 <th className="px-6 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F5EFE6]">
-              {rows.map(s => (
+              {rows.map(s => {
+                const pago = pagoInfo[ultimoPago(s.pagos)?.estado ?? '']
+                return (
                 <tr key={s.id} className="hover:bg-[#F5EFE6] transition-colors">
                   <td className="px-6 py-3 font-medium text-gray-800 max-w-[180px] truncate">{s.titulo}</td>
                   <td className="px-6 py-3 text-gray-600 whitespace-nowrap">{s.usuarios?.nombre_completo ?? '—'}</td>
@@ -149,6 +169,12 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
                       {s.estado.replace('_', ' ')}
                     </span>
                   </td>
+                  <td className="px-6 py-3 whitespace-nowrap">
+                    {pago
+                      ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${pago.clase}`}>{pago.texto}</span>
+                      : <span className="text-xs text-gray-300">—</span>
+                    }
+                  </td>
                   <td className="px-6 py-3 text-gray-400 whitespace-nowrap">
                     {new Date(s.creado_en).toLocaleDateString('es-AR')}
                   </td>
@@ -161,7 +187,8 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
                     </a>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>

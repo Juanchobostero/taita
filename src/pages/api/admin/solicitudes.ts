@@ -25,7 +25,8 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
         id, titulo, estado, creado_en, tecnico_id,
         usuarios!cliente_id ( nombre_completo ),
         tecnicos ( id, usuarios ( nombre_completo ) ),
-        categorias ( nombre )
+        categorias ( nombre ),
+        pagos ( estado, creado_en )
       `, { count: 'exact' })
       .order('actualizado_en', { ascending: false })
       .range(from, to)

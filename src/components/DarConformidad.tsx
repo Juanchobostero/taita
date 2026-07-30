@@ -87,10 +87,13 @@ export default function DarConformidad({
             </p>
             <a
               href={initPoint}
-              className="w-full text-center bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-xl transition-colors text-sm"
+              className="w-full text-center bg-[#3483FA] hover:bg-[#2968C8] text-white font-semibold py-3 rounded-xl transition-colors text-sm"
             >
-              Pagar con Mercado Pago
+              Pagar
             </a>
+            <p className="text-center text-[11px] text-gray-400 flex items-center justify-center gap-1">
+              🔒 Pago seguro
+            </p>
           </>
         ) : pagoEstado === 'rechazado' ? (
           <>
@@ -100,10 +103,15 @@ export default function DarConformidad({
               type="button"
               disabled={regenerando}
               onClick={reintentarPago}
-              className="w-full text-center bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-xl transition-colors text-sm disabled:opacity-50"
+              className="w-full text-center bg-[#3483FA] hover:bg-[#2968C8] text-white font-semibold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
             >
-              {regenerando ? 'Generando link...' : 'Pagar con Mercado Pago'}
+              {regenerando ? 'Generando link...' : 'Pagar'}
             </button>
+            {!regenerando && (
+              <p className="text-center text-[11px] text-gray-400 flex items-center justify-center gap-1">
+                🔒 Pago seguro
+              </p>
+            )}
           </>
         ) : pagoEstado === 'reembolsado' ? (
           <p className="text-xs">

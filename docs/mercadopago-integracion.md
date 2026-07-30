@@ -119,10 +119,22 @@ desarrollador, se pueden reusar entre proyectos.
 - Usuario: `TESTVKNDVYMZ`
 - Contraseña: `qatest4788`
 
-**Comprador de prueba**
+**Comprador de prueba (Jota, cuenta original)**
 - User ID: `1180493422`
 - Usuario: `TETE1322835`
 - Contraseña: `qatest5034`
+
+**Comprador de prueba — Agustín (creado 2026-07-29 para que pruebe él)**
+- User ID: `3575140053`
+- Usuario: `TESTUSER4258...` (ver panel de Mercado Pago → Cuentas de prueba para el usuario completo)
+- Contraseña: `ZG5STk3GjH`
+- Código de verificación: `140053`
+
+**Comprador de prueba — Manu (creado 2026-07-29, amigo que también prueba)**
+- User ID: `3575413443`
+- Usuario: `TESTUSER5637...` (ver panel de Mercado Pago → Cuentas de prueba para el usuario completo)
+- Contraseña: `FWPqGz0ToA`
+- Código de verificación: `413443`
 
 **Credenciales de prueba del Vendedor** (app "TEST TAITA SOLUCIONES", creada logueado como el
 Vendedor de prueba de arriba — confirmado que el Access Token termina en `-1180488044`, el mismo

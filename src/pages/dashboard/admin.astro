@@ -61,6 +61,7 @@ interface SolicitudReciente {
   usuarios: { nombre_completo: string } | null
   tecnicos: { id: string; usuarios: { nombre_completo: string } } | null
   categorias: { nombre: string } | null
+  pagos: { estado: string; creado_en: string }[] | null
 }
 
 const [
@@ -89,7 +90,8 @@ const [
       id, titulo, estado, creado_en, tecnico_id,
       usuarios!cliente_id ( nombre_completo ),
       tecnicos ( id, usuarios ( nombre_completo ) ),
-      categorias ( nombre )
+      categorias ( nombre ),
+      pagos ( estado, creado_en )
     `)
     .order('actualizado_en', { ascending: false })
     .range(0, 9),
