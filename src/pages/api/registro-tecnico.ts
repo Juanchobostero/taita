@@ -30,17 +30,19 @@ export const POST: APIRoute = async ({ request }) => {
 
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
 
+  // `especialidades` llega como un array de `id` de categoría (no de nombres) — ver comentario en
+  // RegistroForm.tsx. `subcategorias` viene keyeado por esos mismos `id`.
   if (Array.isArray(especialidades) && especialidades.length > 0 && tecnico) {
     const { data: categorias } = await supabase
       .from('categorias')
       .select('id, nombre')
-      .in('nombre', especialidades)
+      .in('id', especialidades)
 
     if (categorias?.length) {
       await supabase
         .from('especialidades_tecnico')
         .insert(categorias.map(c => {
-          const subs = (subcategorias?.[c.nombre] ?? [])
+          const subs = (subcategorias?.[c.id] ?? [])
             .map((s: string) => s.trim())
             .filter((s: string) => s.length > 0)
           return {

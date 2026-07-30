@@ -5,12 +5,15 @@ import RegistroForm from '../components/RegistroForm'
 import { createSupabaseAdmin } from '../lib/supabase-admin'
 
 const supabase = createSupabaseAdmin()
+// Se identifica cada categoría por `id`, no por nombre — ver comentario en RegistroForm.tsx sobre
+// por qué el matching por nombre rompía especialidades en silencio cuando se editaba una categoría.
 const { data: cats } = await supabase
   .from('categorias')
-  .select('nombre')
+  .select('id, nombre')
+  .eq('activa', true)
   .order('nombre', { ascending: true })
 
-const especialidades = (cats ?? []).map((c: { nombre: string }) => c.nombre)
+const especialidades = cats ?? []
 ---
 
 <Layout title="Registrarse — Taita Soluciones" description="Creá tu cuenta en Taita Soluciones">

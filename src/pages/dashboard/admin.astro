@@ -49,7 +49,9 @@ if (Astro.request.method === 'POST') {
 interface TecnicoPendiente {
   id: string
   zona_cobertura: string | null
-  usuarios: { nombre_completo: string; creado_en: string }
+  descripcion: string | null
+  cvu: string | null
+  usuarios: { nombre_completo: string; creado_en: string; telefono: string | null; email: string }
   especialidades_tecnico: { categorias: { nombre: string } | null }[]
 }
 interface SolicitudReciente {
@@ -78,8 +80,8 @@ const [
   supabase
     .from('tecnicos')
     .select(`
-      id, zona_cobertura,
-      usuarios!inner ( nombre_completo, creado_en ),
+      id, zona_cobertura, descripcion, cvu,
+      usuarios!inner ( nombre_completo, creado_en, telefono, email ),
       especialidades_tecnico ( categorias ( nombre ) )
     `)
     .eq('activo', false)
@@ -187,6 +189,13 @@ const ingresos = (completadas ?? []).reduce((sum, s) => sum + ((s.total_estimado
                   <p class="text-xs text-gray-400">
                     Registrado el {new Date(t.usuarios.creado_en).toLocaleDateString('es-AR')}
                   </p>
+                  <!-- Datos para validar identidad antes de aprobar (pedido de Agustín) -->
+                  <div class="mt-1 pt-1 border-t border-cream flex flex-col gap-0.5 text-xs text-gray-500">
+                    <span>✉️ {t.usuarios.email}</span>
+                    {t.usuarios.telefono && <span>📞 {t.usuarios.telefono}</span>}
+                    {t.cvu && <span>💳 CVU/CBU: {t.cvu}</span>}
+                    {t.descripcion && <span class="text-gray-400 italic">"{t.descripcion}"</span>}
+                  </div>
                 </div>
                 <div class="flex gap-2">
                   <form method="POST">

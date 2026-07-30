@@ -172,9 +172,13 @@ const categoria = sol.categorias as any
 const precioBase         = sol.precio_base         as number | null
 const tasa               = sol.tasa_aplicada        as number | null
 const total              = sol.total_estimado       as number | null
-const gananciaPlataforma = (precioBase != null && total != null) ? total - precioBase : null
-const cobrarAlTecnico    = precioBase
 const gastosExtra        = sol.gastos_extra         as number | null
+// El técnico recibe el precio base + los gastos extra que él mismo puso (materiales, traslado,
+// etc.) — la plataforma solo se queda con su comisión (%), no con los gastos extra. Antes esto
+// mostraba mal: "plataforma retiene" se calculaba como total - precioBase, lo cual de hecho le
+// restaba los gastos extra al técnico (bug reportado por Agustín, plata real mal repartida).
+const cobrarAlTecnico    = precioBase != null ? precioBase + (gastosExtra ?? 0) : null
+const gananciaPlataforma = (total != null && cobrarAlTecnico != null) ? total - cobrarAlTecnico : null
 // Puede haber más de un intento de pago (reintentos tras un rechazo) — se toma el más reciente
 // por fecha, el orden del array embebido de Supabase no está garantizado.
 const pagosSolicitud     = (sol.pagos as unknown as { estado: string; monto: number; creado_en: string }[] | null) ?? []

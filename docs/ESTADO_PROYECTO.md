@@ -3,11 +3,12 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-07-30 — mejoras de SEO (sitemap, robots.txt, Open Graph, datos
-estructurados). Antes, el 2026-07-29: Mercado Pago Fase 1 probada en producción con credenciales
-de test, flujo de confirmación del técnico (asignada → aceptada/rechazo), fix definitivo del
-Realtime del panel del cliente, y estilo de marca en los emails. Todo implementado, probado por
-Jota, y pusheado. Ver secciones correspondientes más abajo.
+**Última actualización:** 2026-07-30 — 8 correcciones a partir del feedback de Agustín en PDF
+(`TAITA_ERRORES.pdf`), **implementadas, pendientes de probar por Jota**. Antes, el mismo día:
+mejoras de SEO (sitemap, robots.txt, Open Graph, datos estructurados). El 2026-07-29: Mercado Pago
+Fase 1 probada en producción con credenciales de test, flujo de confirmación del técnico (asignada
+→ aceptada/rechazo), fix definitivo del Realtime del panel del cliente, y estilo de marca en los
+emails. Ver secciones correspondientes más abajo.
 
 ---
 
@@ -537,6 +538,85 @@ nuevos y tags de `<head>`/`<script>` que el usuario final ni nota.
 **Pendiente, externo, no es código:** dar de alta el sitio en **Google Search Console** (verificar
 dominio + enviar el sitemap manualmente para no esperar el rastreo orgánico) — Jota lo revisa
 aparte.
+
+---
+
+## Feedback de Agustín (PDF) — 8 correcciones — sesión 2026-07-30
+
+**✅ Implementado. Falta probar en local antes de dar por cerrado cada punto.** Fuente:
+`TAITA_ERRORES.pdf` (capturas + texto de Agustín). Se investigó la causa raíz de cada uno antes de
+tocar código — varios eran bugs reales, no solo pedidos de UI.
+
+1. **Ícono de la campanita** — reemplazado el SVG de campana (parecido a Facebook) por uno de
+   engranaje/herramienta, en `NotificacionesBell.tsx`.
+
+2. **Admin necesita más datos del técnico antes de aprobar** — la tarjeta de "Técnicos pendientes
+   de aprobación" (`admin.astro`) solo mostraba nombre/especialidad/zona. Ahora también muestra
+   email, teléfono, CVU/CBU y descripción (todo lo que ya se pedía al registrarse pero no se
+   mostraba). **No se agregó DNI** — Agustín no lo pidió en el PDF, queda pendiente si lo pide más
+   adelante (requeriría columna nueva + campo obligatorio en el registro).
+
+3. **Eliminar usuarios** — nueva acción `eliminar-usuario` en `api/admin/usuario.ts`, con botón +
+   confirmación inline en `GestionUsuarios.tsx` (`/dashboard/admin/usuarios`), tanto para clientes
+   como técnicos. **Bloqueada si el usuario tiene historial real** (solicitudes, reseñas, o
+   cualquier cambio de estado que haya disparado, vía `solicitud_historial_estados.cambiado_por`)
+   — en ese caso se sugiere desactivar en su lugar (ya existe para técnicos vía `activo`; para
+   clientes con historial no hay equivalente de "deshabilitar" todavía, solo se bloquea el borrado
+   con un mensaje claro). Si no tiene historial: borra `tecnicos` (si aplica) → `usuarios` →
+   usuario de Supabase Auth, en ese orden.
+
+4. **Categoría nueva no le aparece al técnico/admin (causa raíz encontrada)** — el registro de
+   técnico identificaba las especialidades por **nombre** de categoría, no por `id`. Si un nombre
+   no calzaba exacto en el momento de guardar (por ejemplo, si se editó el nombre de una categoría
+   existente después de que la página de registro ya estaba cargada), la especialidad se perdía
+   **en silencio**, sin error — el técnico quedaba sin esa categoría y ni él ni el admin la veían.
+   Corregido de punta a punta para usar `id` (como ya hacía el resto de la app):
+   `registro.astro` (trae `id, nombre` en vez de solo `nombre`, y filtra `activa = true`),
+   `RegistroForm.tsx` (especialidades y subcategorías ahora se manejan por `id`), y
+   `api/registro-tecnico.ts` (matchea por `id`, no por `nombre`). `GestionEspecialidades.tsx`
+   (agregar especialidad después del registro, desde el panel del técnico) ya usaba `id`
+   correctamente — no tenía este bug.
+
+5. **Cliente ve "Pendiente" duplicado con fechas distintas** — confirmado: es un efecto colateral
+   de la extensión reciente del flujo "asignada" (2026-07-29). Ese estado intermedio queda
+   registrado en el historial real de la solicitud, y como al cliente se le muestra igual que
+   "Pendiente" (a propósito, no debe enterarse de la asignación sin confirmar), el timeline le
+   terminaba mostrando dos líneas de "Pendiente" con horarios distintos. Arreglado filtrando las
+   entradas de `asignada` del timeline que ve el cliente (`dashboard/cliente/solicitud/[id].astro`)
+   — técnico y admin siguen viendo su timeline real, sin cambios.
+
+6. **Cliente ve el teléfono del técnico / le falta info** — sacado el teléfono (privacidad — el
+   contacto pasa por la plataforma). Se agregó foto de perfil, calificación, descripción y chips de
+   especialidades del técnico asignado. Para las reseñas, en vez de duplicar esa lógica ahí, se
+   agregó un link "Ver perfil completo y reseñas →" al perfil público del técnico (que ya las
+   muestra).
+
+7. **Admin no recibe aviso de trabajo terminado** — sumado un bloque de notificación (mail +
+   in-app) al admin cuando una solicitud pasa a `completada`, en el mismo punto único de
+   `notificarCambioEstado()` donde ya se notifican los demás cambios — cubre tanto cuando lo
+   completa el técnico como cuando lo cambia el admin a mano.
+
+8. **Técnico no recibía el costo de los materiales (bug de plata real)** — el más importante.
+   Cuando el técnico cargaba gastos extra (materiales), el cliente sí los pagaba, pero las
+   pantallas de "Vas a recibir" (técnico) y "Técnico recibe" / "Plataforma retiene" (admin) solo
+   calculaban con el precio base — la plataforma se estaba quedando de más con el valor de los
+   materiales, en vez de que ese monto pasara íntegro al técnico. Corregido en
+   `dashboard/tecnico/solicitud/[id].astro` y `dashboard/admin/solicitud/[id].astro`: el técnico
+   ahora recibe precio base + gastos extra, y la plataforma retiene solo su comisión (%) real.
+   **No afecta pagos ya procesados** — es una corrección de cómo se calcula/muestra, no de datos
+   ya guardados.
+
+**Falta probar (checklist):**
+- [ ] Campanita: confirmar que se ve el ícono nuevo en las 3 vistas (desktop/mobile).
+- [ ] Aprobar un técnico pendiente → confirmar que se ven email/teléfono/CVU/descripción antes de aprobar.
+- [ ] Eliminar un cliente/técnico sin historial → se borra y no puede volver a loguearse.
+- [ ] Intentar eliminar uno **con** historial → debe bloquear con el mensaje claro.
+- [ ] Crear una categoría nueva → que un técnico la pueda elegir al registrarse y que quede guardada (chequear en el admin que aparece la especialidad).
+- [ ] Editar el nombre de una categoría existente → confirmar que ya no rompe nada para técnicos que se registren después.
+- [ ] Flujo completo asignar → confirmar como técnico → revisar que el cliente ve **una sola** línea de "Pendiente" en el timeline.
+- [ ] Panel cliente, solicitud con técnico asignado → confirmar que no se ve el teléfono, y que sí se ve foto/descripción/especialidades + el link al perfil.
+- [ ] Como técnico, completar un trabajo → confirmar que el admin recibe la notificación.
+- [ ] Completar un trabajo con gastos extra → confirmar en pantalla de técnico y de admin que "vas a recibir"/"técnico recibe" incluye el precio base **más** los gastos extra, y que "plataforma retiene" es solo la comisión.
 
 ---
 

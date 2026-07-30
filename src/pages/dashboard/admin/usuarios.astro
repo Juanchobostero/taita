@@ -20,7 +20,7 @@ const [{ data: rawClientes }, { data: rawTecnicos }] = await Promise.all([
   supabase
     .from('tecnicos')
     .select(`
-      id, activo, zona_cobertura, tarifa_hora, nick, mostrar_nombre, descripcion,
+      id, activo, zona_cobertura, tarifa_hora, nick, mostrar_nombre, descripcion, cvu,
       usuarios!inner ( id, nombre_completo, email, telefono, creado_en )
     `)
     .order('usuarios(nombre_completo)')
@@ -36,6 +36,7 @@ const tecnicos = (rawTecnicos ?? []).map((t: any) => ({
   nick:            t.nick,
   mostrar_nombre:  t.mostrar_nombre,
   descripcion:     t.descripcion,
+  cvu:             t.cvu,
   usuarioId:       t.usuarios.id,
   nombre_completo: t.usuarios.nombre_completo,
   email:           t.usuarios.email,

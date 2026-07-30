@@ -242,6 +242,24 @@ export async function notificarCambioEstado(
       sol.id,
     )
   }
+
+  // El técnico terminó el trabajo — el admin no se enteraba de esto antes (pedido de Agustín).
+  if (estadoNuevo === 'completada') {
+    await enviarEmail({
+      to:      ADMIN_EMAIL,
+      subject: `Trabajo completado — ${sol.titulo}`,
+      html: `
+        <p>El técnico <strong>${tecnico?.nombre_completo ?? '—'}</strong> marcó como completada la
+        solicitud <strong>${sol.titulo}</strong>${cliente ? ` (cliente: ${cliente.nombre_completo})` : ''}.</p>
+      `,
+    })
+    await crearNotificacionesAdmin(
+      supabase,
+      `Trabajo completado — ${sol.titulo}`,
+      `Técnico: ${tecnico?.nombre_completo ?? '—'}.`,
+      sol.id,
+    )
+  }
 }
 
 /** Email + notificación in-app a cliente y admin al crear una solicitud nueva (Paso 2.1 del backlog). */

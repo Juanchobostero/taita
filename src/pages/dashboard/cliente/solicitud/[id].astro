@@ -22,7 +22,11 @@ const { data: sol } = await supabase
     gastos_extra, descripcion_gastos, imagenes_trabajo,
     conformidad_cliente, conformidad_en,
     fecha_solicitada, hora_solicitada, direccion,
-    tecnicos ( usuarios ( nombre_completo, telefono ) ),
+    tecnicos (
+      descripcion, calificacion_promedio, total_servicios,
+      usuarios ( nombre_completo, foto_url ),
+      especialidades_tecnico ( categorias ( nombre ) )
+    ),
     categorias ( nombre, icono )
   `)
   .eq('id', id)
@@ -108,9 +112,12 @@ const estadoDot: Record<string, string> = {
 
 // El historial (Tanda 2) arranca desde el primer cambio real — "pendiente" no queda registrado
 // porque la solicitud se crea directo en ese estado. Se agrega acá como primer paso del timeline.
+// Se filtra "asignada" del historial real porque el cliente no debe enterarse de ese estado
+// intermedio (se le muestra igual que "pendiente" en toda la vista) — sin este filtro, el cambio
+// a "asignada" aparecía como un segundo "Pendiente" duplicado con otra fecha.
 const timeline = [
   { estado: 'pendiente', creado_en: sol.creado_en },
-  ...(rawHistorial ?? []),
+  ...(rawHistorial ?? []).filter(h => h.estado !== 'asignada'),
 ]
 
 const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0 })}`
@@ -168,18 +175,39 @@ const fmtFechaHora = (iso: string) =>
             </div>
           </div>
 
-          <!-- Técnico asignado -->
+          <!-- Técnico asignado — sin teléfono a propósito (privacidad); el contacto pasa siempre
+               por la plataforma -->
           <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
             <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Técnico asignado</h2>
             {tecnico?.usuarios && sol.estado !== 'asignada' ? (
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                  {tecnico.usuarios.nombre_completo?.split(' ').slice(0, 2).map((p: string) => p[0]).join('')}
+              <div class="flex flex-col gap-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-sm shrink-0 overflow-hidden">
+                    {tecnico.usuarios.foto_url
+                      ? <img src={tecnico.usuarios.foto_url} alt={tecnico.usuarios.nombre_completo} class="w-full h-full object-cover" />
+                      : tecnico.usuarios.nombre_completo?.split(' ').slice(0, 2).map((p: string) => p[0]).join('')
+                    }
+                  </div>
+                  <div class="flex flex-col gap-0.5">
+                    <p class="font-semibold text-gray-900 text-sm">{tecnico.usuarios.nombre_completo}</p>
+                    <p class="text-xs text-gray-400">
+                      ⭐ {Number(tecnico.calificacion_promedio ?? 0).toFixed(1)} ({tecnico.total_servicios ?? 0} servicios)
+                    </p>
+                  </div>
                 </div>
-                <div class="flex flex-col gap-0.5">
-                  <p class="font-semibold text-gray-900 text-sm">{tecnico.usuarios.nombre_completo}</p>
-                  {tecnico.usuarios.telefono && <p class="text-xs text-gray-400">📞 {tecnico.usuarios.telefono}</p>}
-                </div>
+                {tecnico.descripcion && <p class="text-sm text-gray-600 leading-relaxed">{tecnico.descripcion}</p>}
+                {tecnico.especialidades_tecnico?.length > 0 && (
+                  <div class="flex flex-wrap gap-1.5">
+                    {tecnico.especialidades_tecnico.map((e: any) => e.categorias?.nombre).filter(Boolean).map((nombre: string) => (
+                      <span class="bg-primary-soft text-primary text-xs font-medium px-2.5 py-1 rounded-full">{nombre}</span>
+                    ))}
+                  </div>
+                )}
+                {sol.tecnico_id && (
+                  <a href={`/tecnicos/${sol.tecnico_id}`} class="text-primary hover:text-primary-hover text-xs font-semibold w-fit">
+                    Ver perfil completo y reseñas →
+                  </a>
+                )}
               </div>
             ) : (
               <p class="text-sm text-amber-600">Todavía no se asignó un técnico.</p>

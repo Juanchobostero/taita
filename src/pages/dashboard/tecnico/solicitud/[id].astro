@@ -261,7 +261,7 @@ const fmtFechaHora = (iso: string) =>
                 )}
                 <div class="border-t border-cream pt-3 flex justify-between">
                   <span class="font-semibold text-gray-900">Vas a recibir</span>
-                  <span class="font-bold text-gray-900">{fmt(precioBase)}</span>
+                  <span class="font-bold text-gray-900">{fmt(precioBase + (gastosExtra ?? 0))}</span>
                 </div>
               </div>
             )}

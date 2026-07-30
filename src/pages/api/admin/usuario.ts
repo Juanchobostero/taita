@@ -47,6 +47,63 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return new Response(JSON.stringify({ ok: true, activo: nuevoActivo }), { status: 200 })
     }
 
+    // Borra un cliente o técnico por completo (perfil + login). Solo si no tiene ningún historial
+    // real asociado — solicitudes, reseñas, o cambios de estado que haya disparado — para no
+    // perder ese registro. Si tiene historial, se bloquea y se sugiere desactivar en su lugar
+    // (pedido de Agustín: "poder eliminar usuarios").
+    else if (accion === 'eliminar-usuario') {
+      const { usuarioId } = body
+      if (!usuarioId) return new Response(JSON.stringify({ error: 'usuarioId requerido' }), { status: 400 })
+
+      const { data: objetivo } = await supabase.from('usuarios').select('tipo').eq('id', usuarioId).single()
+      if (!objetivo) return new Response(JSON.stringify({ error: 'Usuario no encontrado' }), { status: 404 })
+
+      let tecnicoRowId: string | null = null
+      const checks: Promise<{ count: number | null }>[] = [
+        supabase.from('solicitud_historial_estados').select('*', { count: 'exact', head: true }).eq('cambiado_por', usuarioId),
+      ]
+
+      if (objetivo.tipo === 'cliente') {
+        checks.push(
+          supabase.from('solicitudes').select('*', { count: 'exact', head: true }).eq('cliente_id', usuarioId),
+          supabase.from('resenas').select('*', { count: 'exact', head: true }).eq('cliente_id', usuarioId),
+        )
+      } else if (objetivo.tipo === 'tecnico') {
+        const { data: tec } = await supabase.from('tecnicos').select('id').eq('usuario_id', usuarioId).single()
+        tecnicoRowId = tec?.id ?? null
+        if (tecnicoRowId) {
+          checks.push(
+            supabase.from('solicitudes').select('*', { count: 'exact', head: true }).eq('tecnico_id', tecnicoRowId),
+            supabase.from('resenas').select('*', { count: 'exact', head: true }).eq('tecnico_id', tecnicoRowId),
+          )
+        }
+      }
+
+      const resultados  = await Promise.all(checks)
+      const tieneHistorial = resultados.some(r => (r.count ?? 0) > 0)
+
+      if (tieneHistorial) {
+        return new Response(JSON.stringify({
+          error: objetivo.tipo === 'tecnico'
+            ? 'No se puede eliminar: tiene solicitudes, reseñas o cambios de estado asociados. Desactivalo en su lugar para sacarlo de circulación.'
+            : 'No se puede eliminar: tiene solicitudes o reseñas asociadas — se perdería ese historial.',
+        }), { status: 409 })
+      }
+
+      // Orden importa: primero la fila de `tecnicos` (por si acaso no tuviera ON DELETE CASCADE
+      // desde `usuarios`), después el perfil, y por último el login en Supabase Auth.
+      if (tecnicoRowId) {
+        const { error } = await supabase.from('tecnicos').delete().eq('id', tecnicoRowId)
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
+      }
+
+      const { error: errUsuario } = await supabase.from('usuarios').delete().eq('id', usuarioId)
+      if (errUsuario) return new Response(JSON.stringify({ error: errUsuario.message }), { status: 500 })
+
+      const { error: errAuth } = await supabase.auth.admin.deleteUser(usuarioId)
+      if (errAuth) console.error('[eliminar-usuario] usuario borrado del perfil pero no de Auth:', errAuth.message)
+    }
+
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   } catch (err) {
     console.error('[api/admin/usuario]', err)

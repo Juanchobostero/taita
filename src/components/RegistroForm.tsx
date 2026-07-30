@@ -183,8 +183,17 @@ function ClienteForm() {
   )
 }
 
+interface CategoriaOpcion {
+  id:     string
+  nombre: string
+}
+
 // ── Técnico form ───────────────────────────────────────────────────────────
-function TecnicoForm({ especialidades }: { especialidades: string[] }) {
+// Las especialidades se identifican por `id` de categoría (no por nombre) — antes se guardaban y
+// enviaban por nombre, y si una categoría se editaba (cambiaba de nombre) después de que el
+// técnico hubiera cargado la página, el guardado fallaba en silencio: la especialidad quedaba sin
+// asociar porque el nombre ya no calzaba con ninguna categoría existente.
+function TecnicoForm({ especialidades }: { especialidades: CategoriaOpcion[] }) {
   const [serverError, setServerError] = useState('')
   const [subcats, setSubcats]         = useState<Record<string, string[]>>({})
 
@@ -302,21 +311,21 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
       <div className="flex flex-col gap-1.5">
         <Label>Especialidades <span className="text-gray-400 text-xs">(seleccioná todas las que apliquen)</span></Label>
         <div className="flex flex-col gap-2">
-          {especialidades.map(e => {
-            const checked = selectedEsps.includes(e)
-            const subs    = subcats[e] ?? []
+          {especialidades.map(cat => {
+            const checked = selectedEsps.includes(cat.id)
+            const subs    = subcats[cat.id] ?? []
             return (
-              <div key={e} className={`border rounded-xl transition-colors ${checked ? 'border-primary-pale bg-primary-soft/30' : 'border-cream-dark'}`}>
+              <div key={cat.id} className={`border rounded-xl transition-colors ${checked ? 'border-primary-pale bg-primary-soft/30' : 'border-cream-dark'}`}>
                 <label className="flex items-center gap-2.5 cursor-pointer p-3">
                   <input
                     type="checkbox"
-                    value={e}
+                    value={cat.id}
                     {...register('especialidades', {
-                      onChange: (ev) => toggleSubcat(e, ev.target.checked)
+                      onChange: (ev) => toggleSubcat(cat.id, ev.target.checked)
                     })}
                     className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer shrink-0"
                   />
-                  <span className={`text-sm font-medium transition-colors ${checked ? 'text-primary' : 'text-gray-700'}`}>{e}</span>
+                  <span className={`text-sm font-medium transition-colors ${checked ? 'text-primary' : 'text-gray-700'}`}>{cat.nombre}</span>
                 </label>
 
                 {checked && (
@@ -330,16 +339,16 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
                           value={val}
                           maxLength={40}
                           placeholder={`Subcategoría ${idx + 1}`}
-                          onChange={ev => updateSubcat(e, idx, ev.target.value)}
+                          onChange={ev => updateSubcat(cat.id, idx, ev.target.value)}
                           className="flex-1 border border-cream-dark rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary bg-white"
                         />
                         {subs.length > 1 && (
-                          <button type="button" onClick={() => removeSubcat(e, idx)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+                          <button type="button" onClick={() => removeSubcat(cat.id, idx)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
                         )}
                       </div>
                     ))}
                     {subs.length < 5 && (
-                      <button type="button" onClick={() => addSubcat(e)} className="text-xs text-primary hover:underline w-fit mt-0.5">
+                      <button type="button" onClick={() => addSubcat(cat.id)} className="text-xs text-primary hover:underline w-fit mt-0.5">
                         + Agregar subcategoría
                       </button>
                     )}
@@ -414,7 +423,7 @@ function TecnicoForm({ especialidades }: { especialidades: string[] }) {
 }
 
 // ── Root ───────────────────────────────────────────────────────────────────
-export default function RegistroForm({ especialidades = [] }: { especialidades?: string[] }) {
+export default function RegistroForm({ especialidades = [] }: { especialidades?: CategoriaOpcion[] }) {
   const [tipo, setTipo] = useState<'cliente' | 'tecnico'>('cliente')
 
   useEffect(() => {

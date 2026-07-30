@@ -17,6 +17,7 @@ interface TecnicoRow {
   nick:            string | null
   mostrar_nombre:  boolean
   descripcion:     string | null
+  cvu:             string | null
   nombre_completo: string
   email:           string
   telefono:        string | null
@@ -39,6 +40,9 @@ function FilaCliente({ c }: { c: Cliente }) {
   const [telefono, setTelefono] = useState(c.telefono ?? '')
   const [expanded, setExpanded] = useState(false)
   const [save, setSave] = useSave()
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false)
+  const [eliminando, setEliminando] = useState(false)
+  const [errorEliminar, setErrorEliminar] = useState('')
 
   const guardar = async () => {
     setSave('saving')
@@ -48,6 +52,20 @@ function FilaCliente({ c }: { c: Cliente }) {
       body: JSON.stringify({ accion: 'editar-usuario', usuarioId: c.id, nombre_completo: nombre, telefono }),
     })
     setSave(res.ok ? 'ok' : 'error')
+  }
+
+  const eliminar = async () => {
+    setEliminando(true)
+    setErrorEliminar('')
+    const res = await fetch('/api/admin/usuario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'eliminar-usuario', usuarioId: c.id }),
+    })
+    if (res.ok) { window.location.reload(); return }
+    const json = await res.json().catch(() => ({}))
+    setErrorEliminar(json.error ?? 'No se pudo eliminar')
+    setEliminando(false)
   }
 
   const btn = {
@@ -98,7 +116,7 @@ function FilaCliente({ c }: { c: Cliente }) {
               />
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <button
               onClick={(e) => { e.stopPropagation(); guardar() }}
               disabled={save === 'saving'}
@@ -106,7 +124,33 @@ function FilaCliente({ c }: { c: Cliente }) {
             >
               {btn.label}
             </button>
+            {!confirmandoEliminar && (
+              <button
+                onClick={e => { e.stopPropagation(); setConfirmandoEliminar(true) }}
+                className="text-xs font-medium px-3 py-1.5 rounded-full border border-cream-dark text-gray-400 hover:border-red-300 hover:text-red-500 transition-colors"
+              >
+                Eliminar
+              </button>
+            )}
           </div>
+          {confirmandoEliminar && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex flex-col gap-2 text-xs text-red-700" onClick={e => e.stopPropagation()}>
+              <p>¿Seguro que querés eliminar a <strong>{nombre}</strong>? Es definitivo — se borra el login y el perfil.</p>
+              {errorEliminar && <p className="font-semibold">{errorEliminar}</p>}
+              <div className="flex items-center gap-4">
+                <button
+                  disabled={eliminando}
+                  onClick={eliminar}
+                  className="font-semibold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-full transition-colors disabled:opacity-50"
+                >
+                  {eliminando ? 'Eliminando...' : 'Sí, eliminar'}
+                </button>
+                <button disabled={eliminando} onClick={() => setConfirmandoEliminar(false)} className="text-gray-500 hover:text-gray-700">
+                  Volver
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -118,9 +162,35 @@ function FilaTecnico({ t: inicial }: { t: TecnicoRow }) {
   const [expanded, setExpanded] = useState(false)
   const [save,     setSave]     = useSave()
   const [toggling, setToggling] = useState(false)
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false)
+  const [eliminando, setEliminando] = useState(false)
+  const [errorEliminar, setErrorEliminar] = useState('')
+  const [mostrarCvu, setMostrarCvu] = useState(false)
+  const [cvuCopiado, setCvuCopiado] = useState(false)
+
+  const copiarCvu = async () => {
+    if (!t.cvu) return
+    await navigator.clipboard.writeText(t.cvu)
+    setCvuCopiado(true)
+    setTimeout(() => setCvuCopiado(false), 1500)
+  }
 
   const update = (field: keyof TecnicoRow, val: unknown) =>
     setT(prev => ({ ...prev, [field]: val }))
+
+  const eliminar = async () => {
+    setEliminando(true)
+    setErrorEliminar('')
+    const res = await fetch('/api/admin/usuario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'eliminar-usuario', usuarioId: t.usuarioId }),
+    })
+    if (res.ok) { window.location.reload(); return }
+    const json = await res.json().catch(() => ({}))
+    setErrorEliminar(json.error ?? 'No se pudo eliminar')
+    setEliminando(false)
+  }
 
   const guardar = async () => {
     setSave('saving')
@@ -257,6 +327,34 @@ function FilaTecnico({ t: inicial }: { t: TecnicoRow }) {
                 className="border border-cream-dark rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary bg-white resize-none"
               />
             </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400">CVU / CBU</label>
+              <div className="flex items-center gap-2">
+                <span className="border border-cream-dark rounded-lg px-3 py-1.5 text-sm bg-cream/40 flex-1 font-mono">
+                  {t.cvu ? (mostrarCvu ? t.cvu : '•'.repeat(Math.min(t.cvu.length, 22))) : '—'}
+                </span>
+                {t.cvu && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setMostrarCvu(v => !v) }}
+                      className="text-gray-400 hover:text-primary transition-colors shrink-0 cursor-pointer"
+                      title={mostrarCvu ? 'Ocultar' : 'Mostrar'}
+                    >
+                      {mostrarCvu ? '🙈' : '👁️'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); copiarCvu() }}
+                      className="text-gray-400 hover:text-primary transition-colors shrink-0 cursor-pointer"
+                      title="Copiar"
+                    >
+                      {cvuCopiado ? '✅' : '📋'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
           <div className="flex gap-2 items-center">
             <button
@@ -277,7 +375,33 @@ function FilaTecnico({ t: inicial }: { t: TecnicoRow }) {
             >
               {toggling ? '…' : t.activo ? 'Desactivar' : 'Activar'}
             </button>
+            {!confirmandoEliminar && (
+              <button
+                onClick={e => { e.stopPropagation(); setConfirmandoEliminar(true) }}
+                className="text-xs font-medium px-3 py-1.5 rounded-full border border-cream-dark text-gray-400 hover:border-red-300 hover:text-red-500 transition-colors"
+              >
+                Eliminar
+              </button>
+            )}
           </div>
+          {confirmandoEliminar && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex flex-col gap-2 text-xs text-red-700" onClick={e => e.stopPropagation()}>
+              <p>¿Seguro que querés eliminar a <strong>{t.nombre_completo}</strong>? Es definitivo — se borra el login y el perfil. Si tiene solicitudes o reseñas asociadas, no se va a poder — usá "Desactivar" en su lugar.</p>
+              {errorEliminar && <p className="font-semibold">{errorEliminar}</p>}
+              <div className="flex items-center gap-4">
+                <button
+                  disabled={eliminando}
+                  onClick={eliminar}
+                  className="font-semibold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-full transition-colors disabled:opacity-50"
+                >
+                  {eliminando ? 'Eliminando...' : 'Sí, eliminar'}
+                </button>
+                <button disabled={eliminando} onClick={() => setConfirmandoEliminar(false)} className="text-gray-500 hover:text-gray-700">
+                  Volver
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
