@@ -6,7 +6,7 @@ const SITE_URL = 'https://taitasoluciones.com.ar'
 // Páginas fijas de contenido público — se excluyen a propósito login/registro (sin valor de
 // búsqueda) y todo lo que vive bajo /dashboard o /api (privado, ya bloqueado en robots.txt).
 const PAGINAS_FIJAS = [
-  '', 'como-funciona', 'solicitud', 'tecnicos', 'contacto', 'reclamos', 'terminos', 'privacidad',
+  '', 'como-funciona', 'solicitud', 'tecnicos', 'categorias', 'contacto', 'reclamos', 'terminos', 'privacidad',
 ]
 
 function url(loc: string, prioridad: string): string {

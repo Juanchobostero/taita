@@ -5,10 +5,14 @@ import { createSupabaseAdmin } from '../lib/supabase-admin'
 import { toSlug } from '../lib/types'
 
 const supabase = createSupabaseAdmin()
+// Solo las categorías que el admin marcó como "destacada" (máximo 9, se controla desde
+// /dashboard/admin/categorias) — el resto se ve en /categorias ("Ver más"). El .limit(9) queda
+// como respaldo por si alguna vez hubiera más de 9 marcadas.
 const { data: categoriasDB } = await supabase
   .from('categorias')
   .select('id, nombre, icono, imagen_url')
   .eq('activa', true)
+  .eq('destacada', true)
   .order('nombre')
   .limit(9)
 
@@ -116,6 +120,14 @@ const jsonLd = {
             <span class="text-sm font-semibold text-gray-700 group-hover:text-primary transition-colors text-center">{c.nombre}</span>
           </a>
         ))}
+      </div>
+      <div class="flex justify-center mt-8">
+        <a
+          href="/categorias"
+          class="bg-primary hover:bg-primary-hover text-white font-semibold px-8 py-3 rounded-full text-sm transition-colors shadow-sm"
+        >
+          Ver más categorías →
+        </a>
       </div>
     </div>
   </section>

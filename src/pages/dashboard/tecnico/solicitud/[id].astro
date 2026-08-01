@@ -107,7 +107,7 @@ const puedeCompletar = sol.estado === 'aceptada' || sol.estado === 'en_curso' ||
 
 const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0 })}`
 const fmtFechaHora = (iso: string) =>
-  new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
 ---
 
 <Layout title={`Solicitud — ${sol.titulo}`}>
@@ -127,7 +127,7 @@ const fmtFechaHora = (iso: string) =>
             <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl">{sol.titulo}</h1>
             <p class="text-gray-400 text-sm">
               {categoria?.icono} {categoria?.nombre} ·
-              Creada el {new Date(sol.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+              Creada el {new Date(sol.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
             </p>
           </div>
           <span class={`text-sm font-semibold px-4 py-1.5 rounded-full w-fit ${estadoColor[sol.estado]}`}>

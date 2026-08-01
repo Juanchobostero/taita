@@ -18,6 +18,7 @@ interface Categoria {
   porcentaje_tasa: number
   precio_base:     number | null
   activa:          boolean
+  destacada:       boolean
 }
 
 function ImagenUpload({ catId, imagenUrl, onUpdate }: {
@@ -301,6 +302,7 @@ function FilaCategoria({ cat, onUpdate, onRemove }: {
   const [confirmDel, setConfirmDel] = useState(false)
   const [errorMsg,   setErrorMsg]   = useState<string | null>(null)
   const [expanded,   setExpanded]   = useState(false)
+  const [togglingDestacada, setTogglingDestacada] = useState(false)
 
   const guardar = async () => {
     setErrorMsg(null)
@@ -330,6 +332,24 @@ function FilaCategoria({ cat, onUpdate, onRemove }: {
     if (res.ok) {
       const json = await res.json().catch(() => ({}))
       onUpdate({ ...cat, activa: json.activa ?? !cat.activa })
+    }
+  }
+
+  const toggleDestacada = async () => {
+    setErrorMsg(null)
+    setTogglingDestacada(true)
+    const res = await fetch('/api/admin/categoria', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'toggle-destacada', catId: cat.id, destacada: cat.destacada }),
+    })
+    setTogglingDestacada(false)
+    if (res.ok) {
+      const json = await res.json().catch(() => ({}))
+      onUpdate({ ...cat, destacada: json.destacada ?? !cat.destacada })
+    } else {
+      const json = await res.json().catch(() => ({}))
+      setErrorMsg(json.error ?? 'No se pudo actualizar.')
     }
   }
 
@@ -402,6 +422,20 @@ function FilaCategoria({ cat, onUpdate, onRemove }: {
         }`}
       >
         {toggling ? '…' : cat.activa ? 'Desactivar' : 'Activar'}
+      </button>
+
+      <button
+        type="button"
+        onClick={toggleDestacada}
+        disabled={togglingDestacada}
+        title="Mostrar en la página principal"
+        className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors shrink-0 ${
+          cat.destacada
+            ? 'border-amber-300 text-amber-600 bg-amber-50 hover:bg-amber-100'
+            : 'border-cream-dark text-gray-300 hover:border-amber-300 hover:text-amber-500'
+        }`}
+      >
+        {togglingDestacada ? '…' : cat.destacada ? '⭐ Destacada' : '☆ Destacar'}
       </button>
 
       {/* Eliminar (solo inactivas) */}
@@ -508,24 +542,32 @@ function NuevaCategoria({ onCrear }: { onCrear: (cat: Categoria) => void }) {
 export default function GestionCategorias({ inicial }: { inicial: Categoria[] }) {
   const [categorias, setCategorias] = useState(inicial)
 
-  const activas = categorias.filter(c => c.activa).length
+  const activas    = categorias.filter(c => c.activa).length
+  const destacadas = categorias.filter(c => c.destacada).length
 
   return (
     <div className="bg-white rounded-2xl border border-cream-dark overflow-hidden">
       <div className="px-6 py-4 border-b border-cream flex items-center justify-between">
-        <p className="text-xs text-gray-400">Editá nombre, ícono, precio base y tasa. Activá o desactivá cada categoría.</p>
-        <span className="text-xs text-gray-400">{categorias.length} registradas · {activas} activas</span>
+        <p className="text-xs text-gray-400">
+          Editá nombre, ícono, precio base y tasa. "Destacar" la muestra en la página principal (máximo 9).
+        </p>
+        <span className="text-xs text-gray-400">{categorias.length} registradas · {activas} activas · {destacadas}/9 destacadas</span>
       </div>
       <div className="divide-y divide-cream">
         {categorias.map(c => (
           <FilaCategoria
             key={c.id}
             cat={c}
-            onUpdate={updated => setCategorias(prev => prev.map(x => x.id === updated.id ? updated : x))}
+            onUpdate={updated => setCategorias(prev =>
+              prev.map(x => x.id === updated.id ? updated : x)
+                  .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+            )}
             onRemove={id => setCategorias(prev => prev.filter(x => x.id !== id))}
           />
         ))}
-        <NuevaCategoria onCrear={cat => setCategorias(prev => [...prev, cat])} />
+        <NuevaCategoria onCrear={cat => setCategorias(prev =>
+          [...prev, cat].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+        )} />
       </div>
     </div>
   )

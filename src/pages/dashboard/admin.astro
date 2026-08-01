@@ -59,6 +59,7 @@ interface SolicitudReciente {
   titulo: string
   estado: string
   creado_en: string
+  fecha_solicitada: string | null
   tecnico_id: string | null
   usuarios: { nombre_completo: string } | null
   tecnicos: { id: string; usuarios: { nombre_completo: string } } | null
@@ -89,7 +90,7 @@ const [
   supabase
     .from('solicitudes')
     .select(`
-      id, titulo, estado, creado_en, tecnico_id,
+      id, titulo, estado, creado_en, fecha_solicitada, tecnico_id,
       usuarios!cliente_id ( nombre_completo ),
       tecnicos ( id, usuarios ( nombre_completo ) ),
       categorias ( nombre ),
@@ -187,7 +188,7 @@ const ingresos = (completadas ?? []).reduce((sum, s) => sum + ((s.total_estimado
                     {t.zona_cobertura && ` · ${t.zona_cobertura}`}
                   </p>
                   <p class="text-xs text-gray-400">
-                    Registrado el {new Date(t.usuarios.creado_en).toLocaleDateString('es-AR')}
+                    Registrado el {new Date(t.usuarios.creado_en).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
                   </p>
                   <!-- Datos para validar identidad antes de aprobar (pedido de Agustín) -->
                   <div class="mt-1 pt-1 border-t border-cream flex flex-col gap-0.5 text-xs text-gray-500">

@@ -6,6 +6,7 @@ interface SolicitudRow {
   titulo: string
   estado: string
   creado_en: string
+  fecha_solicitada: string | null
   tecnico_id: string | null
   usuarios: { nombre_completo: string } | null
   tecnicos: { id: string; usuarios: { nombre_completo: string } } | null
@@ -147,7 +148,7 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500">Técnico</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500">Estado</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500">Pago</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500">Fecha</th>
+                <th className="px-6 py-3 text-xs font-semibold text-gray-500">Fecha del servicio</th>
                 <th className="px-6 py-3"></th>
               </tr>
             </thead>
@@ -176,7 +177,10 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
                     }
                   </td>
                   <td className="px-6 py-3 text-gray-400 whitespace-nowrap">
-                    {new Date(s.creado_en).toLocaleDateString('es-AR')}
+                    {s.fecha_solicitada
+                      ? new Date(s.fecha_solicitada).toLocaleDateString('es-AR', { timeZone: 'UTC' })
+                      : new Date(s.creado_en).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })
+                    }
                   </td>
                   <td className="px-4 py-3">
                     <a

@@ -234,7 +234,7 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
             <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl">{sol.titulo}</h1>
             <p class="text-gray-400 text-sm">
               {categoria?.icono} {categoria?.nombre} ·
-              Creada el {new Date(sol.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+              Creada el {new Date(sol.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
             </p>
           </div>
           <span class={`text-sm font-semibold px-4 py-1.5 rounded-full w-fit ${estadoColor[sol.estado]}`}>
@@ -550,7 +550,7 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
               {sol.conformidad_cliente ? (
                 <p>
                   ✅ El cliente dio conformidad
-                  {sol.conformidad_en && ` el ${new Date(sol.conformidad_en).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`}.
+                  {sol.conformidad_en && ` el ${new Date(sol.conformidad_en).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}`}.
                 </p>
               ) : (
                 <p>⏳ Todavía no dio conformidad el cliente.</p>

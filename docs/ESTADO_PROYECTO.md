@@ -3,12 +3,15 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-07-30 — 8 correcciones a partir del feedback de Agustín en PDF
-(`TAITA_ERRORES.pdf`), **implementadas, pendientes de probar por Jota**. Antes, el mismo día:
-mejoras de SEO (sitemap, robots.txt, Open Graph, datos estructurados). El 2026-07-29: Mercado Pago
-Fase 1 probada en producción con credenciales de test, flujo de confirmación del técnico (asignada
-→ aceptada/rechazo), fix definitivo del Realtime del panel del cliente, y estilo de marca en los
-emails. Ver secciones correspondientes más abajo.
+**Última actualización:** 2026-07-31 — fix de husos horarios (todas las fechas/horas "reales" de
+la app ahora se muestran siempre en hora de Argentina, sin importar en qué huso corra el servidor)
++ la columna "Fecha" del admin ahora muestra la fecha del servicio en vez de la de creación, **falta
+probar**. Antes, el mismo día: categorías destacadas en la home + página "Ver más" (`/categorias`),
+**falta correr el SQL y probar**. El 2026-07-30: 8 correcciones a partir del feedback de Agustín en
+PDF (`TAITA_ERRORES.pdf`) y mejoras de SEO (sitemap, robots.txt, Open Graph, datos estructurados).
+El 2026-07-29: Mercado Pago Fase 1 probada en producción con credenciales de test, flujo de
+confirmación del técnico (asignada → aceptada/rechazo), fix definitivo del Realtime del panel del
+cliente, y estilo de marca en los emails. Ver secciones correspondientes más abajo.
 
 ---
 
@@ -617,6 +620,100 @@ tocar código — varios eran bugs reales, no solo pedidos de UI.
 - [ ] Panel cliente, solicitud con técnico asignado → confirmar que no se ve el teléfono, y que sí se ve foto/descripción/especialidades + el link al perfil.
 - [ ] Como técnico, completar un trabajo → confirmar que el admin recibe la notificación.
 - [ ] Completar un trabajo con gastos extra → confirmar en pantalla de técnico y de admin que "vas a recibir"/"técnico recibe" incluye el precio base **más** los gastos extra, y que "plataforma retiene" es solo la comisión.
+
+---
+
+## Categorías destacadas en la home + página "Ver más" — sesión 2026-07-31
+
+**✅ Implementado. Falta correr el SQL en Supabase y probar antes de dar por cerrado.**
+
+**Motivo:** la sección de categorías de la página principal traía las categorías con
+`.order('nombre').limit(9)` — ya con más de 9 categorías activas, algunas quedaban **ocultas en
+silencio** en el index (las últimas en orden alfabético), sin ninguna forma de elegir cuáles se
+mostraban ni de ver el resto. Encontrado a partir de un caso real reportado por Jota/Agustín
+("agregué una categoría y no aparece en la principal").
+
+**Cómo quedó, acordado con Agustín:**
+- Nueva columna `categorias.destacada` (boolean) — el admin elige manualmente cuáles categorías
+  aparecen en la home, con un **tope de 9** (se bloquea del lado del servidor si se intenta marcar
+  una décima, no solo del lado visual).
+- Nuevo botón "☆ Destacar" / "⭐ Destacada" en `/dashboard/admin/categorias`, junto a
+  Activar/Desactivar. El encabezado de esa pantalla muestra un contador `X/9 destacadas`.
+- La home (`index.astro`) ahora filtra `activa = true AND destacada = true` (antes solo `activa`
+  + límite fijo).
+- Nueva página pública **`/categorias`** — lista **todas** las categorías activas (no solo las
+  destacadas), mismo estilo de tarjeta que la home. Sumada al `sitemap.xml`.
+- Nuevo botón "Ver más categorías →" al final de la sección de categorías en la home, con el
+  estilo de marca (píldora verde), que lleva a `/categorias`.
+- **El click en cada categoría no cambió** — sigue llevando directo a `/solicitud?categoria=id`,
+  tanto en la home como en `/categorias` (decisión explícita: no se agregó ningún modal ni
+  selector de subitems por ahora, se evaluó y se descartó para esta vuelta).
+
+**SQL a correr en Supabase (aditivo, no rompe nada existente):**
+
+```sql
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS destacada boolean NOT NULL DEFAULT false;
+```
+
+**Importante:** como el default es `false`, después de correr esto **ninguna categoría va a
+aparecer en la home** hasta que el admin entre a `/dashboard/admin/categorias` y marque manualmente
+cuáles quiere destacar (hasta 9). Avisarle a Agustín de este paso antes de que se extrañe de ver la
+sección de categorías vacía en la home.
+
+**Falta probar:**
+- [ ] Correr el SQL de arriba.
+- [ ] Marcar 2-3 categorías como destacadas desde el admin → confirmar que aparecen en la home y
+      el resto no.
+- [ ] Intentar destacar una 10ma → debe bloquear con el mensaje de tope alcanzado.
+- [ ] Desmarcar una destacada → confirmar que desaparece de la home.
+- [ ] Entrar a `/categorias` → deben verse todas las categorías activas (destacadas o no).
+- [ ] Click en una categoría, tanto desde la home como desde `/categorias` → debe seguir llevando
+      igual que siempre a `/solicitud?categoria=id`.
+- [ ] Confirmar que `/categorias` aparece en `/sitemap.xml`.
+
+---
+
+## Fix de husos horarios + fecha del admin — sesión 2026-07-31
+
+**✅ Implementado. Falta probar en producción (en local casi no se nota, ver por qué abajo).**
+
+**Causa raíz:** todas las fechas/horas "reales" de la app (`creado_en`, `actualizado_en`,
+`conformidad_en`, fecha de reseñas, fecha de notificaciones, fecha del recibo de pago) se
+formateaban con `.toLocaleString('es-AR', {...})` o `.toLocaleDateString('es-AR', {...})` **sin
+especificar el huso horario** — en ese caso, JavaScript usa el huso horario de la máquina donde
+corre el código. En tu PC (huso Argentina) esto nunca se nota, pero en producción el código corre
+en el servidor de Vercel (confirmado que la base está en Oregon, EE.UU.), así que esas fechas se
+mostraban con **la hora del servidor, no la de Argentina** — encontrado por Jota con un caso real
+(conformidad marcada a la 1am ARG, mostrada como las 4am).
+
+**Nota importante — esto NO afecta a `fecha_solicitada`** (la fecha que el cliente elige para el
+servicio): esa ya se guarda como medianoche UTC a propósito y se muestra forzando
+`timeZone: 'UTC'` en todos lados desde la Tanda 3, para que nunca se corra un día — ese patrón
+sigue igual, no se tocó.
+
+**Arreglado:** se agregó `timeZone: 'America/Argentina/Buenos_Aires'` explícito a los 13 lugares
+que formateaban un instante real sin especificar huso:
+- Timeline de seguimiento (cliente y técnico) y "Creada el" (cliente, técnico y admin)
+- Fecha de conformidad del cliente (la que reportó Jota)
+- Campanita de notificaciones (los 3 roles)
+- Fecha de registro en Gestión de usuarios y en el panel admin
+- Fecha de reseñas en el perfil público del técnico
+- Fallback de fecha en las listas de "Mis solicitudes" (cliente) y "Solicitudes recibidas" (técnico)
+- Fecha de pago en el recibo PDF
+
+**Además, columna "Fecha" del admin corregida:** `TablaSolicitudesAdmin.tsx` mostraba
+`creado_en` (fecha en que el cliente hizo el pedido) — ahora muestra `fecha_solicitada` (fecha en
+que se va a realizar el servicio), que es lo que Agustín necesita ver de un vistazo. Se renombró
+el encabezado de la columna a "Fecha del servicio" para que quede claro. Si una solicitud no
+tuviera `fecha_solicitada` cargada (no debería pasar, es obligatoria al crear), cae de respaldo a
+`creado_en` en hora de Argentina.
+
+**Falta probar:**
+- [ ] En producción: revisar el timeline de una solicitud, la campanita, y la conformidad del
+      cliente → todas las horas deben coincidir con la hora real de Argentina al momento del hecho.
+- [ ] Panel admin, tabla principal → la columna ahora dice "Fecha del servicio" y muestra la fecha
+      elegida por el cliente, no la de creación.
+- [ ] Descargar un recibo de pago → la fecha de pago debe estar en hora de Argentina.
 
 ---
 

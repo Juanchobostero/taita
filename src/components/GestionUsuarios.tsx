@@ -90,7 +90,7 @@ function FilaCliente({ c }: { c: Cliente }) {
           <p className="text-xs text-gray-400 truncate">{c.email}</p>
         </div>
         <span className="text-xs text-gray-300 shrink-0">
-          {new Date(c.creado_en).toLocaleDateString('es-AR')}
+          {new Date(c.creado_en).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
         </span>
       </div>
       {expanded && (

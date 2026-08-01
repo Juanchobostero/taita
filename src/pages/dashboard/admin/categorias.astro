@@ -17,7 +17,7 @@ if (self?.tipo !== 'admin') return Astro.redirect('/dashboard/cliente')
 
 const { data: rawCategorias } = await supabase
   .from('categorias')
-  .select('id, nombre, icono, imagen_url, porcentaje_tasa, precio_base, activa')
+  .select('id, nombre, icono, imagen_url, porcentaje_tasa, precio_base, activa, destacada')
   .order('nombre')
 
 const categorias = rawCategorias ?? []

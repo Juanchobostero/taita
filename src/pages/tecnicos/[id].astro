@@ -159,7 +159,7 @@ const jsonLd = {
                   </div>
                   {r.comentario && <p class="text-gray-500 text-sm leading-relaxed">{r.comentario}</p>}
                   <p class="text-xs text-gray-300">
-                    {new Date(r.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    {new Date(r.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
                   </p>
                 </div>
               ))}

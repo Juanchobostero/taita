@@ -23,7 +23,7 @@ const BASE_SOLICITUD: Record<UserTipo, string> = {
 }
 
 function fmt(iso: string) {
-  return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
 }
 
 export default function NotificacionesBell({ userId, tipo }: Props) {

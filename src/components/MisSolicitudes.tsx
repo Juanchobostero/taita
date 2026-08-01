@@ -149,10 +149,11 @@ export default function MisSolicitudes({ userId, initialData, initialTotal }: Pr
           const ganancia = (total_ != null && base != null) ? total_ - base : null
           // fecha_solicitada es una fecha "pura" guardada a medianoche UTC — se formatea en UTC
           // para no correrla un día por el huso horario local. creado_en sí es un instante real,
-          // se muestra en hora local normalmente.
+          // se muestra siempre en hora de Argentina (no la del servidor, que en producción corre
+          // en otro huso).
           const fecha = s.fecha_solicitada
             ? new Date(s.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
-            : new Date(s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+            : new Date(s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
           const hora = s.hora_solicitada ? s.hora_solicitada.slice(0, 5) : null
 
           return (

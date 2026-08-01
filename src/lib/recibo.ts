@@ -30,7 +30,7 @@ export function generarReciboPDF(datos: DatosRecibo): Promise<Buffer> {
     doc.fontSize(10).fillColor('#000000')
     doc.text(`Nº de solicitud: ${datos.solicitudId}`)
     doc.text(`Nº de pago (Mercado Pago): ${datos.paymentId}`)
-    doc.text(`Fecha de pago: ${datos.fechaPago.toLocaleString('es-AR')}`)
+    doc.text(`Fecha de pago: ${datos.fechaPago.toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`)
     doc.moveDown()
 
     doc.fontSize(12).fillColor('#1B4D2E').text('Servicio')

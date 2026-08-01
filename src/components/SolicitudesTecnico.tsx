@@ -135,7 +135,7 @@ export default function SolicitudesTecnico({ tecnicoId, usuarioId, initialData }
                 <p className="text-xs text-gray-400">
                   📅 {s.fecha_solicitada
                     ? new Date(s.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
-                    : new Date(s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    : new Date(s.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
                   {s.hora_solicitada && ` ${s.hora_solicitada.slice(0, 5)} hs`}
                 </p>
               </div>

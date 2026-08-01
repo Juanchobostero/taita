@@ -33,6 +33,27 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return new Response(JSON.stringify({ ok: true, activa: nuevaActiva }), { status: 200 })
     }
 
+    // "Destacada" = aparece en la sección de categorías de la página principal. Se limita a 9
+    // como máximo (pedido de Agustín) para que esa sección no crezca sin control — el resto de
+    // las categorías se sigue viendo igual en /categorias ("Ver más").
+    else if (accion === 'toggle-destacada') {
+      const { catId, destacada } = body
+      if (!catId) return new Response(JSON.stringify({ error: 'Datos incompletos' }), { status: 400 })
+      const nuevaDestacada = destacada === true ? false : true
+
+      if (nuevaDestacada) {
+        const { count } = await supabase
+          .from('categorias').select('*', { count: 'exact', head: true }).eq('destacada', true)
+        if ((count ?? 0) >= 9) {
+          return new Response(JSON.stringify({ error: 'Ya hay 9 categorías destacadas — desmarcá una para poder agregar otra.' }), { status: 409 })
+        }
+      }
+
+      const { error } = await supabase.from('categorias').update({ destacada: nuevaDestacada }).eq('id', catId)
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
+      return new Response(JSON.stringify({ ok: true, destacada: nuevaDestacada }), { status: 200 })
+    }
+
     else if (accion === 'eliminar') {
       const { catId } = body
       if (!catId) return new Response(JSON.stringify({ error: 'Datos incompletos' }), { status: 400 })
@@ -53,7 +74,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       if (!nombre) return new Response(JSON.stringify({ error: 'Nombre requerido' }), { status: 400 })
       const { data, error } = await supabase.from('categorias')
         .insert({ nombre, icono: icono || null, porcentaje_tasa: porcentaje ?? 0, precio_base: precio_base ?? null, imagen_url: null, activa: true })
-        .select('id, nombre, icono, imagen_url, porcentaje_tasa, precio_base, activa')
+        .select('id, nombre, icono, imagen_url, porcentaje_tasa, precio_base, activa, destacada')
         .single()
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
       return new Response(JSON.stringify({ ok: true, categoria: data }), { status: 200 })
