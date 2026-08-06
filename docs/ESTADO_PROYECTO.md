@@ -3,7 +3,18 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-07-31 — fix de husos horarios (todas las fechas/horas "reales" de
+**Última actualización:** 2026-08-06 — arrancó la implementación de "mejoras finales" (ver
+`docs/taita-mejoras-finales.md`, requisitos de una meet con Agustín), yendo fase por fase,
+probando cada una antes de seguir con la próxima. Fases 1 a 3 (previsualizar el PDF del recibo, número de solicitud `#123` en toda la web, y mapa de
+ubicación con Leaflet) **implementadas y confirmadas por Jota**. Fase 4 (franja horaria del admin
+al asignar técnico) **implementada, falta correr el SQL y probar**. Fase 5 (botón del técnico para
+cerrar el servicio, nuevo estado `finalizada`) **implementada y confirmada por Jota** (con 3
+rondas de ajustes post-feedback ya resueltas — contadores, notificación al técnico, y modales de
+confirmación). Arrancó la Fase 6 (rediseño visual) — primer recorte, el wizard de "Solicitar
+servicio", **implementado, falta probar**. Ver sección "Mejoras finales — implementación por
+fases" más abajo para el plan completo y el detalle de cada fase.
+
+**Actualización anterior:** 2026-07-31 — fix de husos horarios (todas las fechas/horas "reales" de
 la app ahora se muestran siempre en hora de Argentina, sin importar en qué huso corra el servidor)
 + la columna "Fecha" del admin ahora muestra la fecha del servicio en vez de la de creación, **falta
 probar**. Antes, el mismo día: categorías destacadas en la home + página "Ver más" (`/categorias`),
@@ -1116,6 +1127,509 @@ código esté bien.
 
 Si `ALTER PUBLICATION` tira error porque la tabla ya está agregada (puede pasar si se corre el
 bloque dos veces), es seguro ignorarlo — significa que Realtime ya estaba habilitado.
+
+---
+
+## Mejoras finales — implementación por fases — sesión 2026-08-05 en adelante
+
+**Origen:** `docs/taita-mejoras-finales.md`, requisitos que Jota tomó de una reunión con Agustín
+(el admin/cliente de la plataforma). Son 8 puntos; se analizó cada uno (factibilidad + impacto en
+base de datos) y se acordó con Jota un plan de implementación en fases, de menor a mayor riesgo,
+probando cada fase en producción antes de arrancar la siguiente — no se implementan todas juntas.
+
+**Plan acordado (orden de ejecución):**
+
+| Fase | Qué | Estado |
+|---|---|---|
+| 1 | Previsualizar el PDF del recibo (modal en vez de solo descarga) | ✅ Implementado y confirmado |
+| 2 | Número de solicitud `#123` visible en toda la web | ✅ Implementado y confirmado |
+| 3 | Mapa con Leaflet en el formulario de solicitud + detalle | ✅ Confirmado |
+| 4 | Admin elige franja horaria (mañana/tarde/noche) al asignar técnico | ✅ Implementado, falta probar |
+| 5 | Botón de técnico para cerrar el servicio después del pago | ✅ Implementado, falta probar |
+| 6 | Rediseño visual (formulario + dashboards cliente/técnico) | 🔄 En curso — wizard de solicitud implementado, falta probar |
+| 7 | Subcategorías con precio + canal de "Solicitar cotización" (con chat cliente↔admin) | Pendiente — la más grande, al final |
+
+**Decisiones tomadas con Jota que valen para todo el plan:**
+- El chat interno para el flujo de cotización (Fase 7) **sí se incluye**, pese a que en una charla
+  anterior se había descartado el chat interno como feature general — se trata como una excepción
+  acotada a ese flujo puntual, no como mensajería general de la app.
+- Si el admin asigna una franja horaria (Fase 4) distinta a la que pidió el cliente, alcanza con
+  **notificarle** el cambio — no bloquea la asignación ni agrega un estado nuevo a la solicitud.
+- El canal de "Solicitar cotización" (Fase 7) es un canal **totalmente aparte** del flujo normal de
+  categoría-con-precio-fijo, no depende de si la categoría tiene subitems o no: es un checkbox que,
+  al tildarse, oculta el precio y muestra descripción + carga de imágenes.
+
+### Fase 1 — Previsualizar el PDF del recibo
+
+**✅ Implementado y confirmado por Jota (2026-08-05).**
+
+Antes, el botón "Descargar recibo" en el panel del cliente abría directo el PDF en una pestaña
+nueva o lo bajaba, según el navegador. Ahora hay dos acciones separadas:
+- **👁️ Ver recibo** — abre un modal con el PDF embebido (mismo patrón visual que la galería de
+  fotos del cierre del trabajo), sin salir de la página.
+- **⬇️ Descargar** — baja el archivo directo, usando el parámetro `download` de Supabase Storage
+  (fuerza `Content-Disposition: attachment` desde el propio storage, funciona cross-origin — el
+  atributo HTML `download` no sirve acá porque el link apunta a otro dominio).
+
+**Ajuste post-feedback:** el modal tenía mucho radio de borde (chocaba visualmente contra el visor
+nativo del PDF, que tiene esquinas cuadradas) y el botón de cerrar (✕) quedaba tapado detrás del
+navbar por empate de `z-index` (ambos en `z-50`). Se bajó el radio a `rounded-lg`, se subió el
+modal a `z-100`, y se movió el botón de cerrar para adentro del modal en vez de sobresalir.
+
+**Archivos:** `src/pages/dashboard/cliente/solicitud/[id].astro` (genera dos signed URLs — una para
+preview inline, otra con `{ download: true }`), `src/components/DarConformidad.tsx` (modal +
+botones). Sin impacto en base de datos.
+
+### Fase 2 — Número de solicitud (`#123`)
+
+**✅ Implementado. Falta correr el SQL en Supabase (no confirmado que Jota ya lo corrió) — una vez
+corrido, no hace falta ningún otro paso, el código ya está listo para leer la columna.**
+
+**Motivo:** las solicitudes se identificaban por UUID en todos lados — imposible de referenciar de
+palabra con un cliente o un técnico. Ahora cada solicitud tiene un número corto y correlativo
+(`#00123`) visible como parte del título en absolutamente todos los lugares donde antes se mostraba
+solo el título: los 3 listados (cliente/técnico/admin), las 3 páginas de detalle, el PDF del
+recibo, el título del checkout de Mercado Pago, y **todos** los emails y notificaciones in-app
+(nueva solicitud, cambios de estado, conformidad, pago acreditado/rechazado/reembolsado/
+contracargo, desasignación).
+
+**Cómo quedó:**
+- Columna nueva `solicitudes.numero` (`bigint`, autoincremental vía secuencia de Postgres, `UNIQUE`,
+  `NOT NULL`). Se backfillearon las solicitudes existentes numerándolas según `creado_en` antes de
+  enganchar la secuencia, para que no haya huecos ni duplicados.
+- Nueva función helper `etiqueta(sol)` en `src/lib/notificaciones.ts` → `` `#${numero} — ${titulo}` ``,
+  usada en absolutamente todos los emails/notificaciones de ese archivo (se reemplazó cada uso de
+  `sol.titulo` a mano, son ~25 lugares).
+- `notificarDesasignacion()` ahora recibe también `numeroSolicitud` (antes solo el título) — su
+  único caller (`admin/solicitud/[id].astro`, al desasignar un técnico) actualizado para pasarlo.
+
+**SQL corrido/a correr en Supabase (una sola vez):**
+
+```sql
+ALTER TABLE solicitudes ADD COLUMN numero bigint;
+
+WITH ordenado AS (
+  SELECT id, row_number() OVER (ORDER BY creado_en) AS rn FROM solicitudes
+)
+UPDATE solicitudes SET numero = ordenado.rn
+FROM ordenado WHERE solicitudes.id = ordenado.id;
+
+CREATE SEQUENCE solicitudes_numero_seq OWNED BY solicitudes.numero;
+SELECT setval('solicitudes_numero_seq', (SELECT COALESCE(MAX(numero), 0) FROM solicitudes));
+ALTER TABLE solicitudes ALTER COLUMN numero SET DEFAULT nextval('solicitudes_numero_seq');
+ALTER TABLE solicitudes ALTER COLUMN numero SET NOT NULL;
+ALTER TABLE solicitudes ADD CONSTRAINT solicitudes_numero_unique UNIQUE (numero);
+```
+
+**Nota de Jota tras probarlo:** el número se ve "medio gris" en los listados — es a propósito
+(estilo secundario/discreto, `text-gray-400`), pero se revisa igual junto con el resto de la
+paleta cuando se haga la Fase 6 (rediseño visual). No es un bug, queda anotado para no repetir la
+discusión.
+
+**Archivos tocados (13):** `src/lib/types.ts`, `src/lib/notificaciones.ts`, `src/lib/recibo.ts`,
+`src/components/{MisSolicitudes,SolicitudesTecnico,TablaSolicitudesAdmin}.tsx`,
+`src/pages/dashboard/{cliente,tecnico,admin}.astro`, `src/pages/dashboard/*/solicitud/[id].astro`
+(las 3), `src/pages/api/{cliente,tecnico,admin}/solicitudes.ts`,
+`src/pages/api/cliente/{dar-conformidad,reintentar-pago}.ts`.
+
+### Fase 3 — Mapa de ubicación (Leaflet)
+
+**✅ Implementado y confirmado por Jota (2026-08-05).**
+
+**Cómo quedó:**
+- Se agregó `leaflet` + `@types/leaflet` como dependencia del proyecto (`pnpm add -w leaflet`,
+  `pnpm add -w -D @types/leaflet` — el `-w` fue necesario porque el repo tiene un
+  `pnpm-workspace.yaml` que se declara a sí mismo como único paquete, así que pnpm lo trata como
+  "raíz del workspace"). Se usó Leaflet + tiles de OpenStreetMap directo, sin ninguna librería de
+  wrapper para React (`react-leaflet` no hacía falta) — un solo componente con `useEffect` alcanza
+  y evita otra capa de abstracción. **Sin costo ni API key** — a diferencia de Google Maps, ni los
+  tiles ni el geocoding requieren facturación.
+- Nuevo componente `src/components/MapaUbicacion.tsx` — mismo componente sirve para los dos casos:
+  - **Modo interactivo** (formulario de solicitud, `onChange` provisto): botón "🔍 Buscar dirección
+    en el mapa" (geocodifica lo que el cliente escribió en el campo Dirección), botón "📍 Usar mi
+    ubicación" (pide permiso de geolocalización del navegador), marcador arrastrable, y click en
+    cualquier punto del mapa para reubicarlo a mano.
+  - **Modo de solo lectura** (páginas de detalle, sin `onChange`): mapa fijo centrado en la
+    ubicación guardada, sin controles de edición.
+- Nuevo endpoint `src/pages/api/geocodificar.ts` — proxy server-side a Nominatim (el servicio de
+  geocoding gratuito de OpenStreetMap). Se armó como proxy en vez de llamarlo directo desde el
+  browser para poder mandar un `User-Agent` identificable, como pide la política de uso de
+  Nominatim.
+- El mapa en el formulario es **opcional** — si el cliente no lo toca, la solicitud se crea igual
+  sin `latitud`/`longitud` (ninguno de los dos campos es obligatorio), tal como se decidió en el
+  análisis inicial.
+- Mapa de solo lectura agregado a las 3 páginas de detalle (cliente/técnico/admin), debajo de la
+  dirección — solo se muestra si la solicitud tiene coordenadas guardadas.
+
+**SQL a correr en Supabase (aditivo, nullable — no rompe nada existente):**
+
+```sql
+ALTER TABLE solicitudes ADD COLUMN latitud  numeric;
+ALTER TABLE solicitudes ADD COLUMN longitud numeric;
+```
+
+**Ajustes post-feedback de Jota:**
+- El `window is not defined` original (SSR) se debía a que Leaflet toca `window` apenas se
+  importa, y Astro renderiza el componente en el servidor incluso con `client:load` (para generar
+  el HTML inicial), antes de que llegue a hidratar en el navegador. Se movió el `import('leaflet')`
+  a dinámico dentro de `useEffect` (que nunca corre en el servidor) — el import de tipos (`import
+  type L from 'leaflet'`) se mantiene estático porque se borra en compilación, no ejecuta nada.
+- El marcador no se veía (ícono roto) — con los PNG del ícono empaquetados localmente vía import
+  de Vite (`import x from 'leaflet/dist/images/marker-icon.png'`) la imagen no cargaba. Se cambió a
+  servir los 3 íconos desde el CDN de Leaflet (`unpkg.com`) en vez de bundlearlos — ya se depende
+  de servicios externos igual (tiles de OpenStreetMap, geocoding de Nominatim), así que no suma una
+  dependencia nueva en la práctica, y evita por completo los problemas de resolución de assets.
+- Se sacó el botón manual "Buscar dirección en el mapa" — ahora la búsqueda es automática: al
+  escribir en el campo Dirección del formulario, se geocodifica sola con un debounce de 900ms (para
+  no pegarle a Nominatim en cada tecla). El botón "Usar mi ubicación" se mantiene igual, porque ya
+  funcionaba bien.
+
+**Probado por Jota:** dirección escrita → mapa se ubica solo, marcador visible y correcto, vista de
+solo lectura en el detalle de la solicitud (ver captura "UBICACIÓN" en el detalle) — todo ok.
+
+**Ajuste post-feedback — autocompletado real en vez de auto-ubicar a ciegas:** Jota reportó que
+"Santa Fe 650" (dirección real, pero ambigua con el nombre de la provincia) lo mandaba a Neuquén —
+Nominatim, sin más contexto, devolvía cualquier coincidencia del país entero. Se rediseñó:
+- `src/pages/api/geocodificar.ts` ahora devuelve hasta 5 resultados (antes 1), con un sesgo suave
+  (`viewbox` + `bounded=0`, no excluye el resto del país) hacia la provincia de Corrientes — la
+  zona base de la plataforma hoy. No requiere permiso de geolocalización del usuario.
+- La búsqueda se movió de `MapaUbicacion.tsx` al propio `FormSolicitud.tsx`, como un dropdown de
+  sugerencias pegado al input de Dirección (mismo patrón que un autocompletado de Google Maps u
+  otros — pedido explícito de Jota). El cliente ve la lista y elige la correcta en vez de que el
+  sistema adivine y listo. `MapaUbicacion.tsx` quedó más simple: ya no busca nada, solo dibuja el
+  mapa y reacciona a lat/lng por props (más el botón de geolocalización, que ya andaba bien).
+- Probado con "santa fe 650": ahora las 5 sugerencias caen en la región litoral/NEA (Chaco, Entre
+  Ríos, Misiones, Santa Fe) en vez de saltar a Neuquén — mejora real, aunque no es 100% infalible
+  (no usa la ubicación real del usuario, es un sesgo regional fijo). Si en algún momento hace falta
+  más precisión, el siguiente paso sería sesgar por la geolocalización real del usuario en vez de
+  un viewbox fijo — no implementado todavía, quedó fuera de alcance de este ajuste puntual.
+- **Bug encontrado al probar:** el dropdown de sugerencias quedaba tapado detrás del mapa (no se
+  veían todas las opciones). Causa: Leaflet usa z-index internos altos (200 a 700) para sus capas,
+  y el contenedor del mapa no tenía `position`/`z-index` propio — sin eso, esos valores internos
+  "se escapan" y se comparan directo contra hermanos del mapa en el DOM (como el dropdown),
+  ganándole aunque el dropdown tuviera un z-index nominalmente más alto. Se arregló agregando
+  `relative z-0` al contenedor del mapa en `MapaUbicacion.tsx`, que aísla el apilado interno de
+  Leaflet — recomendable tenerlo en cuenta para cualquier overlay futuro que conviva con el mapa
+  (modales, tooltips, etc.), no es específico de este dropdown.
+
+**Archivos:** `src/components/MapaUbicacion.tsx` (nuevo), `src/pages/api/geocodificar.ts` (nuevo),
+`src/components/FormSolicitud.tsx`, `src/pages/api/crear-solicitud.ts`, `src/lib/types.ts`,
+`src/pages/dashboard/*/solicitud/[id].astro` (las 3). `package.json`/`pnpm-lock.yaml` (nueva
+dependencia `leaflet`).
+
+### Fase 4 — Franja horaria (mañana/tarde/noche) al asignar técnico
+
+**✅ Implementado. El autocompletado de dirección (con su fix de z-index) ya está confirmado por
+Jota (2026-08-05) — falta correr el SQL de `franja_asignada` y probar el flujo de asignación en sí
+(checklist más abajo) antes de dar toda la fase por cerrada.**
+
+**Cómo quedó, según lo acordado con Jota:**
+- `hora_solicitada` (lo que pide el cliente en el formulario) **no se tocó** — sigue siendo el
+  horario puntual de referencia, y sigue siendo la base del chequeo de choque de agenda exacto en
+  `disponibilidad.ts` (eso no cambió).
+- Nueva columna `solicitudes.franja_asignada` (`'manana' | 'tarde' | 'noche'`, nullable) — lo que
+  el admin le compromete al técnico al asignarlo. Es un campo **aparte**, no reemplaza nada.
+- Nuevos helpers en `src/lib/disponibilidad.ts`: `franjaDeHora()` (a qué franja cae una hora
+  puntual — mañana 08–12, tarde 12–18, noche 18–20, mismos límites que el horario laboral ya
+  existente) y `FRANJA_LABEL` (textos para mostrar).
+- El formulario de "Asignar técnico" del admin ahora tiene un segundo select obligatorio con las 3
+  franjas, **pre-seleccionado con la franja que corresponde al horario que pidió el cliente** (así
+  el caso común — sin fricción de horario — no exige tocar nada extra).
+- **Si el admin elige una franja distinta a la que pidió el cliente**, no se bloquea nada (el admin
+  decide) pero se dispara una notificación aparte al cliente (`notificarFranjaAsignada` en
+  `notificaciones.ts`, email + campanita) avisándole el cambio. Si coincide, no se manda nada de
+  más.
+- La franja elegida se conserva a través del flujo de conflicto de agenda (cuando el admin fuerza
+  la asignación reagendando) — viaja como parámetro en la URL y como campo oculto en el sub-form,
+  para no hacérsela elegir dos veces.
+- Se agregó un texto aclaratorio en el formulario de solicitud del cliente, debajo del horario
+  preferido: "El horario que elegís es preferencial — puede ajustarse según la disponibilidad del
+  técnico que te asignemos."
+- La franja asignada se muestra en las 3 páginas de detalle (admin, técnico, cliente) una vez que
+  hay técnico asignado.
+
+**SQL a correr en Supabase (aditivo, nullable — no rompe nada existente; sin CHECK constraint a
+propósito, la validación de los 3 valores vive en el código):**
+
+```sql
+ALTER TABLE solicitudes ADD COLUMN franja_asignada text;
+```
+
+**Falta probar (el SQL de franja + el flujo de asignación en sí — el autocompletado de dirección ya
+se probó y confirmó por separado, ver abajo):**
+- [ ] Correr el SQL de arriba.
+- [ ] Asignar un técnico a una solicitud → confirmar que el select de franja aparece pre-marcado
+      con la franja que corresponde al horario que pidió el cliente.
+- [ ] Asignar con la franja sugerida (sin cambiarla) → el cliente NO debe recibir ningún aviso de
+      cambio de horario.
+- [ ] Asignar con una franja distinta a la sugerida → el cliente SÍ debe recibir email + campanita
+      avisando el cambio.
+- [ ] Ver el detalle de la solicitud como admin, técnico y cliente → la franja asignada debe verse
+      en los 3 paneles.
+- [ ] Probar el flujo de conflicto de agenda (forzar reagendando) → confirmar que la franja elegida
+      se mantiene sin tener que volver a elegirla.
+
+**Archivos:** `src/lib/disponibilidad.ts`, `src/lib/notificaciones.ts`, `src/lib/types.ts`,
+`src/components/FormSolicitud.tsx`, `src/pages/dashboard/admin/solicitud/[id].astro`,
+`src/pages/dashboard/tecnico/solicitud/[id].astro`, `src/pages/dashboard/cliente/solicitud/[id].astro`.
+
+### Fase 5 — Botón del técnico para cerrar el servicio (nuevo estado `finalizada`)
+
+**✅ Implementado. Falta correr el SQL en Supabase y probar antes de dar por cerrado.**
+
+**Pedido de Agustín, aclarado con Jota antes de tocar código:** el cierre debe (1) cerrar
+definitivamente la solicitud y (2) contar el trabajo como terminado recién en ese momento para las
+estadísticas del técnico — hasta ahora `tecnicos.total_servicios` se incrementaba apenas el técnico
+cargaba fotos/gastos ("Completar trabajo"), **antes** de que el cliente diera conformidad o
+pagara. Esto significaba que un trabajo que el cliente nunca terminaba de pagar (o rechazaba) ya
+contaba en las estadísticas del técnico — bug de fondo que esta fase corrige.
+
+**Cómo quedó:**
+- Nuevo estado terminal `finalizada` en `SolicitudEstado` — viene **después** de `completada`, no
+  la reemplaza. El flujo completo queda: `aceptada → en_curso → completada` (técnico carga
+  fotos/gastos) `→` cliente da conformidad y paga `→` **`finalizada`** (técnico cierra, solo
+  posible con el pago ya acreditado).
+- Nuevo botón **"✅ Cerrar servicio"** (componente `CerrarServicio.tsx`, con confirmación inline,
+  mismo patrón que `ResponderAsignacion.tsx`) — aparece en el panel del técnico (listado y detalle)
+  únicamente cuando `estado === 'completada'` **y** el último pago registrado es `'pagado'`.
+- Nuevo endpoint `POST /api/tecnico/finalizar-servicio.ts` — valida ambas condiciones en el
+  servidor (no solo en el botón), incrementa `tecnicos.total_servicios` recién acá, y llama a
+  `notificarCambioEstado(..., 'finalizada', ...)` — el único punto que cambia el estado, para no
+  perder historial ni notificaciones (mismo criterio que todo el resto de la app).
+- **El incremento de `total_servicios` se sacó de `api/tecnico/completar.ts`** (donde vivía antes)
+  y se movió acá — es el cambio de fondo que pidió Agustín. Los conteos históricos ya incrementados
+  bajo la regla vieja no se tocan/recalculan, solo cambia el criterio hacia adelante.
+- **Es irreversible a propósito** — no hay forma de volver de `finalizada` para atrás desde la UI
+  (ni el admin la puede elegir a mano en el dropdown de "Estado del servicio", queda deshabilitada
+  igual que `asignada`).
+- **Para el cliente no cambia nada visualmente** — mismo criterio que ya existía para `asignada`
+  (que se le muestra como "Pendiente"): `finalizada` se le muestra idéntico a "Completada" (mismo
+  label, color, y se filtra del timeline) porque es un cierre administrativo interno entre técnico
+  y admin, no algo que el cliente necesite distinguir. El bloque de conformidad/pago/recibo y la
+  posibilidad de dejar reseña se mantienen visibles igual que en `completada`.
+- **Para técnico y admin sí es un estado distinto y visible** ("Finalizada", verde oscuro sólido
+  para diferenciarlo de "Completada"). El admin recibe una notificación in-app cuando el técnico
+  cierra (no email, no hace falta llenarle la bandeja por un paso administrativo).
+- **Notificaciones y tiempo real, sin romper nada de lo existente:** el cambio de estado pasa
+  siempre por `notificarCambioEstado()` (nunca un `update` directo), así que el historial y el
+  timeline quedan consistentes igual que cualquier otro cambio de estado. Las 3 páginas de detalle
+  ya escuchan cambios en tiempo real sobre su propia solicitud (`CambiosEnVivo`, ya existía, no
+  hizo falta tocarlo). La tabla del admin (`TablaSolicitudesAdmin`) se refresca sola porque
+  escucha `notificaciones` del admin, y esta fase le agrega justamente esa notificación. La lista
+  del cliente no recibe push para `finalizada` a propósito (no hay nada nuevo que mostrarle), y la
+  del técnico se actualiza con el reload local que ya hace el propio botón al confirmar.
+- De paso se corrigió un falso positivo: un `<\strong>` que parecía HTML roto en el email de
+  "Trabajo completado" resultó ser un artefacto de visualización de una herramienta, no un bug real
+  — se verificó contra el archivo y ya estaba bien (`</strong>`), no se tocó nada ahí.
+
+**Ajuste post-feedback — contadores que "perdían" trabajos al finalizar:** Jota probó el flujo
+completo y encontró que el contador "Completados" del panel del técnico bajaba en 1 apenas cerraba
+un servicio (porque solo contaba `estado === 'completada'`, y al finalizar deja de serlo). Al
+revisar el resto de la app se encontraron **3 lugares más con el mismo bug** — todos contaban o
+sumaban solo `'completada'`, así que cualquier trabajo finalizado "desaparecía" del cálculo:
+- `dashboard/tecnico.astro` — "Completados" ahora cuenta `completada` + `finalizada` (no baja al
+  cerrar), y sus "Ganancias" ahora suman ambos estados también (antes esa plata "se perdía" del
+  acumulado al cerrar el trabajo — bug con plata real, el mismo tipo de cosa que ya pasó antes con
+  el cálculo de "plataforma retiene"). Se agregó una tarjeta nueva **"Finalizados"** con el
+  desglose de cuántos de esos ya están cerrados del todo — queda lista para reusarse en el
+  rediseño (Fase 6).
+- `dashboard/admin.astro` — "Ingresos (completadas)" tenía el mismo problema, corregido igual.
+- `dashboard/cliente.astro` — el contador "Completadas" del cliente, mismo fix.
+- `api/crear-resena.ts` — **este era un bug más serio**: el endpoint que guarda la reseña exigía
+  `estado === 'completada'` a rajatabla, así que un cliente que quisiera dejar reseña **después**
+  de que el técnico cerrara el servicio se hubiera encontrado con un error ("Solicitud no
+  válida") — la opción de reseñar seguía visible en su panel (ya la habíamos dejado andando para
+  `finalizada` también) pero el guardado hubiera fallado. Corregido para aceptar ambos estados.
+
+Regla general que queda anotada: cualquier lugar del código que filtre/cuente específicamente por
+`estado === 'completada'` para algo relacionado con plata, estadísticas o acciones del cliente
+(no con la lógica de transición de estados en sí) probablemente deba incluir también `'finalizada'`
+de ahora en más — quedó revisado todo el código existente al momento de este fix, pero es un patrón
+a tener en cuenta para código nuevo.
+
+**Segundo ajuste post-feedback — el técnico no recibía notificación de su propio cierre:** Jota
+probó de nuevo y notó que al admin le llegaba la notificación de "Servicio cerrado" pero al técnico
+no le aparecía nada en su campanita. Causa: `finalizada` no estaba en `AVISAR_TECNICO` (el set que
+controla a quién se le manda aviso). Esto era inconsistente con `completada`, que **sí** está en
+ese set — el técnico ya recibía notificación de su propia acción al completar un trabajo (funciona
+como una especie de recibo/confirmación en su panel), y `finalizada` debía seguir el mismo criterio.
+Se agregó `'finalizada'` a `AVISAR_TECNICO` en `src/lib/notificaciones.ts` — reusa el mismo mensaje
+genérico que ya usan todos los demás cambios de estado ("La solicitud X pasó a estado Finalizada"),
+sin necesidad de un caso especial.
+
+**Tercer ajuste post-feedback — el bloque de confirmación desarmaba el listado del técnico:** el
+recuadro de "¿Confirmás cerrar...?" de `CerrarServicio` reemplazaba al botón in-place con un
+bloque `w-full` — dentro de la fila del listado (`SolicitudesTecnico`, que tiene varios elementos
+en una fila flex) eso empujaba y comprimía todo el contenido de la izquierda. Se cambió a un
+**modal centrado con fondo oscuro** (mismo patrón visual que el modal de previsualizar el recibo,
+Fase 1) en vez de un popover flotante anclado al botón — se descartó esa opción porque el listado
+tiene `overflow-hidden` en su contenedor, que hubiera recortado un popover anclado en la última
+fila. El modal, al ser `position: fixed`, no participa del flujo del documento así que no mueve
+nada de alrededor, y no se recorta contra ningún `overflow-hidden`. Se aplicó el mismo criterio a
+**los otros dos componentes con el mismo patrón** (confirmar/reemplazar in-place), por consistencia
+y porque tenían el mismo riesgo potencial: `ResponderAsignacion.tsx` (confirmar rechazo) y
+`CancelarSolicitud.tsx` (confirmar cancelación) — ninguno de los dos tenía el bug reportado
+todavía, pero ambos se usan en contextos de listado similares.
+
+**SQL a correr en Supabase (una sola vez) — amplía el CHECK constraint de `estado`:**
+
+```sql
+-- Si no estás seguro del nombre exacto del constraint, confirmarlo primero:
+-- SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+-- WHERE conrelid = 'solicitudes'::regclass AND contype = 'c';
+
+ALTER TABLE solicitudes DROP CONSTRAINT solicitudes_estado_check;
+ALTER TABLE solicitudes ADD CONSTRAINT solicitudes_estado_check
+  CHECK (estado IN ('pendiente','asignada','aceptada','en_curso','completada','finalizada','cancelada'));
+```
+
+**Probado por Jota:** el flujo central anda bien — botón aparece recién con el pago acreditado,
+cierra correctamente, no se puede cerrar dos veces. Encontró el bug de los contadores (ya
+corregido, ver arriba).
+
+**Falta probar:**
+- [ ] Confirmar que el contador "Finalizados" nuevo y "Completados"/"Ganancias" corregidos se ven
+      bien en el panel del técnico después del fix.
+- [ ] Confirmar que "Ingresos (completadas)" del admin y "Completadas" del cliente tampoco bajan al
+      finalizar un servicio.
+- [ ] Dejar una reseña sobre una solicitud ya `finalizada` (no solo `completada`) → debe guardarse
+      sin error (era el bug más importante de los 4 encontrados).
+- [ ] Ver como cliente → debe verse exactamente igual que "Completada" (mismo label/color, sin
+      entrada duplicada en el timeline), con el recibo y la posibilidad de dejar reseña intactos.
+- [ ] Ver como admin → debe verse "Finalizada" (distinto de "Completada"), con el aviso de "ya
+      cuenta en sus estadísticas", y debe haber llegado una notificación in-app al admin.
+- [ ] Confirmar que el admin NO puede elegir "Finalizada" a mano desde el dropdown de estado.
+
+**Archivos:** `src/lib/types.ts`, `src/lib/notificaciones.ts`,
+`src/pages/api/tecnico/{completar,finalizar-servicio}.ts` (nuevo el segundo),
+`src/pages/api/crear-resena.ts`,
+`src/components/CerrarServicio.tsx` (nuevo), `src/components/{SolicitudesTecnico,MisSolicitudes,TablaSolicitudesAdmin}.tsx`,
+`src/pages/dashboard/*/solicitud/[id].astro` (las 3),
+`src/pages/dashboard/{tecnico,admin,cliente}.astro` (contadores).
+
+## Fase 6 — Rediseño visual — sesión 2026-08-06 en adelante
+
+**Origen:** Jota armó un mockup con Claude web (formulario de solicitud como wizard de 6 pasos) y
+recibió otro de Agustín para el home mobile (estilo app nativa). Se acordaron 3 decisiones antes de
+tocar código:
+- **Horario preferido:** se mantiene el horario puntual (cada 30 min) tal cual funciona hoy — solo
+  cambia el estilo visual (botones en vez de dropdown). **No** se pasa a franjas Mañana/Tarde/Noche
+  como sugería el mockup — eso hubiera implicado rehacer el chequeo de choques de agenda en
+  `disponibilidad.ts`, que sigue funcionando a horario exacto.
+- **Bottom nav mobile** (Inicio/Servicios/Citas/Perfil, pendiente de implementar): Inicio = home,
+  Servicios = categorías/técnicos, Citas = mis solicitudes, Perfil = panel/dashboard — todo según
+  el rol logueado.
+- **Orden de implementación:** primero el wizard de "Solicitar servicio" (lo más concretamente
+  especificado), después el home mobile, después el home de escritorio (sin mockup exacto, con
+  libertad de propuesta).
+- El paso "¿Con quién preferís trabajar?" del mockup estaba mal planteado (Jota no le había pasado
+  bien el contexto a Claude web) — no es una elección real de técnico, es solo informativo. Se
+  ajustó el texto y se sacó cualquier indicio visual de que fuera una selección real.
+
+### Fase 6a — Wizard de "Solicitar servicio"
+
+**✅ Implementado. Falta probar (no se pudo probar visualmente en este entorno — sin navegador ni
+sesión logueada disponible; se verificó que compila y que la ruta no rompe en el servidor).**
+
+**Cómo quedó:**
+- `FormSolicitud.tsx` reescrito como wizard de 6 pasos (Servicio → Técnico → Detalles → Cuándo →
+  Dónde → Confirmar), con sidebar de progreso en desktop (checks/números conectados por una línea,
+  paso actual resaltado) y una barra compacta arriba en mobile (rótulo "Paso X de 6" + barra de
+  progreso delgada) en vez del sidebar completo, que no entra bien en pantallas chicas.
+  "Continuar" valida solo los campos del paso actual (`react-hook-form`'s `trigger()`) antes de
+  avanzar — no hace falta llenar todo el formulario para saber si el primer paso está mal.
+- **Toda la lógica de negocio existente se mantuvo intacta** — Zod schema, fetch de técnicos
+  candidatos, cálculo de precio, autocompletado de dirección (Fase 3.1), mapa (Fase 3), chequeo de
+  disponibilidad contra un técnico fijo — el rediseño es una reestructuración de la capa visual/de
+  flujo, no reescribió ninguna regla de negocio.
+- Paso "Técnico" ajustado a lo que pediste: sin radios ni implicación de que sea una elección real.
+  "Que Taita asigne" queda como texto destacado (no seleccionable) y abajo los técnicos candidatos
+  como antes, solo con mejor estilo — si se pasa `tecnicoId` (flujo desde el perfil de un técnico
+  puntual), este paso muestra directamente esa tarjeta fija.
+- El horario preferido pasó de `<select>` a una grilla de píldoras (una por cada media hora), sin
+  tocar `franjasHorarias()` ni la lógica de choque de agenda.
+- Si al enviar aparece un conflicto de horario (técnico fijo ya ocupado), el wizard vuelve solo al
+  paso 4 para que se vea el aviso en contexto, en vez de quedar escondido en otro paso.
+- `src/pages/solicitud.astro` ensanchado (`max-w-5xl`, antes `max-w-2xl`) para que entre el layout
+  de sidebar + card, y se sacó el encabezado "Solicitar servicio" que quedaba duplicado con el
+  título que ahora trae el propio paso 1 del wizard. De paso se corrigió el fondo de la página
+  (usaba `bg-gray-50`, inconsistente con el resto de la app que usa `bg-cream`).
+
+**Falta probar:**
+- [ ] Recorrer el wizard completo (los 6 pasos) tanto en desktop como en mobile — sidebar vs. barra
+      compacta, que "Continuar" bloquee bien si falta completar el paso actual.
+- [ ] Flujo con técnico fijo (`?tecnico=...`) → el paso 2 debe mostrar la tarjeta fija, y un
+      conflicto de horario debe devolver al paso 4 con el aviso visible.
+- [ ] Elegir una sugerencia del autocompletado de dirección (Fase 3.1) y confirmar que el mapa
+      (paso 5) sigue funcionando igual que antes dentro del wizard.
+- [ ] Enviar la solicitud completa → confirmar que llega igual que siempre (mismos datos, misma
+      notificación al admin/cliente).
+- [ ] Si el dev server tira `Failed to fetch dynamically imported module` o similar en consola,
+      reiniciarlo (`Ctrl+C` y `pnpm dev` de nuevo) — es caché de Vite desactualizada, no un bug de
+      este cambio (ya pasó una vez con el mapa).
+
+**Ajustes post-feedback de Jota (2 bugs reales, no solo visuales):**
+- **El botón final aparecía en "Enviando..." sin haber sido clickeado.** Primer intento: se agregó
+  un `onKeyDown` al `<form>` para interceptar Enter (problema clásico de wizards de un solo
+  `<form>`, donde Enter en cualquier input dispara el envío nativo salteando los pasos). Jota probó
+  de nuevo y el problema seguía igual sin haber tocado Enter, así que la causa real era otra cosa
+  (probablemente algún timing de hidratación con el mecanismo nativo de submit del navegador, no
+  se pudo identificar la causa exacta). Solución definitiva, más robusta que perseguir la causa:
+  se sacó `type="submit"` de **todos** los botones del wizard — el `<form>` ahora tiene un
+  `onSubmit` que siempre hace `preventDefault()` (nunca deja que el navegador dispare un envío
+  nativo, sea cual sea la causa), y el botón "Enviar solicitud" es `type="button"` con
+  `onClick={handleSubmit(onSubmit)}` — dispara el envío de `react-hook-form` a mano, únicamente
+  con ese click puntual. No hay ninguna otra forma de que se dispare.
+- **"Usar mi ubicación" no completaba el campo Dirección** (que es obligatorio), aunque el mapa sí
+  ubicaba bien el pin — daba error de validación de campo vacío al querer avanzar. No era un bug
+  nuevo de esta fase, ya existía desde la Fase 3, recién se notó ahora al volver a probar el flujo
+  completo. Se agregó geocoding inverso (coordenadas → dirección legible): nuevo endpoint
+  `src/pages/api/geocodificar-inverso.ts` (mismo proxy a Nominatim que el geocoding normal),
+  llamado únicamente al apretar "Usar mi ubicación" — **no** al arrastrar el marcador o tocar el
+  mapa a mano, para no pisarle al cliente una dirección que ya escribió solo porque ajustó el pin.
+  Si el geocoding inverso falla, la ubicación se guarda igual (mejor esfuerzo, no bloquea).
+
+**Archivos:** `src/components/FormSolicitud.tsx`, `src/pages/solicitud.astro`,
+`src/components/MapaUbicacion.tsx`, `src/pages/api/geocodificar-inverso.ts` (nuevo).
+
+**Confirmado por Jota (2026-08-06):** el botón "Enviar solicitud" ya no aparece en "Enviando..."
+sin haber sido clickeado — el fix de sacar `type="submit"` de todos los botones funcionó.
+
+**Último ajuste de la sesión — tarjeta de estimación con estilo "metálico"/glass:** a pedido de
+Jota (referencia: una tarjeta "DISPONIBLE" de su portfolio, con efecto de brillo que se mueve al
+pasar el mouse), la tarjeta verde de "Estimación de costo" del paso 6 pasó de un verde plano a un
+degradé oscuro (`from-[#1f5a37] via-[#123723] to-[#081a10]`) con sombra profunda, anillo sutil, y
+un **brillo diagonal que barre la tarjeta al hacer hover** (un overlay `via-white/15` que se
+desplaza con `group-hover` + `transition-transform duration-700`) — más una leve elevación
+(`hover:-translate-y-1`). Todo con CSS puro (gradientes + transform), **sin agregar Three.js ni
+ninguna librería nueva** — no hacía falta para lograr el efecto visual pedido, y hubiera sido
+sobrecargar el proyecto para una sola tarjeta. Falta probar el hover en el navegador (no se pudo
+verificar visualmente en este entorno).
+
+**Pendiente de esta fase (para la próxima sesión):**
+- Home mobile (estilo app nativa, según referencia de Agustín — capturas 7 y 8 que mandó Jota).
+- Home de escritorio (propuesta libre, sin mockup exacto).
+- Bottom nav mobile (Inicio/Servicios/Citas/Perfil) — acordado: Inicio=home, Servicios=categorías/
+  técnicos, Citas=mis solicitudes, Perfil=panel/dashboard, todo según el rol logueado. Toca el
+  layout global (`Layout.astro`/`Navbar.tsx`), no es solo del home.
+- Evaluar qué otras pantallas de cliente/técnico conviene extender con el mismo lenguaje visual
+  del wizard (tarjetas, tipografía, el estilo "metálico" nuevo, etc.) — decidir caso a caso, no
+  se acordó todavía cuáles.
+- El lado admin queda con estilo "de oficina", sin tocar mucho (decisión ya tomada en el análisis
+  inicial de la Fase 6).
+
+**Pendiente de sesiones anteriores, todavía sin confirmar que se corrió:**
+- [ ] SQL de la Fase 4 (`franja_asignada`) — ver esa sección más arriba.
+- [ ] SQL de la Fase 5 (ampliar el CHECK constraint con `'finalizada'`) — ver esa sección más
+      arriba. **Importante:** sin este, el botón "Cerrar servicio" va a fallar en producción/en la
+      otra máquina aunque en local ya haya funcionado, si esa base de datos es la misma — si es la
+      misma base (no una copia distinta), ya debería estar corrido; si Jota prueba mañana desde
+      otra máquina contra la misma Supabase, no hace falta repetirlo.
+
+**Nota para retomar mañana:** Jota va a pushear este estado y probar desde otra máquina. Si
+aparece `Failed to fetch dynamically imported module` o cualquier error de módulo en la consola del
+navegador, es caché de Vite desactualizada del `pnpm dev` — reiniciar el servidor (`Ctrl+C` y
+`pnpm dev` de nuevo) antes de asumir que es un bug de código (ya pasó dos veces en esta sesión).
 
 ---
 

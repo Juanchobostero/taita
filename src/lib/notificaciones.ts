@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { enviarEmail } from './email'
 import { generarReciboPDF } from './recibo'
+import { FRANJA_LABEL, type FranjaHoraria } from './disponibilidad'
 
 const ADMIN_EMAIL = 'taitasoluciones@gmail.com'
 
@@ -10,6 +11,7 @@ const ESTADO_LABEL: Record<string, string> = {
   aceptada:   'Aceptada',
   en_curso:   'En curso',
   completada: 'Completada',
+  finalizada: 'Finalizada',
   cancelada:  'Cancelada',
 }
 
@@ -24,12 +26,16 @@ const AVISAR_CLIENTE = new Set(['pendiente', 'aceptada', 'en_curso', 'completada
 // Estados en los que el técnico asignado recibe email de aviso. "asignada" es cuando el admin le
 // asigna el trabajo y queda esperando que lo confirme o lo rechace — el técnico ya no se entera
 // recién en "aceptada" (que ahora es una acción del propio técnico, no hace falta avisarle de su
-// propia acción). "en_curso"/"completada"/"cancelada" además sirven como disparador para que la
-// lista de solicitudes del técnico (in-app, tiempo real) se refresque sola.
-const AVISAR_TECNICO  = new Set(['asignada', 'en_curso', 'completada', 'cancelada'])
+// propia acción). "en_curso"/"completada"/"cancelada"/"finalizada" además sirven como disparador
+// para que la lista de solicitudes del técnico (in-app, tiempo real) se refresque sola — y sí, el
+// técnico recibe aviso aunque "completada"/"finalizada" sean acciones suyas: es el mismo criterio
+// que ya existía para "completada" (queda como una especie de recibo/confirmación en su panel de
+// notificaciones), no hace falta un caso especial para "finalizada".
+const AVISAR_TECNICO  = new Set(['asignada', 'en_curso', 'completada', 'finalizada', 'cancelada'])
 
 interface SolicitudNotif {
   id:               string
+  numero:           number
   titulo:           string
   fecha_solicitada: string | null
   hora_solicitada:  string | null
@@ -39,11 +45,18 @@ interface SolicitudNotif {
   categorias:       { nombre: string } | null
 }
 
+// Etiqueta que se usa en todos los emails y notificaciones al referenciar una solicitud — el
+// número corto es más fácil de decir/buscar que el título solo, y es el mismo que ve el usuario
+// en su panel (pedido de Agustín: "mostrar código/nro de solicitud como título").
+function etiqueta(sol: { numero: number; titulo: string }): string {
+  return `#${sol.numero} — ${sol.titulo}`
+}
+
 async function fetchSolicitudNotif(supabase: SupabaseClient, solicitudId: string): Promise<SolicitudNotif | null> {
   const { data } = await supabase
     .from('solicitudes')
     .select(`
-      id, titulo, fecha_solicitada, hora_solicitada, total_estimado,
+      id, numero, titulo, fecha_solicitada, hora_solicitada, total_estimado,
       usuarios!cliente_id ( id, nombre_completo, email ),
       tecnicos ( usuario_id, usuarios ( nombre_completo, email ) ),
       categorias ( nombre )
@@ -112,25 +125,66 @@ export async function notificarDesasignacion(
   tecnicoUsuarioId: string,
   tecnicoEmail:     string | null,
   tecnicoNombre:    string,
+  numeroSolicitud:  number,
   tituloSolicitud:  string,
   solicitudId:      string,
 ): Promise<void> {
+  const label = etiqueta({ numero: numeroSolicitud, titulo: tituloSolicitud })
   if (tecnicoEmail) {
     await enviarEmail({
       to:      tecnicoEmail,
-      subject: `Ya no estás asignado a "${tituloSolicitud}"`,
+      subject: `Ya no estás asignado a ${label}`,
       html: `
         <p>Hola ${tecnicoNombre},</p>
-        <p>La solicitud <strong>${tituloSolicitud}</strong> ya no está asignada a vos — volvió a quedar
+        <p>La solicitud <strong>${label}</strong> ya no está asignada a vos — volvió a quedar
         disponible para asignarse a otro técnico.</p>
       `,
     })
   }
   await crearNotificacion(
     supabase, tecnicoUsuarioId,
-    `Ya no estás asignado a "${tituloSolicitud}"`,
+    `Ya no estás asignado a ${label}`,
     'Volvió a quedar disponible para asignarse a otro técnico.',
     solicitudId,
+  )
+}
+
+/**
+ * Avisa al cliente que la franja horaria que el admin le comprometió al técnico (mañana/tarde/
+ * noche) no coincide con la que él había pedido en el formulario — se llama solo cuando hay
+ * discrepancia, no en cada asignación. No bloquea nada ni cambia el estado de la solicitud, es
+ * puramente informativo (decisión tomada con Jota: el admin decide, el cliente se entera).
+ */
+export async function notificarFranjaAsignada(
+  supabase:    SupabaseClient,
+  solicitudId: string,
+  franja:      FranjaHoraria,
+): Promise<void> {
+  const sol = await fetchSolicitudNotif(supabase, solicitudId)
+  if (!sol?.usuarios) return
+
+  const cliente = sol.usuarios
+  const label   = FRANJA_LABEL[franja]
+
+  if (cliente.email) {
+    await enviarEmail({
+      to:      cliente.email,
+      subject: `Ajustamos el horario de tu solicitud ${etiqueta(sol)}`,
+      html: `
+        <p>Hola ${cliente.nombre_completo},</p>
+        <p>Le asignamos un técnico a tu solicitud <strong>${etiqueta(sol)}</strong>, pero con una
+        franja horaria distinta a la que habías pedido: <strong>${label}</strong>. Es el horario en
+        el que el técnico asignado tiene disponibilidad.</p>
+        <p>Revisá tu panel para ver el detalle.</p>
+      `,
+    })
+  }
+
+  await crearNotificacion(
+    supabase, cliente.id,
+    `Ajustamos el horario de tu solicitud ${etiqueta(sol)}`,
+    `Nueva franja asignada: ${label}.`,
+    sol.id,
   )
 }
 
@@ -181,10 +235,10 @@ export async function notificarCambioEstado(
     if (cliente.email) {
       await enviarEmail({
         to:      cliente.email,
-        subject: `Tu solicitud "${sol.titulo}" — ${label}`,
+        subject: `Tu solicitud ${etiqueta(sol)} — ${label}`,
         html: `
           <p>Hola ${cliente.nombre_completo},</p>
-          <p>Tu solicitud <strong>${sol.titulo}</strong> (${categoria?.nombre ?? 'servicio'}) cambió de estado a
+          <p>Tu solicitud <strong>${etiqueta(sol)}</strong> (${categoria?.nombre ?? 'servicio'}) cambió de estado a
           <strong>${label}</strong>.</p>
           ${mostrarHorario && fechaHora ? `<p>Horario confirmado: <strong>${fechaHora}</strong>.</p>` : ''}
           <p>Revisá tu panel para ver el detalle.</p>
@@ -194,7 +248,7 @@ export async function notificarCambioEstado(
 
     await crearNotificacion(
       supabase, cliente.id,
-      `Tu solicitud "${sol.titulo}" — ${label}`,
+      `Tu solicitud ${etiqueta(sol)} — ${label}`,
       mostrarHorario && fechaHora ? `Horario confirmado: ${fechaHora}.` : `Cambió de estado a ${label}.`,
       sol.id,
     )
@@ -206,22 +260,22 @@ export async function notificarCambioEstado(
     if (tecnico.email) {
       await enviarEmail({
         to:      tecnico.email,
-        subject: esAsignacion ? `Nuevo trabajo asignado: "${sol.titulo}"` : `Solicitud "${sol.titulo}" — ${label}`,
+        subject: esAsignacion ? `Nuevo trabajo asignado: ${etiqueta(sol)}` : `Solicitud ${etiqueta(sol)} — ${label}`,
         html: esAsignacion ? `
           <p>Hola ${tecnico.nombre_completo},</p>
-          <p>Te asignaron la solicitud <strong>${sol.titulo}</strong> (${categoria?.nombre ?? 'servicio'}).</p>
+          <p>Te asignaron la solicitud <strong>${etiqueta(sol)}</strong> (${categoria?.nombre ?? 'servicio'}).</p>
           ${fechaHora ? `<p>Horario propuesto: <strong>${fechaHora}</strong>.</p>` : ''}
           <p>Entrá a tu panel para confirmarla o rechazarla.</p>
         ` : `
           <p>Hola ${tecnico.nombre_completo},</p>
-          <p>La solicitud <strong>${sol.titulo}</strong> pasó a estado <strong>${label}</strong>.</p>
+          <p>La solicitud <strong>${etiqueta(sol)}</strong> pasó a estado <strong>${label}</strong>.</p>
         `,
       })
     }
 
     await crearNotificacion(
       supabase, tecnicoId,
-      esAsignacion ? `Nuevo trabajo asignado: "${sol.titulo}"` : `Solicitud "${sol.titulo}" — ${label}`,
+      esAsignacion ? `Nuevo trabajo asignado: ${etiqueta(sol)}` : `Solicitud ${etiqueta(sol)} — ${label}`,
       esAsignacion ? 'Confirmalo o rechazalo desde tu panel.' : `La solicitud pasó a estado ${label}.`,
       sol.id,
     )
@@ -232,12 +286,12 @@ export async function notificarCambioEstado(
   if (estadoNuevo === 'pendiente' && cambiadoPor) {
     await enviarEmail({
       to:      ADMIN_EMAIL,
-      subject: `La solicitud "${sol.titulo}" volvió a Pendiente`,
-      html:    `<p>La solicitud <strong>${sol.titulo}</strong> volvió al estado <strong>Pendiente</strong> y quedó disponible para asignar un técnico.</p>`,
+      subject: `La solicitud ${etiqueta(sol)} volvió a Pendiente`,
+      html:    `<p>La solicitud <strong>${etiqueta(sol)}</strong> volvió al estado <strong>Pendiente</strong> y quedó disponible para asignar un técnico.</p>`,
     })
     await crearNotificacionesAdmin(
       supabase,
-      `La solicitud "${sol.titulo}" volvió a Pendiente`,
+      `La solicitud ${etiqueta(sol)} volvió a Pendiente`,
       'Quedó disponible para asignar un técnico.',
       sol.id,
     )
@@ -247,16 +301,29 @@ export async function notificarCambioEstado(
   if (estadoNuevo === 'completada') {
     await enviarEmail({
       to:      ADMIN_EMAIL,
-      subject: `Trabajo completado — ${sol.titulo}`,
+      subject: `Trabajo completado — ${etiqueta(sol)}`,
       html: `
         <p>El técnico <strong>${tecnico?.nombre_completo ?? '—'}</strong> marcó como completada la
-        solicitud <strong>${sol.titulo}</strong>${cliente ? ` (cliente: ${cliente.nombre_completo})` : ''}.</p>
+        solicitud <strong>${etiqueta(sol)}</strong>${cliente ? ` (cliente: ${cliente.nombre_completo})` : ''}.</p>
       `,
     })
     await crearNotificacionesAdmin(
       supabase,
-      `Trabajo completado — ${sol.titulo}`,
+      `Trabajo completado — ${etiqueta(sol)}`,
       `Técnico: ${tecnico?.nombre_completo ?? '—'}.`,
+      sol.id,
+    )
+  }
+
+  // El técnico cerró definitivamente el servicio (después de que se acreditó el pago) — recién
+  // acá cuenta como "terminado" para las estadísticas (ver api/tecnico/finalizar-servicio.ts).
+  // Solo se avisa al admin — cliente y técnico ya se enteraron de todo lo que importa en los pasos
+  // anteriores (conformidad, pago acreditado); esto es un cierre administrativo interno.
+  if (estadoNuevo === 'finalizada') {
+    await crearNotificacionesAdmin(
+      supabase,
+      `Servicio cerrado — ${etiqueta(sol)}`,
+      `El técnico ${tecnico?.nombre_completo ?? '—'} cerró el servicio. Ya cuenta en sus estadísticas.`,
       sol.id,
     )
   }
@@ -285,10 +352,10 @@ export async function notificarNuevaSolicitud(supabase: SupabaseClient, solicitu
     if (cliente.email) {
       await enviarEmail({
         to:      cliente.email,
-        subject: `Recibimos tu solicitud "${sol.titulo}"`,
+        subject: `Recibimos tu solicitud ${etiqueta(sol)}`,
         html: `
           <p>Hola ${cliente.nombre_completo},</p>
-          <p>Recibimos tu solicitud <strong>${sol.titulo}</strong>.</p>
+          <p>Recibimos tu solicitud <strong>${etiqueta(sol)}</strong>.</p>
           ${detalle}
           <p>Revisá tu perfil para ver el detalle.</p>
         `,
@@ -296,7 +363,7 @@ export async function notificarNuevaSolicitud(supabase: SupabaseClient, solicitu
     }
     await crearNotificacion(
       supabase, cliente.id,
-      `Recibimos tu solicitud "${sol.titulo}"`,
+      `Recibimos tu solicitud ${etiqueta(sol)}`,
       `${categoria?.nombre ?? 'Servicio'} · Técnico: ${tecnicoTexto}.`,
       sol.id,
     )
@@ -304,7 +371,7 @@ export async function notificarNuevaSolicitud(supabase: SupabaseClient, solicitu
 
   await enviarEmail({
     to:      ADMIN_EMAIL,
-    subject: `Nueva solicitud: ${sol.titulo}`,
+    subject: `Nueva solicitud: ${etiqueta(sol)}`,
     html: `
       <p>Cliente: ${cliente?.nombre_completo ?? '—'}</p>
       ${detalle}
@@ -312,7 +379,7 @@ export async function notificarNuevaSolicitud(supabase: SupabaseClient, solicitu
   })
   await crearNotificacionesAdmin(
     supabase,
-    `Nueva solicitud: ${sol.titulo}`,
+    `Nueva solicitud: ${etiqueta(sol)}`,
     `Cliente: ${cliente?.nombre_completo ?? '—'}.`,
     sol.id,
   )
@@ -330,16 +397,16 @@ export async function notificarConformidad(supabase: SupabaseClient, solicitudId
 
   await enviarEmail({
     to:      ADMIN_EMAIL,
-    subject: `Conformidad recibida: ${sol.titulo}`,
+    subject: `Conformidad recibida: ${etiqueta(sol)}`,
     html: `
       <p>El cliente <strong>${cliente?.nombre_completo ?? '—'}</strong> dio conformidad sobre la
-      solicitud <strong>${sol.titulo}</strong>.</p>
+      solicitud <strong>${etiqueta(sol)}</strong>.</p>
       <p>Monto a registrar: <strong>${monto}</strong>.</p>
     `,
   })
   await crearNotificacionesAdmin(
     supabase,
-    `Conformidad recibida: ${sol.titulo}`,
+    `Conformidad recibida: ${etiqueta(sol)}`,
     `Monto: ${monto}.`,
     sol.id,
   )
@@ -348,17 +415,17 @@ export async function notificarConformidad(supabase: SupabaseClient, solicitudId
     if (tecnico.email) {
       await enviarEmail({
         to:      tecnico.email,
-        subject: `Conformidad recibida: ${sol.titulo}`,
+        subject: `Conformidad recibida: ${etiqueta(sol)}`,
         html: `
           <p>Hola ${tecnico.nombre_completo},</p>
-          <p>El cliente dio conformidad sobre <strong>${sol.titulo}</strong>. El pago se va a reflejar
+          <p>El cliente dio conformidad sobre <strong>${etiqueta(sol)}</strong>. El pago se va a reflejar
           próximamente en la cuenta que declaraste.</p>
         `,
       })
     }
     await crearNotificacion(
       supabase, tecnicoId,
-      `Conformidad recibida: ${sol.titulo}`,
+      `Conformidad recibida: ${etiqueta(sol)}`,
       'El pago se va a reflejar próximamente en tu cuenta.',
       sol.id,
     )
@@ -378,7 +445,7 @@ export async function notificarPagoConfirmado(
   const { data: sol } = await supabase
     .from('solicitudes')
     .select(`
-      id, titulo, precio_base, gastos_extra, total_estimado,
+      id, numero, titulo, precio_base, gastos_extra, total_estimado,
       usuarios!cliente_id ( id, nombre_completo, email ),
       tecnicos ( usuario_id, usuarios ( nombre_completo, email ) ),
       categorias ( nombre )
@@ -401,6 +468,7 @@ export async function notificarPagoConfirmado(
   try {
     const pdf = await generarReciboPDF({
       solicitudId,
+      numero:        sol.numero,
       titulo:        sol.titulo,
       categoria,
       clienteNombre: cliente?.nombre_completo ?? '—',
@@ -432,10 +500,10 @@ export async function notificarPagoConfirmado(
     if (cliente.email) {
       await enviarEmail({
         to:      cliente.email,
-        subject: `Pago acreditado — ${sol.titulo}`,
+        subject: `Pago acreditado — ${etiqueta(sol)}`,
         html: `
           <p>Hola ${cliente.nombre_completo},</p>
-          <p>Confirmamos que tu pago de <strong>${montoTxt}</strong> por <strong>${sol.titulo}</strong>
+          <p>Confirmamos que tu pago de <strong>${montoTxt}</strong> por <strong>${etiqueta(sol)}</strong>
           fue acreditado. ¡Gracias por confiar en Taita!</p>
           ${reciboUrl ? `<p><a href="${reciboUrl}">Descargar recibo (PDF)</a></p>` : ''}
         `,
@@ -443,7 +511,7 @@ export async function notificarPagoConfirmado(
     }
     await crearNotificacion(
       supabase, cliente.id,
-      `Pago acreditado — ${sol.titulo}`,
+      `Pago acreditado — ${etiqueta(sol)}`,
       `Se acreditó tu pago de ${montoTxt}.`,
       solicitudId,
     )
@@ -453,17 +521,17 @@ export async function notificarPagoConfirmado(
     if (tecnico.email) {
       await enviarEmail({
         to:      tecnico.email,
-        subject: `Pago del cliente acreditado — ${sol.titulo}`,
+        subject: `Pago del cliente acreditado — ${etiqueta(sol)}`,
         html: `
           <p>Hola ${tecnico.nombre_completo},</p>
-          <p>El cliente pagó <strong>${montoTxt}</strong> por <strong>${sol.titulo}</strong>. Tu parte se
+          <p>El cliente pagó <strong>${montoTxt}</strong> por <strong>${etiqueta(sol)}</strong>. Tu parte se
           va a acreditar según lo acordado.</p>
         `,
       })
     }
     await crearNotificacion(
       supabase, tecnicoId,
-      `Pago del cliente acreditado — ${sol.titulo}`,
+      `Pago del cliente acreditado — ${etiqueta(sol)}`,
       `El cliente pagó ${montoTxt}.`,
       solicitudId,
     )
@@ -471,15 +539,15 @@ export async function notificarPagoConfirmado(
 
   await enviarEmail({
     to:      ADMIN_EMAIL,
-    subject: `Pago acreditado — ${sol.titulo}`,
+    subject: `Pago acreditado — ${etiqueta(sol)}`,
     html: `
-      <p>Se acreditó el pago de <strong>${montoTxt}</strong> para <strong>${sol.titulo}</strong>
+      <p>Se acreditó el pago de <strong>${montoTxt}</strong> para <strong>${etiqueta(sol)}</strong>
       (cliente: ${cliente?.nombre_completo ?? '—'}).</p>
     `,
   })
   await crearNotificacionesAdmin(
     supabase,
-    `Pago acreditado — ${sol.titulo}`,
+    `Pago acreditado — ${etiqueta(sol)}`,
     `Monto: ${montoTxt}.`,
     solicitudId,
   )
@@ -494,7 +562,7 @@ export async function notificarPagoRechazado(supabase: SupabaseClient, solicitud
   const { data: sol } = await supabase
     .from('solicitudes')
     .select(`
-      id, titulo,
+      id, numero, titulo,
       usuarios!cliente_id ( id, nombre_completo, email ),
       tecnicos ( usuario_id )
     `)
@@ -509,17 +577,17 @@ export async function notificarPagoRechazado(supabase: SupabaseClient, solicitud
     if (cliente.email) {
       await enviarEmail({
         to:      cliente.email,
-        subject: `No pudimos procesar tu pago — ${sol.titulo}`,
+        subject: `No pudimos procesar tu pago — ${etiqueta(sol)}`,
         html: `
           <p>Hola ${cliente.nombre_completo},</p>
-          <p>El pago de <strong>${sol.titulo}</strong> no pudo procesarse. Podés reintentarlo desde el
+          <p>El pago de <strong>${etiqueta(sol)}</strong> no pudo procesarse. Podés reintentarlo desde el
           detalle de la solicitud en tu panel.</p>
         `,
       })
     }
     await crearNotificacion(
       supabase, cliente.id,
-      `No pudimos procesar tu pago — ${sol.titulo}`,
+      `No pudimos procesar tu pago — ${etiqueta(sol)}`,
       'Podés reintentarlo desde el detalle de la solicitud.',
       solicitudId,
     )
@@ -528,7 +596,7 @@ export async function notificarPagoRechazado(supabase: SupabaseClient, solicitud
   if (tecnicoId) {
     await crearNotificacion(
       supabase, tecnicoId,
-      `Pago rechazado — ${sol.titulo}`,
+      `Pago rechazado — ${etiqueta(sol)}`,
       'El intento de pago del cliente no pudo procesarse.',
       solicitudId,
     )
@@ -536,7 +604,7 @@ export async function notificarPagoRechazado(supabase: SupabaseClient, solicitud
 
   await crearNotificacionesAdmin(
     supabase,
-    `Pago rechazado — ${sol.titulo}`,
+    `Pago rechazado — ${etiqueta(sol)}`,
     'El intento de pago del cliente no pudo procesarse.',
     solicitudId,
   )
@@ -550,7 +618,7 @@ export async function notificarPagoReembolsado(supabase: SupabaseClient, solicit
   const { data: sol } = await supabase
     .from('solicitudes')
     .select(`
-      id, titulo, total_estimado,
+      id, numero, titulo, total_estimado,
       usuarios!cliente_id ( id, nombre_completo, email ),
       tecnicos ( usuario_id )
     `)
@@ -566,16 +634,16 @@ export async function notificarPagoReembolsado(supabase: SupabaseClient, solicit
     if (cliente.email) {
       await enviarEmail({
         to:      cliente.email,
-        subject: `Pago reembolsado — ${sol.titulo}`,
+        subject: `Pago reembolsado — ${etiqueta(sol)}`,
         html: `
           <p>Hola ${cliente.nombre_completo},</p>
-          <p>Te reembolsamos ${montoTxt} correspondiente a <strong>${sol.titulo}</strong>.</p>
+          <p>Te reembolsamos ${montoTxt} correspondiente a <strong>${etiqueta(sol)}</strong>.</p>
         `,
       })
     }
     await crearNotificacion(
       supabase, cliente.id,
-      `Pago reembolsado — ${sol.titulo}`,
+      `Pago reembolsado — ${etiqueta(sol)}`,
       `Se te reembolsó ${montoTxt}.`,
       solicitudId,
     )
@@ -584,7 +652,7 @@ export async function notificarPagoReembolsado(supabase: SupabaseClient, solicit
   if (tecnicoId) {
     await crearNotificacion(
       supabase, tecnicoId,
-      `Pago reembolsado — ${sol.titulo}`,
+      `Pago reembolsado — ${etiqueta(sol)}`,
       'El pago del cliente fue reembolsado.',
       solicitudId,
     )
@@ -594,12 +662,12 @@ export async function notificarPagoReembolsado(supabase: SupabaseClient, solicit
   // que saber por mail sí o sí, no solo por la campanita.
   await enviarEmail({
     to:      ADMIN_EMAIL,
-    subject: `Pago reembolsado — ${sol.titulo}`,
-    html: `<p>Se reembolsó ${montoTxt} de la solicitud <strong>${sol.titulo}</strong>.</p>`,
+    subject: `Pago reembolsado — ${etiqueta(sol)}`,
+    html: `<p>Se reembolsó ${montoTxt} de la solicitud <strong>${etiqueta(sol)}</strong>.</p>`,
   })
   await crearNotificacionesAdmin(
     supabase,
-    `Pago reembolsado — ${sol.titulo}`,
+    `Pago reembolsado — ${etiqueta(sol)}`,
     `Monto: ${montoTxt}.`,
     solicitudId,
   )
@@ -613,7 +681,7 @@ export async function notificarPagoContracargo(supabase: SupabaseClient, solicit
   const { data: sol } = await supabase
     .from('solicitudes')
     .select(`
-      id, titulo, total_estimado,
+      id, numero, titulo, total_estimado,
       usuarios!cliente_id ( id, nombre_completo ),
       tecnicos ( usuario_id )
     `)
@@ -627,7 +695,7 @@ export async function notificarPagoContracargo(supabase: SupabaseClient, solicit
   if (tecnicoId) {
     await crearNotificacion(
       supabase, tecnicoId,
-      `Contracargo — ${sol.titulo}`,
+      `Contracargo — ${etiqueta(sol)}`,
       'El cliente inició una disputa bancaria sobre este pago.',
       solicitudId,
     )
@@ -635,16 +703,16 @@ export async function notificarPagoContracargo(supabase: SupabaseClient, solicit
 
   await enviarEmail({
     to:      ADMIN_EMAIL,
-    subject: `⚠️ Contracargo — ${sol.titulo}`,
+    subject: `⚠️ Contracargo — ${etiqueta(sol)}`,
     html: `
       <p>El cliente <strong>${(sol.usuarios as unknown as { nombre_completo: string } | null)?.nombre_completo ?? '—'}</strong>
-      inició una disputa bancaria (contracargo) por ${montoTxt} sobre <strong>${sol.titulo}</strong>.
+      inició una disputa bancaria (contracargo) por ${montoTxt} sobre <strong>${etiqueta(sol)}</strong>.
       Requiere atención cuanto antes.</p>
     `,
   })
   await crearNotificacionesAdmin(
     supabase,
-    `⚠️ Contracargo — ${sol.titulo}`,
+    `⚠️ Contracargo — ${etiqueta(sol)}`,
     `Disputa bancaria por ${montoTxt} — requiere atención.`,
     solicitudId,
   )

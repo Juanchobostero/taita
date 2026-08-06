@@ -54,37 +54,35 @@ if (tecnicoParam) {
 >
   <Navbar client:load />
 
-  <div class="bg-gray-50 min-h-screen py-10 px-4">
-    <div class="max-w-2xl mx-auto flex flex-col gap-6">
+  <div class="bg-cream min-h-screen py-8 px-4">
+    <div class="max-w-5xl mx-auto flex flex-col gap-4">
 
-      <a href={tecnicoId ? `/tecnicos/${tecnicoId}` : '/tecnicos'}
-         class="text-primary hover:text-primary-hover font-medium flex items-center gap-1 w-fit text-sm">
-        ← {tecnicoId ? 'Volver al perfil' : 'Ver técnicos'}
-      </a>
-
-      <!-- Encabezado -->
-      <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100">
-        <h1 class="text-2xl font-bold text-gray-900 mb-1">Solicitar servicio</h1>
-        {tecnicoNombre
-          ? <p class="text-gray-500 text-sm">Enviándole una solicitud a <span class="font-semibold text-gray-700">{tecnicoNombre}</span></p>
-          : <p class="text-gray-500 text-sm">Describí lo que necesitás y te asignamos el técnico ideal.</p>
-        }
+      <div class="flex items-center justify-between">
+        <a href={tecnicoId ? `/tecnicos/${tecnicoId}` : '/tecnicos'}
+           class="text-primary hover:text-primary-hover font-medium flex items-center gap-1 w-fit text-sm">
+          ← {tecnicoId ? 'Volver al perfil' : 'Ver técnicos'}
+        </a>
+        {tecnicoNombre && (
+          <p class="text-gray-500 text-sm hidden sm:block">
+            Enviándole una solicitud a <span class="font-semibold text-gray-700">{tecnicoNombre}</span>
+          </p>
+        )}
       </div>
 
       <!-- Formulario -->
-      <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100">
-        {categorias.length === 0 ? (
+      {categorias.length === 0 ? (
+        <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-cream-dark">
           <p class="text-gray-400 text-sm text-center py-6">No hay categorías disponibles.</p>
-        ) : (
-          <FormSolicitud
-            client:load
-            tecnicoId={tecnicoId}
-            tecnicoNombre={tecnicoNombre}
-            categorias={categorias}
-            defaultCategoriaId={categoriaParam}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <FormSolicitud
+          client:load
+          tecnicoId={tecnicoId}
+          tecnicoNombre={tecnicoNombre}
+          categorias={categorias}
+          defaultCategoriaId={categoriaParam}
+        />
+      )}
 
     </div>
   </div>

@@ -20,7 +20,7 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     const { data, count, error } = await supabase
       .from('solicitudes')
       .select(`
-        id, titulo, descripcion, estado, direccion, tecnico_id,
+        id, numero, titulo, descripcion, estado, direccion, tecnico_id,
         precio_base, tasa_aplicada, total_estimado, fecha_solicitada, hora_solicitada, creado_en,
         tecnicos ( usuarios ( nombre_completo ) ),
         categorias ( nombre, icono ),

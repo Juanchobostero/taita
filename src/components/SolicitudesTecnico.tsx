@@ -2,9 +2,11 @@ import { useState, useEffect, useRef, useId } from 'react'
 import { supabase } from '@/lib/supabase'
 import CompletarTrabajo from '@/components/CompletarTrabajo'
 import ResponderAsignacion from '@/components/ResponderAsignacion'
+import CerrarServicio from '@/components/CerrarServicio'
 
 interface SolicitudRow {
   id:                  string
+  numero:              number
   titulo:              string
   estado:              string
   total_estimado:      number | null
@@ -50,6 +52,7 @@ const estadoLabel: Record<string, string> = {
   aceptada:   'Aceptada',
   en_curso:   'En curso',
   completada: 'Completada',
+  finalizada: 'Finalizada',
   cancelada:  'Cancelada',
 }
 const estadoColor: Record<string, string> = {
@@ -58,6 +61,7 @@ const estadoColor: Record<string, string> = {
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-primary-soft text-[#1B4D2E]',
+  finalizada: 'bg-[#1B4D2E] text-white',
   cancelada:  'bg-gray-100 text-gray-500',
 }
 
@@ -122,13 +126,15 @@ export default function SolicitudesTecnico({ tecnicoId, usuarioId, initialData }
           {rows.map(s => (
             <div key={s.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex flex-col gap-1">
-                <a href={`/dashboard/tecnico/solicitud/${s.id}`} className="font-semibold text-gray-900 text-sm hover:text-primary transition-colors w-fit">{s.titulo}</a>
+                <a href={`/dashboard/tecnico/solicitud/${s.id}`} className="font-semibold text-gray-900 text-sm hover:text-primary transition-colors w-fit">
+                  <span className="text-gray-400 font-normal">#{s.numero}</span> {s.titulo}
+                </a>
                 <p className="text-xs text-gray-400">
                   {s.categorias?.icono} {s.categorias?.nombre}
                   {s.usuarios?.nombre_completo && ` · 👤 ${s.usuarios.nombre_completo}`}
                 </p>
                 {s.direccion && <p className="text-xs text-gray-400">📍 {s.direccion}</p>}
-                {s.estado === 'completada' && s.conformidad_cliente && (() => {
+                {(s.estado === 'completada' || s.estado === 'finalizada') && s.conformidad_cliente && (() => {
                   const info = pagoInfo[ultimoPago(s.pagos)?.estado ?? '']
                   return info ? <p className={`text-xs font-medium ${info.clase}`}>{info.texto}</p> : null
                 })()}
@@ -165,6 +171,9 @@ export default function SolicitudesTecnico({ tecnicoId, usuarioId, initialData }
                     precioBase={s.precio_base ?? null}
                     tasa={s.tasa_aplicada ?? null}
                   />
+                )}
+                {s.estado === 'completada' && ultimoPago(s.pagos)?.estado === 'pagado' && (
+                  <CerrarServicio solicitudId={s.id} titulo={s.titulo} />
                 )}
               </div>
             </div>

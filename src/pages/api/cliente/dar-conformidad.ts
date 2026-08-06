@@ -17,7 +17,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const supabase = createSupabaseAdmin()
     const { data: sol } = await supabase
       .from('solicitudes')
-      .select('id, titulo, estado, cliente_id, total_estimado, conformidad_cliente')
+      .select('id, numero, titulo, estado, cliente_id, total_estimado, conformidad_cliente')
       .eq('id', solicitudId)
       .single()
 
@@ -50,7 +50,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     // ('registrado'), igual que Resend cuando falta su API key: no rompe nada.
     let preferencia: Awaited<ReturnType<typeof crearPreferencia>> = null
     try {
-      preferencia = await crearPreferencia({ pagoId, solicitudId, titulo: sol.titulo, monto })
+      preferencia = await crearPreferencia({ pagoId, solicitudId, titulo: `#${sol.numero} — ${sol.titulo}`, monto })
     } catch (err) {
       console.error('[dar-conformidad] error creando preferencia de Mercado Pago:', err)
     }

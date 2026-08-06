@@ -9,16 +9,18 @@ interface Props {
   pagoEstado:    string | null
   initPoint:     string | null
   reciboUrl:     string | null
+  reciboDescargaUrl: string | null
 }
 
 export default function DarConformidad({
-  solicitudId, titulo, total, yaConfirmado, conformidadEn, pagoEstado, initPoint, reciboUrl,
+  solicitudId, titulo, total, yaConfirmado, conformidadEn, pagoEstado, initPoint, reciboUrl, reciboDescargaUrl,
 }: Props) {
   const [abierto,     setAbierto]     = useState(false)
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
   const [regenerando, setRegenerando] = useState(false)
   const [errorReintento, setErrorReintento] = useState('')
+  const [verRecibo,   setVerRecibo]   = useState(false)
 
   const fmt = (n: number) => `$${n.toLocaleString('es-AR')}`
 
@@ -62,6 +64,7 @@ export default function DarConformidad({
       : null
 
     return (
+      <>
       <div className="bg-primary-soft border border-primary-pale rounded-xl p-4 flex flex-col gap-2 text-sm text-[#1B4D2E]">
         <p className="font-semibold">✅ Diste conformidad{fecha ? ` el ${fecha}` : ''}</p>
 
@@ -71,12 +74,23 @@ export default function DarConformidad({
               ✅ Pago acreditado{total != null ? ` por ${fmt(total)}` : ''}. Gracias por confiar en Taita.
             </p>
             {reciboUrl && (
-              <a
-                href={reciboUrl}
-                className="inline-flex items-center gap-1 w-fit text-xs font-semibold bg-primary-soft hover:bg-primary text-[#1B4D2E] hover:text-white px-3 py-1.5 rounded-full transition-colors"
-              >
-                📄 Descargar recibo
-              </a>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVerRecibo(true)}
+                  className="inline-flex items-center gap-1 w-fit text-xs font-semibold bg-primary-soft hover:bg-primary text-[#1B4D2E] hover:text-white px-3 py-1.5 rounded-full transition-colors"
+                >
+                  👁️ Ver recibo
+                </button>
+                {reciboDescargaUrl && (
+                  <a
+                    href={reciboDescargaUrl}
+                    className="inline-flex items-center gap-1 w-fit text-xs font-semibold text-[#1B4D2E] hover:text-primary px-1.5 py-1.5 transition-colors"
+                  >
+                    ⬇️ Descargar
+                  </a>
+                )}
+              </div>
             )}
           </>
         ) : pagoEstado === 'pendiente_pago' && initPoint ? (
@@ -128,6 +142,30 @@ export default function DarConformidad({
           </p>
         )}
       </div>
+
+      {verRecibo && reciboUrl && (
+        <div
+          className="fixed inset-0 z-100 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setVerRecibo(false)}
+        >
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events */}
+          <div
+            className="relative w-full max-w-3xl h-[90vh] bg-white rounded-lg overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setVerRecibo(false)}
+              className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white text-gray-700 hover:bg-gray-100 flex items-center justify-center shadow-md text-lg font-bold leading-none"
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+            <iframe src={reciboUrl} title="Recibo de pago" className="w-full h-full border-0" />
+          </div>
+        </div>
+      )}
+      </>
     )
   }
 

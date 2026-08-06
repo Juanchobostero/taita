@@ -16,7 +16,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const supabase = createSupabaseAdmin()
     const { data: sol } = await supabase
       .from('solicitudes')
-      .select('id, titulo, estado, cliente_id, total_estimado, conformidad_cliente')
+      .select('id, numero, titulo, estado, cliente_id, total_estimado, conformidad_cliente')
       .eq('id', solicitudId)
       .single()
 
@@ -43,7 +43,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const monto  = sol.total_estimado ?? 0
     const pagoId = randomUUID()
-    const preferencia = await crearPreferencia({ pagoId, solicitudId, titulo: sol.titulo, monto })
+    const preferencia = await crearPreferencia({ pagoId, solicitudId, titulo: `#${sol.numero} — ${sol.titulo}`, monto })
     if (!preferencia) {
       return new Response(JSON.stringify({ error: 'Mercado Pago no está configurado.' }), { status: 500 })
     }

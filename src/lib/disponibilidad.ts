@@ -100,3 +100,23 @@ export function franjasHorarias(): string[] {
   for (let min = HORA_INICIO_MIN; min < HORA_FIN_MIN; min += PASO_MIN) franjas.push(horaDesdeMinutos(min))
   return franjas
 }
+
+// Franja horaria amplia (mañana/tarde/noche) que el admin le compromete al técnico al asignarlo —
+// distinta del horario puntual que pidió el cliente (`hora_solicitada`), que sigue siendo solo
+// informativo/de referencia. Los cortes coinciden con el horario laboral de arriba (08:00–20:00).
+export type FranjaHoraria = 'manana' | 'tarde' | 'noche'
+
+export const FRANJA_LABEL: Record<FranjaHoraria, string> = {
+  manana: 'Mañana (08:00–12:00)',
+  tarde:  'Tarde (12:00–18:00)',
+  noche:  'Noche (18:00–20:00)',
+}
+
+/** A qué franja amplia cae una hora puntual — se usa para sugerir la franja por default al admin
+ * y para detectar si la franja que terminó asignando difiere de lo que pidió el cliente. */
+export function franjaDeHora(hora: string): FranjaHoraria {
+  const min = minutosDesdeHora(hora.slice(0, 5))
+  if (min < 12 * 60) return 'manana'
+  if (min < 18 * 60) return 'tarde'
+  return 'noche'
+}

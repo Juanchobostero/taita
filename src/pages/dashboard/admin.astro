@@ -56,6 +56,7 @@ interface TecnicoPendiente {
 }
 interface SolicitudReciente {
   id: string
+  numero: number
   titulo: string
   estado: string
   creado_en: string
@@ -90,7 +91,7 @@ const [
   supabase
     .from('solicitudes')
     .select(`
-      id, titulo, estado, creado_en, fecha_solicitada, tecnico_id,
+      id, numero, titulo, estado, creado_en, fecha_solicitada, tecnico_id,
       usuarios!cliente_id ( nombre_completo ),
       tecnicos ( id, usuarios ( nombre_completo ) ),
       categorias ( nombre ),
@@ -98,7 +99,10 @@ const [
     `)
     .order('actualizado_en', { ascending: false })
     .range(0, 9),
-  supabase.from('solicitudes').select('total_estimado').eq('estado', 'completada'),
+  // Incluye "finalizada" además de "completada" — son trabajos completados igual, solo que ya
+  // pasaron por el cierre definitivo del técnico (Fase 5); si no, los ingresos "desaparecían" del
+  // acumulado apenas el técnico cerraba el servicio.
+  supabase.from('solicitudes').select('total_estimado').in('estado', ['completada', 'finalizada']),
 ])
 
 const pendientes = (rawPendientes ?? []) as TecnicoPendiente[]

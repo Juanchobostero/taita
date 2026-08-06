@@ -5,8 +5,10 @@ import GaleriaFotos from '../../../../components/GaleriaFotos'
 import CancelarSolicitud from '../../../../components/CancelarSolicitud'
 import DarConformidad from '../../../../components/DarConformidad'
 import CambiosEnVivo from '../../../../components/CambiosEnVivo'
+import MapaUbicacion from '../../../../components/MapaUbicacion'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
 import { actualizarPagoDesdeMP, obtenerLinkPago } from '../../../../lib/mercadopago'
+import { FRANJA_LABEL, type FranjaHoraria } from '../../../../lib/disponibilidad'
 
 const { id } = Astro.params
 if (!id) return Astro.redirect('/dashboard/cliente')
@@ -17,11 +19,11 @@ const userId   = Astro.locals.user!.id
 const { data: sol } = await supabase
   .from('solicitudes')
   .select(`
-    id, titulo, descripcion, estado, creado_en, cliente_id,
+    id, numero, titulo, descripcion, estado, creado_en, cliente_id,
     tecnico_id, precio_base, tasa_aplicada, total_estimado,
     gastos_extra, descripcion_gastos, imagenes_trabajo,
     conformidad_cliente, conformidad_en,
-    fecha_solicitada, hora_solicitada, direccion,
+    fecha_solicitada, hora_solicitada, direccion, latitud, longitud, franja_asignada,
     tecnicos (
       descripcion, calificacion_promedio, total_servicios,
       usuarios ( nombre_completo, foto_url ),
@@ -62,9 +64,15 @@ const pagoInitPoint = (pagoEstado === 'pendiente_pago' && pagoRow?.mp_preference
   ? await obtenerLinkPago(pagoRow.mp_preference_id).catch(() => null)
   : null
 
-// Link firmado temporal (bucket privado) — se regenera en cada visita, no queda un link fijo dando vueltas.
+// Links firmados temporales (bucket privado) — se regeneran en cada visita, no quedan links fijos
+// dando vueltas. Uno sirve para previsualizar inline (sin forzar descarga) y el otro fuerza la
+// descarga vía el parámetro `download` de Supabase Storage (funciona cross-origin, a diferencia
+// del atributo HTML `download` que el navegador ignora en links a otro dominio).
 const pagoReciboUrl = (pagoEstado === 'pagado' && pagoRow?.recibo_path)
   ? (await supabase.storage.from('recibos').createSignedUrl(pagoRow.recibo_path, 60 * 60)).data?.signedUrl ?? null
+  : null
+const pagoReciboDescargaUrl = (pagoEstado === 'pagado' && pagoRow?.recibo_path)
+  ? (await supabase.storage.from('recibos').createSignedUrl(pagoRow.recibo_path, 60 * 60, { download: true })).data?.signedUrl ?? null
   : null
 
 const { data: rawHistorial } = await supabase
@@ -84,13 +92,16 @@ const descGastos       = sol.descripcion_gastos as string | null
 const imagenesTrabajo  = (sol.imagenes_trabajo  as string[] | null) ?? []
 
 // "asignada" (técnico asignado pero todavía sin confirmar) se muestra igual que "pendiente" acá
-// — el cliente no ve nada distinto hasta que el técnico confirma de verdad.
+// — el cliente no ve nada distinto hasta que el técnico confirma de verdad. Mismo criterio para
+// "finalizada": es el cierre administrativo interno del técnico (después de cobrar) — para el
+// cliente no cambia nada respecto de "Completada", así que se muestra igual.
 const estadoLabel: Record<string, string> = {
   pendiente:  'Pendiente',
   asignada:   'Pendiente',
   aceptada:   'Aceptada',
   en_curso:   'En curso',
   completada: 'Completada',
+  finalizada: 'Completada',
   cancelada:  'Cancelada',
 }
 const estadoColor: Record<string, string> = {
@@ -99,6 +110,7 @@ const estadoColor: Record<string, string> = {
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
+  finalizada: 'bg-[#E8F5E9] text-[#1B4D2E]',
   cancelada:  'bg-red-100 text-red-700',
 }
 const estadoDot: Record<string, string> = {
@@ -107,17 +119,18 @@ const estadoDot: Record<string, string> = {
   aceptada:   'bg-blue-400',
   en_curso:   'bg-blue-400',
   completada: 'bg-primary',
+  finalizada: 'bg-primary',
   cancelada:  'bg-red-400',
 }
 
 // El historial (Tanda 2) arranca desde el primer cambio real — "pendiente" no queda registrado
 // porque la solicitud se crea directo en ese estado. Se agrega acá como primer paso del timeline.
-// Se filtra "asignada" del historial real porque el cliente no debe enterarse de ese estado
-// intermedio (se le muestra igual que "pendiente" en toda la vista) — sin este filtro, el cambio
-// a "asignada" aparecía como un segundo "Pendiente" duplicado con otra fecha.
+// Se filtran "asignada" y "finalizada" del historial real porque el cliente no debe enterarse de
+// esos pasos intermedios/administrativos (se le muestran igual que "pendiente"/"completada" en
+// toda la vista) — sin este filtro aparecerían como un "Pendiente"/"Completada" duplicado.
 const timeline = [
   { estado: 'pendiente', creado_en: sol.creado_en },
-  ...(rawHistorial ?? []).filter(h => h.estado !== 'asignada'),
+  ...(rawHistorial ?? []).filter(h => h.estado !== 'asignada' && h.estado !== 'finalizada'),
 ]
 
 const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0 })}`
@@ -125,7 +138,7 @@ const fmtFechaHora = (iso: string) =>
   new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
 ---
 
-<Layout title={`Solicitud — ${sol.titulo}`}>
+<Layout title={`Solicitud #${sol.numero} — ${sol.titulo}`}>
   <Navbar client:load />
   <CambiosEnVivo client:load autoReload suscripciones={[{ tabla: 'solicitudes', filtro: `id=eq.${sol.id}` }]} />
 
@@ -139,7 +152,7 @@ const fmtFechaHora = (iso: string) =>
         </a>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div class="flex flex-col gap-1">
-            <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl">{sol.titulo}</h1>
+            <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl"><span class="text-gray-400 font-sans font-normal">#{sol.numero}</span> {sol.titulo}</h1>
             <p class="text-gray-400 text-sm">
               {categoria?.icono} {categoria?.nombre} ·
               Creada el {new Date(sol.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
@@ -237,11 +250,23 @@ const fmtFechaHora = (iso: string) =>
                   {sol.hora_solicitada && ` · ${(sol.hora_solicitada as string).slice(0, 5)} hs`}
                 </p>
               </div>
+              {sol.franja_asignada && sol.estado !== 'pendiente' && (
+                <div class="flex flex-col gap-1">
+                  <span class="text-gray-400 text-xs uppercase tracking-wide">Franja horaria asignada</span>
+                  <p class="text-gray-800 font-medium">🕒 {FRANJA_LABEL[sol.franja_asignada as FranjaHoraria] ?? sol.franja_asignada}</p>
+                </div>
+              )}
             </div>
+            {sol.latitud != null && sol.longitud != null && (
+              <div class="flex flex-col gap-1.5">
+                <span class="text-gray-400 text-xs uppercase tracking-wide">Ubicación</span>
+                <MapaUbicacion client:load lat={sol.latitud} lng={sol.longitud} />
+              </div>
+            )}
           </div>
 
           <!-- Cierre del trabajo (fotos + gastos) -->
-          {sol.estado === 'completada' && (imagenesTrabajo.length > 0 || (gastosExtra != null && gastosExtra > 0)) && (
+          {(sol.estado === 'completada' || sol.estado === 'finalizada') && (imagenesTrabajo.length > 0 || (gastosExtra != null && gastosExtra > 0)) && (
             <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
               <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Cierre del trabajo</h2>
 
@@ -300,7 +325,7 @@ const fmtFechaHora = (iso: string) =>
           </div>
 
           <!-- Conformidad + pago — solo cuando el servicio ya está completado -->
-          {sol.estado === 'completada' && (
+          {(sol.estado === 'completada' || sol.estado === 'finalizada') && (
             <div class="bg-white rounded-2xl border border-cream-dark p-6">
               <DarConformidad
                 client:load
@@ -312,6 +337,7 @@ const fmtFechaHora = (iso: string) =>
                 pagoEstado={pagoEstado}
                 initPoint={pagoInitPoint}
                 reciboUrl={pagoReciboUrl}
+                reciboDescargaUrl={pagoReciboDescargaUrl}
               />
             </div>
           )}

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 
 interface SolicitudRow {
   id: string
+  numero: number
   titulo: string
   estado: string
   creado_en: string
@@ -28,6 +29,7 @@ const estadoColor: Record<string, string> = {
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
+  finalizada: 'bg-[#1B4D2E] text-white',
   cancelada:  'bg-gray-100 text-gray-500',
 }
 
@@ -157,7 +159,9 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
                 const pago = pagoInfo[ultimoPago(s.pagos)?.estado ?? '']
                 return (
                 <tr key={s.id} className="hover:bg-[#F5EFE6] transition-colors">
-                  <td className="px-6 py-3 font-medium text-gray-800 max-w-[180px] truncate">{s.titulo}</td>
+                  <td className="px-6 py-3 font-medium text-gray-800 max-w-55 truncate">
+                    <span className="text-gray-400 font-normal">#{s.numero}</span> {s.titulo}
+                  </td>
                   <td className="px-6 py-3 text-gray-600 whitespace-nowrap">{s.usuarios?.nombre_completo ?? '—'}</td>
                   <td className="px-6 py-3 text-gray-600 whitespace-nowrap">
                     {s.tecnico_id

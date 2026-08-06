@@ -16,13 +16,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const supabase = createSupabaseAdmin()
 
-  // Verificar que la solicitud es del cliente y está completada
+  // Verificar que la solicitud es del cliente y ya se completó — "finalizada" también vale, es el
+  // mismo trabajo completado, solo que el técnico ya hizo el cierre definitivo (Fase 5).
   const { data: solicitud } = await supabase
     .from('solicitudes')
     .select('id, estado, cliente_id')
     .eq('id', solicitudId)
     .eq('cliente_id', user.id)
-    .eq('estado', 'completada')
+    .in('estado', ['completada', 'finalizada'])
     .single()
 
   if (!solicitud) {

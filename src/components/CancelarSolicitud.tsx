@@ -27,8 +27,8 @@ export default function CancelarSolicitud({ solicitudId, titulo }: Props) {
     setLoading(false)
   }
 
-  if (!abierto) {
-    return (
+  return (
+    <>
       <button
         type="button"
         onClick={() => setAbierto(true)}
@@ -36,35 +36,46 @@ export default function CancelarSolicitud({ solicitudId, titulo }: Props) {
       >
         Cancelar solicitud
       </button>
-    )
-  }
 
-  return (
-    <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex flex-col gap-2 text-xs text-red-700">
-      <p>
-        ¿Seguro que querés cancelar <strong>{titulo}</strong>? Según nuestros{' '}
-        <a href="/terminos" target="_blank" className="underline font-medium">Términos y condiciones</a>,
-        la cancelación es definitiva y, si ya hay un técnico asignado, va a ser notificado.
-      </p>
-      {error && <p className="text-red-600 font-semibold">{error}</p>}
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          disabled={loading}
-          onClick={confirmar}
-          className="font-semibold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-full transition-colors disabled:opacity-50"
+      {/* Modal centrado en vez de un bloque inline — mismo criterio que CerrarServicio y
+          ResponderAsignacion, para que sea consistente en toda la app. */}
+      {abierto && (
+        <div
+          className="fixed inset-0 z-100 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !loading && setAbierto(false)}
         >
-          {loading ? 'Cancelando...' : 'Sí, cancelar'}
-        </button>
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => setAbierto(false)}
-          className="text-gray-500 hover:text-gray-700"
-        >
-          Volver
-        </button>
-      </div>
-    </div>
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events */}
+          <div
+            className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-5 flex flex-col gap-3 text-sm text-red-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p>
+              ¿Seguro que querés cancelar <strong>{titulo}</strong>? Según nuestros{' '}
+              <a href="/terminos" target="_blank" className="underline font-medium">Términos y condiciones</a>,
+              la cancelación es definitiva y, si ya hay un técnico asignado, va a ser notificado.
+            </p>
+            {error && <p className="text-red-600 font-semibold text-xs">{error}</p>}
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={confirmar}
+                className="font-semibold bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full transition-colors disabled:opacity-50 text-sm"
+              >
+                {loading ? 'Cancelando...' : 'Sí, cancelar'}
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setAbierto(false)}
+                className="text-gray-500 hover:text-gray-700 text-sm"
+              >
+                Volver
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

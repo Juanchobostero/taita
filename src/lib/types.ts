@@ -1,6 +1,6 @@
 // ── Enums ─────────────────────────────────────────────────────────────────
 export type UserTipo        = 'cliente' | 'tecnico' | 'admin'
-export type SolicitudEstado = 'pendiente' | 'asignada' | 'aceptada' | 'en_curso' | 'completada' | 'cancelada'
+export type SolicitudEstado = 'pendiente' | 'asignada' | 'aceptada' | 'en_curso' | 'completada' | 'finalizada' | 'cancelada'
 
 // ── Tablas base ───────────────────────────────────────────────────────────
 export interface Usuario {
@@ -37,6 +37,7 @@ export interface Categoria {
 
 export interface Solicitud {
   id:                  string
+  numero:              number
   cliente_id:          string
   tecnico_id:          string | null
   categoria_id:        string
@@ -49,6 +50,9 @@ export interface Solicitud {
   fecha_solicitada:    string | null
   hora_solicitada:     string | null
   direccion:           string | null
+  latitud:             number | null
+  longitud:            number | null
+  franja_asignada:     string | null
   estado:              SolicitudEstado
   creado_en:           string
   actualizado_en:      string

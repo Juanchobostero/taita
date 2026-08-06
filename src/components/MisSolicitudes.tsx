@@ -5,6 +5,7 @@ import ResenaForm from '@/components/ResenaForm'
 
 interface SolicitudRow {
   id:               string
+  numero:           number
   titulo:           string
   descripcion:      string | null
   estado:           string
@@ -31,13 +32,15 @@ const PAGE_SIZE = 5
 
 // "asignada" (técnico asignado pero todavía sin confirmar) se muestra igual que "pendiente" acá
 // — el cliente no ve nada distinto hasta que el técnico confirma de verdad, para no mostrar un
-// estado intermedio que no puede accionar.
+// estado intermedio que no puede accionar. Mismo criterio para "finalizada" (cierre administrativo
+// del técnico tras cobrar): para el cliente es exactamente "Completada", no hay nada nuevo que ver.
 const estadoLabel: Record<string, string> = {
   pendiente:  'Pendiente',
   asignada:   'Pendiente',
   aceptada:   'Aceptada',
   en_curso:   'En curso',
   completada: 'Completada',
+  finalizada: 'Completada',
   cancelada:  'Cancelada',
 }
 const estadoColor: Record<string, string> = {
@@ -46,6 +49,7 @@ const estadoColor: Record<string, string> = {
   aceptada:   'bg-blue-100 text-blue-800',
   en_curso:   'bg-blue-100 text-blue-800',
   completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
+  finalizada: 'bg-[#E8F5E9] text-[#1B4D2E]',
   cancelada:  'bg-red-100 text-red-700',
 }
 
@@ -162,7 +166,7 @@ export default function MisSolicitudes({ userId, initialData, initialTotal }: Pr
               {/* Fila principal */}
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div className="flex flex-col gap-1">
-                  <p className="font-semibold text-gray-900">{s.titulo}</p>
+                  <p className="font-semibold text-gray-900"><span className="text-gray-400 font-normal">#{s.numero}</span> {s.titulo}</p>
                   <p className="text-xs text-gray-400">
                     {cat?.icono} {cat?.nombre} · 📅 {fecha}{hora && ` ${hora} hs`}
                   </p>
@@ -239,7 +243,7 @@ export default function MisSolicitudes({ userId, initialData, initialTotal }: Pr
               )}
 
               {/* Reseña — solo en solicitudes completadas sin reseña previa */}
-              {s.estado === 'completada' && !s.resenas?.length && s.tecnico_id && tec?.usuarios && (
+              {(s.estado === 'completada' || s.estado === 'finalizada') && !s.resenas?.length && s.tecnico_id && tec?.usuarios && (
                 <ResenaForm
                   solicitudId={s.id}
                   tecnicoId={s.tecnico_id}

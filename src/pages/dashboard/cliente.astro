@@ -25,7 +25,7 @@ const [
   supabase
     .from('solicitudes')
     .select(`
-      id, titulo, descripcion, estado, direccion, tecnico_id,
+      id, numero, titulo, descripcion, estado, direccion, tecnico_id,
       precio_base, tasa_aplicada, total_estimado, fecha_solicitada, hora_solicitada, creado_en,
       tecnicos ( usuarios ( nombre_completo ) ),
       categorias ( nombre, icono ),
@@ -38,8 +38,11 @@ const [
     .eq('cliente_id', userId).in('estado', ['pendiente', 'asignada']),
   supabase.from('solicitudes').select('*', { count: 'exact', head: true })
     .eq('cliente_id', userId).in('estado', ['aceptada', 'en_curso']),
+  // Incluye "finalizada" además de "completada" — para el cliente es el mismo trabajo terminado,
+  // solo que el técnico ya hizo el cierre administrativo interno (Fase 5); si no, este contador
+  // "perdía" solicitudes apenas se cerraban.
   supabase.from('solicitudes').select('*', { count: 'exact', head: true })
-    .eq('cliente_id', userId).eq('estado', 'completada'),
+    .eq('cliente_id', userId).in('estado', ['completada', 'finalizada']),
 ])
 
 const solicitudes = rawSolicitudes ?? []

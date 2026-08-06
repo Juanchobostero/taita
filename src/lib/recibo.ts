@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit'
 
 interface DatosRecibo {
   solicitudId:   string
+  numero:        number
   titulo:        string
   categoria:     string | null
   clienteNombre: string
@@ -28,7 +29,7 @@ export function generarReciboPDF(datos: DatosRecibo): Promise<Buffer> {
     doc.moveDown(1.5)
 
     doc.fontSize(10).fillColor('#000000')
-    doc.text(`Nº de solicitud: ${datos.solicitudId}`)
+    doc.text(`Nº de solicitud: #${datos.numero}`)
     doc.text(`Nº de pago (Mercado Pago): ${datos.paymentId}`)
     doc.text(`Fecha de pago: ${datos.fechaPago.toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`)
     doc.moveDown()

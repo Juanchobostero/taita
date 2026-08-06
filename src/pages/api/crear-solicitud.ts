@@ -14,7 +14,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const body = await request.json()
   const { tecnicoId, categoriaId, titulo, descripcion,
-          precioBase, tasaAplicada, totalEstimado, fechaSolicitada, horaSolicitada, direccion } = body
+          precioBase, tasaAplicada, totalEstimado, fechaSolicitada, horaSolicitada, direccion,
+          latitud, longitud } = body
 
   if (!categoriaId || !titulo || !fechaSolicitada || !horaSolicitada || !direccion) {
     return new Response(JSON.stringify({ error: 'Datos incompletos' }), { status: 400 })
@@ -49,6 +50,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     fecha_solicitada: fechaSolicitada,
     hora_solicitada:  horaSolicitada,
     direccion,
+    latitud:          typeof latitud === 'number' ? latitud : null,
+    longitud:         typeof longitud === 'number' ? longitud : null,
     estado:           'pendiente',
   }).select('id').single()
 

@@ -34,7 +34,7 @@ const { data: todasCategorias } = await supabase
 const { data: rawSolicitudes } = await supabase
   .from('solicitudes')
   .select(`
-    id, titulo, estado, total_estimado, precio_base, tasa_aplicada,
+    id, numero, titulo, estado, total_estimado, precio_base, tasa_aplicada,
     gastos_extra, descripcion_gastos, imagenes_trabajo,
     conformidad_cliente,
     fecha_solicitada, hora_solicitada, creado_en, direccion,
@@ -54,9 +54,15 @@ const stats = {
   // viene filtrada por `tecnico_id = tecnico.id`.
   pendientes:  solicitudes.filter(s => s.estado === 'asignada').length,
   en_curso:    solicitudes.filter(s => ['aceptada', 'en_curso'].includes(s.estado)).length,
-  completadas: solicitudes.filter(s => s.estado === 'completada').length,
+  // "Completados" cuenta el trabajo entregado en total (completada + finalizada) — no debe bajar
+  // cuando un trabajo pasa a "finalizada", que es solo el cierre administrativo de uno que ya
+  // estaba completado. "Finalizados" es el desglose de cuántos de esos ya están cerrados del todo
+  // (pago acreditado + técnico cerró) — mismo criterio para "Ganancias", que si no "perdía" plata
+  // ya ganada apenas se cerraba el trabajo.
+  completadas: solicitudes.filter(s => s.estado === 'completada' || s.estado === 'finalizada').length,
+  finalizadas: solicitudes.filter(s => s.estado === 'finalizada').length,
   ganancias:   solicitudes
-    .filter(s => s.estado === 'completada')
+    .filter(s => s.estado === 'completada' || s.estado === 'finalizada')
     .reduce((acc, s) => acc + (s.total_estimado ?? 0), 0),
 }
 
@@ -94,7 +100,7 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
       </div>
 
       <!-- Stats -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
           <p class="text-xs text-gray-500">Solicitudes nuevas</p>
           <p class="text-3xl font-bold text-amber-500">{stats.pendientes}</p>
@@ -106,6 +112,10 @@ const nombre = tecnico.usuarios.nombre_completo.split(' ')[0]
         <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
           <p class="text-xs text-gray-500">Completados</p>
           <p class="text-3xl font-bold text-[#1B4D2E]">{stats.completadas}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
+          <p class="text-xs text-gray-500">Finalizados</p>
+          <p class="text-3xl font-bold text-emerald-700">{stats.finalizadas}</p>
         </div>
         <div class="bg-white rounded-2xl p-5 border border-cream-dark flex flex-col gap-1">
           <p class="text-xs text-gray-500">Ganancias</p>

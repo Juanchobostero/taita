@@ -13,7 +13,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     const { data: tec } = await supabase
       .from('tecnicos')
-      .select('id, total_servicios')
+      .select('id')
       .eq('usuario_id', user.id)
       .single()
     if (!tec) return new Response(JSON.stringify({ error: 'No sos técnico' }), { status: 403 })
@@ -57,10 +57,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       actualizado_en:      new Date().toISOString(),
     }
 
-    await Promise.all([
-      supabase.from('solicitudes').update(updates).eq('id', solicitudId),
-      supabase.from('tecnicos').update({ total_servicios: (tec.total_servicios ?? 0) + 1 }).eq('id', tec.id),
-    ])
+    // El contador de trabajos (`tecnicos.total_servicios`) ya NO se incrementa acá — se movió al
+    // cierre definitivo (`finalizar-servicio.ts`, después de que el pago se acredita), para que
+    // las estadísticas del técnico solo cuenten trabajos realmente terminados y cobrados, no
+    // trabajos que el cliente todavía puede rechazar o nunca termina de pagar (pedido de Agustín).
+    await supabase.from('solicitudes').update(updates).eq('id', solicitudId)
 
     // Si ya estaba "completada" (auto-completada por el cron), no volver a notificar/loguear
     // el mismo cambio de estado — solo se está completando el cierre con fotos/gastos.
