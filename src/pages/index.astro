@@ -16,6 +16,14 @@ const { data: categoriasDB } = await supabase
   .order('nombre')
   .limit(9)
 
+// Números reales para la tarjeta de confianza del hero — nada de cifras inventadas. Si el número
+// es chico (plataforma recién arrancando), igual se muestra tal cual es; el copy está pensado
+// para que lea bien sea cual sea el valor.
+const [{ count: tecnicosActivos }, { count: serviciosRealizados }] = await Promise.all([
+  supabase.from('tecnicos').select('*', { count: 'exact', head: true }).eq('activo', true),
+  supabase.from('solicitudes').select('*', { count: 'exact', head: true }).in('estado', ['completada', 'finalizada']),
+])
+
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
@@ -35,9 +43,26 @@ const jsonLd = {
   <section class="bg-cream py-12 px-8">
     <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-8 md:gap-12">
 
-      <!-- Mascota -->
-      <div class="shrink-0">
+      <!-- Mascota + tarjeta de confianza (solo desktop) -->
+      <div class="shrink-0 relative">
         <img src="/images/taita-avatar.webp" alt="TAITA" class="w-40 h-40 md:w-48 md:h-48 object-contain mix-blend-multiply animate-fade-up hover:scale-105 transition-transform duration-300 ease-out cursor-pointer [clip-path:circle(50%)]" />
+
+        <!-- Mismo estilo "metálico" con brillo al hover que la tarjeta de estimación del wizard
+             (Fase 6a) — le da continuidad visual al rediseño. Números reales, no inventados. -->
+        <div class="hidden md:block card-metallic group absolute -bottom-5 -right-10 w-48 p-4">
+          <div class="card-metallic-shine" />
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-2xl font-bold leading-none">{tecnicosActivos ?? 0}</p>
+              <p class="text-[10px] text-white/70 uppercase tracking-wide mt-1">Técnicos activos</p>
+            </div>
+            <div class="w-px h-8 bg-white/20"></div>
+            <div>
+              <p class="text-2xl font-bold leading-none text-amber-400">{serviciosRealizados ?? 0}</p>
+              <p class="text-[10px] text-white/70 uppercase tracking-wide mt-1">Servicios realizados</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Contenido -->
@@ -59,6 +84,25 @@ const jsonLd = {
           plomería y más. Rápido, seguro y garantizado.
         </p>
 
+        <!-- Buscador + CTA — solo mobile, estilo app nativa (referencia que pasó Agustín) -->
+        <div class="w-full md:hidden flex flex-col gap-3 mb-5">
+          <button
+            id="mobile-search-trigger"
+            type="button"
+            class="w-full flex items-center gap-2 bg-white border border-cream-dark rounded-full pl-4 pr-1.5 py-1.5 text-sm text-gray-400 shadow-sm"
+          >
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <span class="flex-1 text-left truncate">¿Qué servicio necesitás hoy?</span>
+            <span class="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-full shrink-0">Buscar</span>
+          </button>
+          <a
+            href="/solicitud"
+            class="w-full text-center bg-primary hover:bg-primary-hover text-white font-bold py-3.5 rounded-full text-sm shadow-sm transition-colors"
+          >
+            Solicitar servicio ahora
+          </a>
+        </div>
+
         <div class="flex items-center gap-2 flex-wrap justify-center md:justify-start">
           <span class="text-xs text-gray-400 font-medium">Populares:</span>
           {(categoriasDB ?? []).slice(0, 4).map(c => (
@@ -73,6 +117,14 @@ const jsonLd = {
     </div>
   </section>
 
+  <script>
+    // El buscador mobile del hero reusa el mismo Command Palette (Ctrl+K) que ya tiene el navbar
+    // de escritorio — no duplica lógica de búsqueda, solo dispara el mismo atajo.
+    document.getElementById('mobile-search-trigger')?.addEventListener('click', () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { ctrlKey: true, key: 'k', bubbles: true }))
+    })
+  </script>
+
   <!-- POR QUÉ USARNOS -->
   <section class="py-16 px-4 bg-white">
     <div class="max-w-6xl mx-auto">
@@ -86,12 +138,13 @@ const jsonLd = {
           { icon: '⚡', title: 'Respuesta rápida',       desc: 'Encontrá ayuda para hoy mismo. Técnicos disponibles en tu zona en minutos.' },
           { icon: '⭐', title: 'Calidad evaluada',       desc: 'Leé reseñas reales de otros clientes de tu comunidad antes de contratar.' },
         ].map(({ icon, title, desc }) => (
-          <div class="bg-cream rounded-2xl border border-cream-dark p-6 flex flex-col items-center text-center gap-3">
-            <div class="w-11 h-11 bg-primary-soft rounded-xl flex items-center justify-center text-[22px]">
+          <div class="card-metallic group p-6 flex flex-col items-center text-center gap-3">
+            <div class="card-metallic-shine" />
+            <div class="w-11 h-11 bg-white/10 rounded-xl flex items-center justify-center text-[22px]">
               {icon}
             </div>
-            <h3 class="text-sm font-semibold text-primary">{title}</h3>
-            <p class="text-xs text-gray-400 leading-relaxed">{desc}</p>
+            <h3 class="text-sm font-semibold text-white">{title}</h3>
+            <p class="text-xs text-white/65 leading-relaxed">{desc}</p>
           </div>
         ))}
       </div>
@@ -109,7 +162,7 @@ const jsonLd = {
         {(categoriasDB ?? []).map(c => (
           <a
             href={`/solicitud?categoria=${c.id}`}
-            class="bg-white rounded-2xl border border-[#D8D4CC] hover:border-primary-hover p-6 flex flex-col items-center gap-3 transition-colors group cursor-pointer"
+            class="bg-white rounded-2xl border border-[#D8D4CC] hover:border-primary-hover p-6 flex flex-col items-center gap-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg group cursor-pointer"
           >
             <div class="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center bg-gray-100 shrink-0">
               {c.imagen_url
@@ -135,12 +188,13 @@ const jsonLd = {
   <!-- BANNER CTA TÉCNICO -->
   <section class="py-12 px-4 bg-white">
     <div class="max-w-6xl mx-auto">
-      <div class="bg-primary-soft rounded-2xl border border-primary-pale p-7 flex flex-col sm:flex-row items-center justify-between gap-5">
+      <div class="card-metallic group p-7 flex flex-col sm:flex-row items-center justify-between gap-5">
+        <div class="card-metallic-shine" />
         <div>
-          <h3 class="font-serif font-bold text-primary text-xl mb-1.5">¿Sos taita y querés ofrecer tus servicios?</h3>
-          <p class="text-sm text-gray-500">Unite a nuestra comunidad y empezá a ganar.</p>
+          <h3 class="font-serif font-bold text-white text-xl mb-1.5">¿Sos taita y querés ofrecer tus servicios?</h3>
+          <p class="text-sm text-white/70">Unite a nuestra comunidad y empezá a ganar.</p>
         </div>
-        <a href="/registro?tipo=tecnico" class="bg-primary hover:bg-primary-hover text-white rounded-full px-6 py-3 text-sm font-semibold shrink-0 transition-colors">
+        <a href="/registro?tipo=tecnico" class="bg-amber-500 hover:bg-amber-600 text-white rounded-full px-6 py-3 text-sm font-semibold shrink-0 transition-colors relative z-10">
           Quiero registrarme
         </a>
       </div>

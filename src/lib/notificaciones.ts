@@ -6,13 +6,14 @@ import { FRANJA_LABEL, type FranjaHoraria } from './disponibilidad'
 const ADMIN_EMAIL = 'taitasoluciones@gmail.com'
 
 const ESTADO_LABEL: Record<string, string> = {
-  pendiente:  'Pendiente',
-  asignada:   'Asignada',
-  aceptada:   'Aceptada',
-  en_curso:   'En curso',
-  completada: 'Completada',
-  finalizada: 'Finalizada',
-  cancelada:  'Cancelada',
+  pendiente:     'Pendiente',
+  asignada:      'Asignada',
+  aceptada:      'Aceptada',
+  en_curso:      'En curso',
+  completada:    'Completada',
+  finalizada:    'Finalizada',
+  cancelada:     'Cancelada',
+  en_cotizacion: 'En cotización',
 }
 
 // Estados en los que el cliente recibe email de aviso. "pendiente" se agregó porque ese estado
@@ -110,6 +111,84 @@ async function crearNotificacionesAdmin(
 /** Notificación in-app para admin al recibir un mensaje de /contacto o /reclamos (sin mail asociado a una solicitud). */
 export async function notificarMensajeAdmin(supabase: SupabaseClient, titulo: string, mensaje: string): Promise<void> {
   await crearNotificacionesAdmin(supabase, titulo, mensaje, null)
+}
+
+/**
+ * Se llama cuando se registra un técnico nuevo (queda `activo: false` hasta que el admin lo
+ * aprueba manualmente desde el panel). Avisa a las dos puntas: al admin, para que sepa que hay
+ * alguien esperando aprobación, y al propio técnico, para que sepa que su cuenta quedó pendiente
+ * y no es un error — antes esto no avisaba a nadie, el único indicio era el aviso pasivo dentro
+ * del panel del técnico ("Tu perfil está pendiente de aprobación").
+ */
+export async function notificarNuevoTecnico(
+  supabase:         SupabaseClient,
+  tecnicoUsuarioId: string,
+  nombreCompleto:   string,
+  tecnicoEmail:     string | null,
+): Promise<void> {
+  await enviarEmail({
+    to:      ADMIN_EMAIL,
+    subject: `Nuevo técnico registrado: ${nombreCompleto}`,
+    html: `
+      <p><strong>${nombreCompleto}</strong> se registró como técnico y está esperando aprobación.</p>
+      <p>Entrá al panel de administración para revisar sus datos y activarlo.</p>
+    `,
+  })
+  await crearNotificacionesAdmin(
+    supabase,
+    `Nuevo técnico registrado: ${nombreCompleto}`,
+    'Está esperando tu aprobación para empezar a recibir trabajos.',
+    null,
+  )
+
+  if (tecnicoEmail) {
+    await enviarEmail({
+      to:      tecnicoEmail,
+      subject: 'Recibimos tu registro en Taita Soluciones',
+      html: `
+        <p>Hola ${nombreCompleto},</p>
+        <p>Recibimos tu registro como técnico. Antes de que puedas empezar a recibir trabajos, un
+        administrador va a revisar y validar tu identidad.</p>
+        <p>Te avisamos apenas tu cuenta esté aprobada.</p>
+      `,
+    })
+  }
+  await crearNotificacion(
+    supabase, tecnicoUsuarioId,
+    'Recibimos tu registro',
+    'Tu cuenta está pendiente de aprobación — te avisamos apenas un administrador la valide.',
+    null,
+  )
+}
+
+/**
+ * Se llama cuando el admin aprueba a un técnico pendiente (`activo` pasa a `true` desde el panel).
+ * Antes esto no avisaba nada — el técnico solo se enteraba si volvía a entrar a su panel y notaba
+ * que el aviso de "pendiente de aprobación" ya no estaba.
+ */
+export async function notificarTecnicoAprobado(
+  supabase:         SupabaseClient,
+  tecnicoUsuarioId: string,
+  nombreCompleto:   string,
+  tecnicoEmail:     string | null,
+): Promise<void> {
+  if (tecnicoEmail) {
+    await enviarEmail({
+      to:      tecnicoEmail,
+      subject: '¡Tu cuenta de técnico fue aprobada!',
+      html: `
+        <p>Hola ${nombreCompleto},</p>
+        <p>Validamos tu registro y tu cuenta ya está activa. Ya podés empezar a recibir trabajos a
+        través de Taita Soluciones.</p>
+      `,
+    })
+  }
+  await crearNotificacion(
+    supabase, tecnicoUsuarioId,
+    '¡Tu cuenta fue aprobada!',
+    'Tu perfil de técnico ya está activo — ya podés empezar a recibir trabajos.',
+    null,
+  )
 }
 
 /**
@@ -383,6 +462,150 @@ export async function notificarNuevaSolicitud(supabase: SupabaseClient, solicitu
     `Cliente: ${cliente?.nombre_completo ?? '—'}.`,
     sol.id,
   )
+}
+
+/**
+ * Se llama cuando cliente o admin mandan un mensaje nuevo en el chat de una solicitud "en
+ * cotización" (Fase 7b). Avisa siempre al OTRO participante — nunca al que acaba de escribir.
+ * Igual que el resto de los chats/notificaciones de la app, esto es lo único que dispara el
+ * refresco en tiempo real del widget de chat (ver comentario en `ChatCotizacion.tsx` sobre por
+ * qué no se escucha Realtime directo sobre `cotizacion_mensajes`).
+ */
+export async function notificarMensajeCotizacion(
+  supabase:        SupabaseClient,
+  solicitudId:     string,
+  remitenteEsAdmin: boolean,
+  mensajePreview:  string,
+): Promise<void> {
+  const sol = await fetchSolicitudNotif(supabase, solicitudId)
+  if (!sol?.usuarios) return
+
+  const cliente  = sol.usuarios
+  const preview  = mensajePreview.length > 140 ? `${mensajePreview.slice(0, 140)}…` : mensajePreview
+
+  if (remitenteEsAdmin) {
+    if (cliente.email) {
+      await enviarEmail({
+        to:      cliente.email,
+        subject: `Nuevo mensaje sobre tu cotización ${etiqueta(sol)}`,
+        html: `
+          <p>Hola ${cliente.nombre_completo},</p>
+          <p>Te escribieron sobre tu solicitud <strong>${etiqueta(sol)}</strong>:</p>
+          <p style="color:#555;">"${preview}"</p>
+          <p>Respondé desde tu panel para seguir la conversación.</p>
+        `,
+      })
+    }
+    await crearNotificacion(
+      supabase, cliente.id,
+      `Nuevo mensaje sobre tu cotización ${etiqueta(sol)}`,
+      preview,
+      sol.id,
+    )
+  } else {
+    await enviarEmail({
+      to:      ADMIN_EMAIL,
+      subject: `Nuevo mensaje de cotización — ${etiqueta(sol)}`,
+      html: `
+        <p><strong>${cliente.nombre_completo}</strong> escribió sobre su solicitud de cotización
+        <strong>${etiqueta(sol)}</strong>:</p>
+        <p style="color:#555;">"${preview}"</p>
+      `,
+    })
+    await crearNotificacionesAdmin(
+      supabase,
+      `Nuevo mensaje de cotización — ${etiqueta(sol)}`,
+      `${cliente.nombre_completo}: "${preview}"`,
+      sol.id,
+    )
+  }
+}
+
+/** Se llama cuando el admin envía el precio de una cotización (Fase 7b) — avisa al cliente. */
+export async function notificarCotizacionEnviada(
+  supabase:    SupabaseClient,
+  solicitudId: string,
+  total:       number,
+): Promise<void> {
+  const sol = await fetchSolicitudNotif(supabase, solicitudId)
+  if (!sol?.usuarios) return
+
+  const cliente = sol.usuarios
+  const monto   = `$${total.toLocaleString('es-AR')}`
+
+  if (cliente.email) {
+    await enviarEmail({
+      to:      cliente.email,
+      subject: `Te enviamos una cotización — ${etiqueta(sol)}`,
+      html: `
+        <p>Hola ${cliente.nombre_completo},</p>
+        <p>Ya tenemos un precio para tu solicitud <strong>${etiqueta(sol)}</strong>:
+        <strong>${monto}</strong>.</p>
+        <p>Entrá a tu panel para aceptarla o rechazarla.</p>
+      `,
+    })
+  }
+  await crearNotificacion(
+    supabase, cliente.id,
+    `Te enviamos una cotización — ${etiqueta(sol)}`,
+    `Precio propuesto: ${monto}. Entrá a tu panel para responder.`,
+    sol.id,
+  )
+}
+
+/**
+ * Se llama cuando el cliente acepta o rechaza la cotización que le envió el admin (Fase 7b) —
+ * aparte de `notificarCambioEstado` (que hace la transición de estado real y su propio aviso
+ * genérico), porque ese genérico no cubre el caso "rechazada → cancelada" para el admin, y el
+ * caso "aceptada → pendiente" solo le llega como el mensaje genérico de "volvió a pendiente", sin
+ * decir explícitamente que fue por una cotización aceptada. Esta función avisa ambas puntas de
+ * forma explícita: al admin (que fue el cliente quien decidió) y al propio cliente (confirmación
+ * de su propia acción — el genérico de `notificarCambioEstado` solo dice "cambió de estado a
+ * Pendiente/Cancelada", sin contexto de que fue por responder una cotización).
+ */
+export async function notificarCotizacionRespuesta(
+  supabase:    SupabaseClient,
+  solicitudId: string,
+  aceptada:    boolean,
+): Promise<void> {
+  const sol = await fetchSolicitudNotif(supabase, solicitudId)
+  if (!sol) return
+
+  const tituloAdmin = aceptada
+    ? `El cliente aceptó la cotización — ${etiqueta(sol)}`
+    : `El cliente rechazó la cotización — ${etiqueta(sol)}`
+  const mensajeAdmin = aceptada
+    ? 'Ya podés asignarle un técnico como a cualquier otra solicitud.'
+    : 'La solicitud quedó cancelada.'
+
+  await enviarEmail({
+    to:      ADMIN_EMAIL,
+    subject: tituloAdmin,
+    html:    `<p>${mensajeAdmin}</p>`,
+  })
+  await crearNotificacionesAdmin(supabase, tituloAdmin, mensajeAdmin, sol.id)
+
+  if (sol.usuarios) {
+    const cliente = sol.usuarios
+    const tituloCliente = aceptada
+      ? `Aceptaste la cotización — ${etiqueta(sol)}`
+      : `Rechazaste la cotización — ${etiqueta(sol)}`
+    const mensajeCliente = aceptada
+      ? 'Tu solicitud ya está pendiente de que te asignemos un técnico.'
+      : 'Tu solicitud quedó cancelada.'
+
+    if (cliente.email) {
+      await enviarEmail({
+        to:      cliente.email,
+        subject: tituloCliente,
+        html: `
+          <p>Hola ${cliente.nombre_completo},</p>
+          <p>${mensajeCliente}</p>
+        `,
+      })
+    }
+    await crearNotificacion(supabase, cliente.id, tituloCliente, mensajeCliente, sol.id)
+  }
 }
 
 /** Email + notificación in-app a admin y técnico cuando el cliente da conformidad final (Paso 5 del backlog). */

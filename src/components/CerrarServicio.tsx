@@ -32,7 +32,7 @@ export default function CerrarServicio({ solicitudId, titulo }: Props) {
       <button
         type="button"
         onClick={() => setConfirmando(true)}
-        className="text-xs font-semibold bg-primary hover:bg-primary-hover text-white px-3 py-1.5 rounded-full transition-colors"
+        className="flex-1 sm:flex-none text-sm font-semibold bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-full transition-colors"
       >
         ✅ Cerrar servicio
       </button>

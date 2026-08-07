@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css'
+import BottomNavMobile from '../components/BottomNavMobile'
 
 interface Props {
   title?: string
@@ -43,7 +44,8 @@ const imagenAbsoluta = new URL(image, Astro.site ?? Astro.url).href
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   </head>
-  <body class="bg-cream antialiased">
+  <body class="bg-cream antialiased pb-16 md:pb-0">
     <slot />
+    <BottomNavMobile client:load />
   </body>
 </html>

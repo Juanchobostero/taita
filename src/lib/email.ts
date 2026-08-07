@@ -58,7 +58,12 @@ export async function enviarEmail({ to, subject, html }: EnviarEmailParams): Pro
     return
   }
   try {
-    await resend.emails.send({ from, to, subject, html: plantillaEmail(html) })
+    // El SDK de Resend NO lanza excepción ante errores de la API (dominio no verificado,
+    // destinatario rechazado, rate limit, etc.) — devuelve `{ data: null, error: {...} }`. Si no
+    // se chequea `error` acá, un envío rechazado queda completamente silencioso (sin log ni
+    // aviso), que es justo lo que pasó con el mail al admin en el flujo de alta de técnico.
+    const { error } = await resend.emails.send({ from, to, subject, html: plantillaEmail(html) })
+    if (error) console.error(`[email] Resend rechazó el envío a ${to} ("${subject}"):`, error)
   } catch (err) {
     console.error(`[email] Error enviando a ${to}:`, err)
   }

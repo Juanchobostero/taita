@@ -7,6 +7,9 @@ import { notificarCambioEstado, notificarDesasignacion, notificarFranjaAsignada 
 import { chequearDisponibilidad, franjaDeHora, FRANJA_LABEL, type FranjaHoraria } from '../../../../lib/disponibilidad'
 import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 import MapaUbicacion from '../../../../components/MapaUbicacion'
+import MercadoPagoBadge from '../../../../components/MercadoPagoBadge.astro'
+import ChatCotizacion from '../../../../components/ChatCotizacion'
+import EnviarCotizacion from '../../../../components/EnviarCotizacion'
 
 const { id } = Astro.params
 if (!id) return Astro.redirect('/dashboard/admin')
@@ -152,7 +155,7 @@ const canceladaOk = Astro.url.searchParams.get('cancelada') === '1'
 const { data: sol } = await supabase
   .from('solicitudes')
   .select(`
-    id, numero, titulo, descripcion, estado, creado_en,
+    id, numero, titulo, descripcion, estado, creado_en, es_cotizacion,
     tecnico_id, categoria_id,
     precio_base, tasa_aplicada, total_estimado,
     gastos_extra, descripcion_gastos, imagenes_trabajo,
@@ -161,6 +164,7 @@ const { data: sol } = await supabase
     usuarios!cliente_id ( nombre_completo, telefono, email ),
     tecnicos ( tarifa_hora, usuarios ( nombre_completo, telefono ) ),
     categorias ( nombre, icono, porcentaje_tasa ),
+    categoria_subitems ( nombre ),
     pagos ( estado, monto, creado_en )
   `)
   .eq('id', id)
@@ -183,6 +187,7 @@ const tecnicosActivos = (rawTecnicosActivos ?? []).map((t: any) => ({
 const cliente  = sol.usuarios as any
 const tecnico  = sol.tecnicos as any
 const categoria = sol.categorias as any
+const subitem   = sol.categoria_subitems as any
 
 // Franja sugerida por default en el selector del admin — la que corresponde al horario que pidió
 // el cliente, así el caso común (asignar sin fricción horaria) no requiere tocar nada.
@@ -217,22 +222,24 @@ const descGastos         = sol.descripcion_gastos   as string | null
 const imagenesTrabajo    = (sol.imagenes_trabajo    as string[] | null) ?? []
 
 const estadoLabel: Record<string, string> = {
-  pendiente:  'Pendiente',
-  asignada:   'Esperando confirmación del técnico',
-  aceptada:   'Aceptada',
-  en_curso:   'En curso',
-  completada: 'Completada',
-  finalizada: 'Finalizada',
-  cancelada:  'Cancelada',
+  pendiente:     'Pendiente',
+  asignada:      'Esperando confirmación del técnico',
+  aceptada:      'Aceptada',
+  en_curso:      'En curso',
+  completada:    'Completada',
+  finalizada:    'Finalizada',
+  cancelada:     'Cancelada',
+  en_cotizacion: 'En cotización',
 }
 const estadoColor: Record<string, string> = {
-  pendiente:  'bg-amber-100 text-amber-800',
-  asignada:   'bg-purple-100 text-purple-700',
-  aceptada:   'bg-blue-100 text-blue-800',
-  en_curso:   'bg-blue-100 text-blue-800',
-  completada: 'bg-primary-soft text-[#1B4D2E]',
-  finalizada: 'bg-[#1B4D2E] text-white',
-  cancelada:  'bg-red-100 text-red-700',
+  pendiente:     'bg-amber-100 text-amber-800',
+  asignada:      'bg-purple-100 text-purple-700',
+  aceptada:      'bg-blue-100 text-blue-800',
+  en_curso:      'bg-blue-100 text-blue-800',
+  completada:    'bg-primary-soft text-[#1B4D2E]',
+  finalizada:    'bg-[#1B4D2E] text-white',
+  cancelada:     'bg-red-100 text-red-700',
+  en_cotizacion: 'bg-amber-100 text-amber-800',
 }
 
 const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0 })}`
@@ -240,7 +247,15 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
 
 <Layout title={`Solicitud #${sol.numero} — ${sol.titulo}`}>
   <Navbar client:load />
-  <CambiosEnVivo client:load autoReload suscripciones={[{ tabla: 'solicitudes', filtro: `id=eq.${sol.id}` }]} />
+  <!-- `notificaciones` como respaldo — mismo motivo que en el detalle del cliente: la policy de
+       SELECT de `solicitudes` mezcla la del admin (con EXISTS/JOIN) con las de cliente/técnico en
+       la misma tabla, y eso puede romper Realtime para todos (ver
+       guia-notificaciones-realtime-supabase.md). El admin ya recibe una notificación por cada
+       evento de cotización/cambio de estado, así que sirve como disparador confiable. -->
+  <CambiosEnVivo client:load autoReload suscripciones={[
+    { tabla: 'solicitudes', filtro: `id=eq.${sol.id}` },
+    { tabla: 'notificaciones', filtro: `usuario_id=eq.${userId}` },
+  ]} />
 
   <div class="bg-cream min-h-screen py-8 px-4">
     <div class="max-w-4xl mx-auto flex flex-col gap-6">
@@ -320,6 +335,11 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                       </p>
                     )}
                   </div>
+                ) : sol.estado === 'en_cotizacion' ? (
+                  <p class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    💬 Todavía en cotización — se puede asignar un técnico recién cuando el cliente
+                    acepte el precio.
+                  </p>
                 ) : (
                   <form method="POST" class="flex flex-col gap-2">
                     <input type="hidden" name="accion" value="asignar-tecnico" />
@@ -397,10 +417,44 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
             </div>
           </div>
 
+          <!-- Cotización (Fase 7b) — chat con el cliente + form para mandarle el precio. Se
+               muestra mientras esté en el canal de cotización, y se deja el chat visible como
+               historial incluso después de que se acepte/rechace (es_cotizacion no se borra). -->
+          {sol.es_cotizacion && (
+            <div class="bg-white rounded-2xl border border-amber-200 shadow-sm p-6 flex flex-col gap-4">
+              <div class="flex items-center gap-2.5">
+                <span class="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-base shrink-0">💬</span>
+                <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Cotización</h2>
+              </div>
+
+              <ChatCotizacion client:load solicitudId={sol.id} usuarioId={userId} esAdmin={true} />
+
+              {sol.estado === 'en_cotizacion' && (
+                precioBase == null ? (
+                  <div class="pt-4 border-t border-cream">
+                    <p class="text-sm font-semibold text-gray-700 mb-3">Enviar cotización al cliente</p>
+                    <EnviarCotizacion client:load solicitudId={sol.id} />
+                  </div>
+                ) : (
+                  <p class="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5">
+                    Ya le enviaste una cotización de {fmt(total ?? precioBase)} — esperando que el
+                    cliente la acepte o la rechace.
+                  </p>
+                )
+              )}
+            </div>
+          )}
+
           <!-- Detalles del trabajo -->
           <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
             <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Detalles del trabajo</h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              {subitem?.nombre && (
+                <div class="flex flex-col gap-1">
+                  <span class="text-gray-400 text-xs uppercase tracking-wide">Detalle del servicio</span>
+                  <p class="text-gray-800 font-medium">{subitem.nombre}</p>
+                </div>
+              )}
               {sol.descripcion && (
                 <div class="sm:col-span-2 flex flex-col gap-1">
                   <span class="text-gray-400 text-xs uppercase tracking-wide">Descripción</span>
@@ -473,11 +527,15 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                 name="estado"
                 class="w-full border border-cream-dark rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary bg-white"
               >
-                {(['pendiente','asignada','aceptada','en_curso','completada','finalizada','cancelada'] as const).map(e => {
+                {(['pendiente','en_cotizacion','asignada','aceptada','en_curso','completada','finalizada','cancelada'] as const).map(e => {
                   // "asignada" y "finalizada" no se pueden elegir a mano — solo se llega a "asignada"
                   // asignando un técnico (y se sale respondiendo desde el panel del técnico), y a
                   // "finalizada" solo la alcanza el propio técnico cerrando el servicio ya cobrado.
-                  if (e === 'asignada' || e === 'finalizada') {
+                  // "en_cotizacion" tampoco — solo se llega ahí desde el checkbox del cliente en el
+                  // wizard, y se sale respondiendo la cotización (ver card de arriba) — se deja acá
+                  // solo para que el <select> la muestre bien seleccionada en vez de caer en la
+                  // primera opción por default.
+                  if (e === 'asignada' || e === 'finalizada' || e === 'en_cotizacion') {
                     return <option value={e} selected={sol.estado === e} disabled>{estadoLabel[e]}</option>
                   }
                   const requiereTecnico = ['aceptada','en_curso','completada'].includes(e)
@@ -603,9 +661,12 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                 <p>⏳ Todavía no dio conformidad el cliente.</p>
               )}
               {pagoRow && pagoInfo[pagoRow.estado] && (
-                <p class={`text-xs font-medium px-2.5 py-1 rounded-full w-fit ${pagoInfo[pagoRow.estado].clase}`}>
-                  {pagoInfo[pagoRow.estado].texto}
-                  {pagoRow.estado === 'pagado' && ` — $${pagoRow.monto.toLocaleString('es-AR')}`}
+                <p class={`inline-flex items-center gap-1.5 flex-wrap text-xs font-medium px-2.5 py-1 rounded-full w-fit ${pagoInfo[pagoRow.estado].clase}`}>
+                  {pagoRow.estado === 'pagado' && <MercadoPagoBadge />}
+                  <span>
+                    {pagoInfo[pagoRow.estado].texto}
+                    {pagoRow.estado === 'pagado' && ` — $${pagoRow.monto.toLocaleString('es-AR')}`}
+                  </span>
                 </p>
               )}
               {sol.estado === 'finalizada' && (

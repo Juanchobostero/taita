@@ -7,6 +7,7 @@ import ResponderAsignacion from '../../../../components/ResponderAsignacion'
 import CerrarServicio from '../../../../components/CerrarServicio'
 import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 import MapaUbicacion from '../../../../components/MapaUbicacion'
+import MercadoPagoBadge from '../../../../components/MercadoPagoBadge.astro'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
 import { FRANJA_LABEL, type FranjaHoraria } from '../../../../lib/disponibilidad'
 
@@ -125,19 +126,23 @@ const fmtFechaHora = (iso: string) =>
     <div class="max-w-4xl mx-auto flex flex-col gap-6">
 
       <!-- Encabezado -->
-      <div>
-        <a href="/dashboard/tecnico" class="text-primary hover:text-primary-hover text-sm font-medium flex items-center gap-1 w-fit mb-4">
+      <div class="card-metallic group p-6 sm:p-8">
+        <div class="card-metallic-shine" />
+        <a href="/dashboard/tecnico" class="text-white/70 hover:text-white text-sm font-medium inline-flex items-center gap-1 w-fit mb-4 transition-colors">
           ← Volver al panel
         </a>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div class="flex flex-col gap-1">
-            <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl"><span class="text-gray-400 font-sans font-normal">#{sol.numero}</span> {sol.titulo}</h1>
-            <p class="text-gray-400 text-sm">
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-bold text-white bg-white/15 px-2.5 py-1 rounded-md tracking-wide">#{sol.numero}</span>
+              <h1 class="font-serif font-bold text-white text-2xl sm:text-3xl leading-tight">{sol.titulo}</h1>
+            </div>
+            <p class="text-white/70 text-sm">
               {categoria?.icono} {categoria?.nombre} ·
               Creada el {new Date(sol.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
             </p>
           </div>
-          <span class={`text-sm font-semibold px-4 py-1.5 rounded-full w-fit ${estadoColor[sol.estado]}`}>
+          <span class={`text-sm font-semibold px-4 py-1.5 rounded-full w-fit shrink-0 ${estadoColor[sol.estado]}`}>
             {estadoLabel[sol.estado]}
           </span>
         </div>
@@ -253,41 +258,43 @@ const fmtFechaHora = (iso: string) =>
         <div class="flex flex-col gap-6">
 
           <!-- Ganancia -->
-          <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
-            <div class="px-6 py-4 border-b border-cream">
-              <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Tu ganancia</h2>
+          <div class="card-metallic group overflow-hidden">
+            <div class="card-metallic-shine" />
+            <div class="px-6 py-4 border-b border-white/15">
+              <h2 class="font-serif font-bold text-white text-base">Tu ganancia</h2>
             </div>
 
             {precioBase == null ? (
-              <div class="px-6 py-5 text-sm text-gray-400 text-center">
+              <div class="px-6 py-5 text-sm text-white/60 text-center">
                 Tarifa a convenir — sin cálculo automático
               </div>
             ) : (
               <div class="px-6 py-5 flex flex-col gap-3 text-sm">
-                <div class="flex justify-between text-gray-600">
+                <div class="flex justify-between text-white/70">
                   <span>Precio base</span>
-                  <span class="font-medium text-gray-800">{fmt(precioBase)}</span>
+                  <span class="font-medium text-white">{fmt(precioBase)}</span>
                 </div>
-                <div class="flex justify-between text-gray-400 text-xs">
+                <div class="flex justify-between text-white/50 text-xs">
                   <span>Tasa plataforma</span>
                   <span>{tasa ?? 0}%</span>
                 </div>
                 {gastosExtra != null && gastosExtra > 0 && (
-                  <div class="flex justify-between text-amber-700">
+                  <div class="flex justify-between text-amber-300">
                     <span>Gastos extras</span>
                     <span class="font-medium">+ {fmt(gastosExtra)}</span>
                   </div>
                 )}
-                <div class="border-t border-cream pt-3 flex justify-between">
-                  <span class="font-semibold text-gray-900">Vas a recibir</span>
-                  <span class="font-bold text-gray-900">{fmt(precioBase + (gastosExtra ?? 0))}</span>
+                <div class="border-t border-white/15 pt-3 flex justify-between">
+                  <span class="font-semibold text-white">Vas a recibir</span>
+                  <span class="font-bold text-amber-300 text-base">{fmt(precioBase + (gastosExtra ?? 0))}</span>
                 </div>
               </div>
             )}
 
             {(sol.estado === 'completada' || sol.estado === 'finalizada') && sol.conformidad_cliente && pagoInfo[pagoEstado ?? ''] && (
-              <div class={`mx-6 mb-5 rounded-xl border px-4 py-3 text-xs ${pagoInfo[pagoEstado ?? ''].clase}`}>
-                {pagoInfo[pagoEstado ?? ''].texto}
+              <div class={`mx-6 mb-5 rounded-xl border px-4 py-3 text-xs flex items-center gap-2 flex-wrap ${pagoInfo[pagoEstado ?? ''].clase}`}>
+                {(pagoEstado === 'pagado' || pagoEstado === 'registrado') && <MercadoPagoBadge />}
+                <span>{pagoInfo[pagoEstado ?? ''].texto}</span>
               </div>
             )}
           </div>

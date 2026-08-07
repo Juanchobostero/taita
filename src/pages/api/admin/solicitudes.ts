@@ -19,7 +19,11 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     const from      = (page - 1) * PAGE_SIZE
     const to        = from + PAGE_SIZE - 1
 
-    const { data, count, error } = await supabase
+    // Filtros seleccionables (búsqueda por estado/categoría, no de texto) — ver FiltrosSolicitudes.tsx
+    const estados     = url.searchParams.get('estados')?.split(',').filter(Boolean)
+    const categoriaId = url.searchParams.get('categoriaId')
+
+    let query = supabase
       .from('solicitudes')
       .select(`
         id, numero, titulo, estado, creado_en, fecha_solicitada, tecnico_id,
@@ -28,6 +32,11 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
         categorias ( nombre ),
         pagos ( estado, creado_en )
       `, { count: 'exact' })
+
+    if (estados?.length) query = query.in('estado', estados)
+    if (categoriaId)     query = query.eq('categoria_id', categoriaId)
+
+    const { data, count, error } = await query
       .order('actualizado_en', { ascending: false })
       .range(from, to)
 

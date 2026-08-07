@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useId } from 'react'
 import { supabase } from '@/lib/supabase'
+import MercadoPagoBadge from '@/components/MercadoPagoBadge'
+import FiltrosSolicitudes, { type EstadoFiltro, type CategoriaFiltroOpt } from '@/components/FiltrosSolicitudes'
 
 interface SolicitudRow {
   id: string
@@ -19,18 +21,33 @@ interface Props {
   initialData:  SolicitudRow[]
   initialTotal: number
   usuarioId:    string
+  categorias:   CategoriaFiltroOpt[]
 }
 
 const PAGE_SIZE = 10
 
+// El admin ve los 8 valores crudos de `estado`, sin agrupar (a diferencia del listado del
+// cliente) — es la vista de gestión, tiene sentido distinguir "Asignada" de "Pendiente", etc.
+const ESTADOS_FILTRO: EstadoFiltro[] = [
+  { key: 'pendiente',     label: 'Pendiente',      estados: ['pendiente'],     clase: 'bg-amber-100 text-amber-800' },
+  { key: 'en_cotizacion', label: 'En cotización',   estados: ['en_cotizacion'], clase: 'bg-amber-100 text-amber-800' },
+  { key: 'asignada',      label: 'Asignada',        estados: ['asignada'],     clase: 'bg-purple-100 text-purple-700' },
+  { key: 'aceptada',      label: 'Aceptada',        estados: ['aceptada'],     clase: 'bg-blue-100 text-blue-800' },
+  { key: 'en_curso',      label: 'En curso',        estados: ['en_curso'],     clase: 'bg-blue-100 text-blue-800' },
+  { key: 'completada',    label: 'Completada',      estados: ['completada'],   clase: 'bg-[#E8F5E9] text-[#1B4D2E]' },
+  { key: 'finalizada',    label: 'Finalizada',      estados: ['finalizada'],   clase: 'bg-[#1B4D2E] text-white' },
+  { key: 'cancelada',     label: 'Cancelada',       estados: ['cancelada'],    clase: 'bg-gray-100 text-gray-500' },
+]
+
 const estadoColor: Record<string, string> = {
-  pendiente:  'bg-amber-100 text-amber-800',
-  asignada:   'bg-purple-100 text-purple-700',
-  aceptada:   'bg-blue-100 text-blue-800',
-  en_curso:   'bg-blue-100 text-blue-800',
-  completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
-  finalizada: 'bg-[#1B4D2E] text-white',
-  cancelada:  'bg-gray-100 text-gray-500',
+  pendiente:     'bg-amber-100 text-amber-800',
+  asignada:      'bg-purple-100 text-purple-700',
+  aceptada:      'bg-blue-100 text-blue-800',
+  en_curso:      'bg-blue-100 text-blue-800',
+  completada:    'bg-[#E8F5E9] text-[#1B4D2E]',
+  finalizada:    'bg-[#1B4D2E] text-white',
+  cancelada:     'bg-gray-100 text-gray-500',
+  en_cotizacion: 'bg-amber-100 text-amber-800',
 }
 
 // Puede haber más de un intento de pago (reintentos tras un rechazo) — se toma el más reciente
@@ -59,15 +76,19 @@ function pageNumbers(current: number, total: number): (number | '...')[] {
   return pages
 }
 
-export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuarioId }: Props) {
+export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuarioId, categorias }: Props) {
   const [rows,    setRows]    = useState<SolicitudRow[]>(initialData)
   const [total,   setTotal]   = useState(initialTotal)
   const [page,    setPage]    = useState(1)
   const [loading, setLoading] = useState(false)
   const [synced,  setSynced]  = useState(false)
+  const [filtros, setFiltros] = useState<{ estados: string[]; categoriaId: string | null }>({ estados: [], categoriaId: null })
 
   const pageRef = useRef(page)
   pageRef.current = page
+  const filtrosRef = useRef(filtros)
+  filtrosRef.current = filtros
+  const montadoRef = useRef(false)
   const instanceId = useId()
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
@@ -77,7 +98,10 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
   async function fetchPage(next: number, opts: { silent?: boolean } = {}) {
     if (!opts.silent) setLoading(true)
     try {
-      const res  = await fetch(`/api/admin/solicitudes?page=${next}`)
+      const params = new URLSearchParams({ page: String(next) })
+      if (filtrosRef.current.estados.length) params.set('estados', filtrosRef.current.estados.join(','))
+      if (filtrosRef.current.categoriaId)     params.set('categoriaId', filtrosRef.current.categoriaId)
+      const res  = await fetch(`/api/admin/solicitudes?${params}`)
       const json = await res.json()
       setRows(json.data)
       setTotal(json.total)
@@ -91,6 +115,13 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
     if (next === page || next < 1 || next > totalPages) return
     await fetchPage(next)
   }
+
+  // Los filtros disparan su propio refetch (desde la página 1) — se salta el primer render.
+  useEffect(() => {
+    if (!montadoRef.current) { montadoRef.current = true; return }
+    fetchPage(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros])
 
   // Tiempo real: el admin ve todas las solicitudes, así que no hace falta filtro por `solicitudes`
   // — pero esa policy resuelve "es admin" con un JOIN/EXISTS contra `usuarios`, y ese tipo de
@@ -137,9 +168,15 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
         </span>
       </div>
 
+      <div className="px-6 py-4 border-b border-[#E8E0D5]">
+        <FiltrosSolicitudes estadosDisponibles={ESTADOS_FILTRO} categorias={categorias} onChange={setFiltros} />
+      </div>
+
       {/* Table */}
       {rows.length === 0 ? (
-        <div className="px-6 py-8 text-center text-gray-400 text-sm">Sin solicitudes aún</div>
+        <div className="px-6 py-8 text-center text-gray-400 text-sm">
+          {filtros.estados.length || filtros.categoriaId ? 'Ninguna solicitud coincide con estos filtros.' : 'Sin solicitudes aún'}
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -156,7 +193,8 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
             </thead>
             <tbody className="divide-y divide-[#F5EFE6]">
               {rows.map(s => {
-                const pago = pagoInfo[ultimoPago(s.pagos)?.estado ?? '']
+                const estadoPago = ultimoPago(s.pagos)?.estado ?? ''
+                const pago = pagoInfo[estadoPago]
                 return (
                 <tr key={s.id} className="hover:bg-[#F5EFE6] transition-colors">
                   <td className="px-6 py-3 font-medium text-gray-800 max-w-55 truncate">
@@ -176,7 +214,12 @@ export default function TablaSolicitudesAdmin({ initialData, initialTotal, usuar
                   </td>
                   <td className="px-6 py-3 whitespace-nowrap">
                     {pago
-                      ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${pago.clase}`}>{pago.texto}</span>
+                      ? (
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${pago.clase}`}>
+                          {estadoPago === 'pagado' && <MercadoPagoBadge />}
+                          {pago.texto}
+                        </span>
+                      )
                       : <span className="text-xs text-gray-300">—</span>
                     }
                   </td>

@@ -3,7 +3,7 @@ import Layout from '../../layouts/Layout.astro'
 import Navbar from '../../components/Navbar'
 import TablaSolicitudesAdmin from '../../components/TablaSolicitudesAdmin'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
-import { notificarCambioEstado } from '../../lib/notificaciones'
+import { notificarCambioEstado, notificarTecnicoAprobado } from '../../lib/notificaciones'
 
 const supabase = createSupabaseAdmin()
 const userId = Astro.locals.user!.id
@@ -22,7 +22,23 @@ if (Astro.request.method === 'POST') {
 
   if (accion === 'aprobar') {
     const tecnicoId = form.get('tecnicoId')?.toString()
-    if (tecnicoId) await supabase.from('tecnicos').update({ activo: true }).eq('id', tecnicoId)
+    if (tecnicoId) {
+      await supabase.from('tecnicos').update({ activo: true }).eq('id', tecnicoId)
+      // Aviso "mejor esfuerzo": si falla el email/notificación, la aprobación igual quedó hecha.
+      try {
+        const { data: tecnico } = await supabase
+          .from('tecnicos')
+          .select('usuario_id, usuarios ( nombre_completo, email )')
+          .eq('id', tecnicoId)
+          .single()
+        const usuario = (tecnico?.usuarios as unknown as { nombre_completo: string; email: string | null } | null)
+        if (tecnico && usuario) {
+          await notificarTecnicoAprobado(supabase, tecnico.usuario_id, usuario.nombre_completo, usuario.email)
+        }
+      } catch (err) {
+        console.error('[dashboard/admin] error notificando aprobación de técnico:', err)
+      }
+    }
 
   } else if (accion === 'rechazar') {
     const tecnicoId = form.get('tecnicoId')?.toString()
@@ -54,6 +70,15 @@ interface TecnicoPendiente {
   usuarios: { nombre_completo: string; creado_en: string; telefono: string | null; email: string }
   especialidades_tecnico: { categorias: { nombre: string } | null }[]
 }
+interface CotizacionPendiente {
+  id: string
+  numero: number
+  titulo: string
+  creado_en: string
+  precio_base: number | null
+  usuarios: { nombre_completo: string } | null
+  categorias: { nombre: string; icono: string | null } | null
+}
 interface SolicitudReciente {
   id: string
   numero: number
@@ -73,8 +98,10 @@ const [
   { count: totalTecnicosActivos },
   { count: totalSolicitudes },
   { data: rawPendientes },
+  { data: rawCotizaciones },
   { data: rawRecientes },
   { data: completadas },
+  { data: rawCategoriasFiltro },
 ] = await Promise.all([
   supabase.from('usuarios').select('*', { count: 'exact', head: true }),
   supabase.from('tecnicos').select('*', { count: 'exact', head: true }).eq('activo', true),
@@ -88,6 +115,17 @@ const [
     `)
     .eq('activo', false)
     .limit(10),
+  // Fase 7b: solicitudes del canal de "Solicitar cotización" esperando que el admin les mande un
+  // precio, o que ya se lo mandó y están esperando la respuesta del cliente (precio_base != null).
+  supabase
+    .from('solicitudes')
+    .select(`
+      id, numero, titulo, creado_en, precio_base,
+      usuarios!cliente_id ( nombre_completo ),
+      categorias ( nombre, icono )
+    `)
+    .eq('estado', 'en_cotizacion')
+    .order('creado_en', { ascending: true }),
   supabase
     .from('solicitudes')
     .select(`
@@ -103,10 +141,14 @@ const [
   // pasaron por el cierre definitivo del técnico (Fase 5); si no, los ingresos "desaparecían" del
   // acumulado apenas el técnico cerraba el servicio.
   supabase.from('solicitudes').select('total_estimado').in('estado', ['completada', 'finalizada']),
+  // Para el filtro por categoría de la tabla de solicitudes (FiltrosSolicitudes).
+  supabase.from('categorias').select('id, nombre, icono').eq('activa', true).order('nombre'),
 ])
 
-const pendientes = (rawPendientes ?? []) as TecnicoPendiente[]
-const recientes  = (rawRecientes  ?? []) as SolicitudReciente[]
+const pendientes   = (rawPendientes   ?? []) as TecnicoPendiente[]
+const cotizaciones = (rawCotizaciones ?? []) as CotizacionPendiente[]
+const recientes    = (rawRecientes    ?? []) as SolicitudReciente[]
+const categoriasFiltro = rawCategoriasFiltro ?? []
 
 const ingresos = (completadas ?? []).reduce((sum, s) => sum + ((s.total_estimado as number | null) ?? 0), 0)
 ---
@@ -166,13 +208,19 @@ const ingresos = (completadas ?? []).reduce((sum, s) => sum + ((s.total_estimado
         </div>
       </div>
 
-      <!-- Técnicos pendientes -->
-      <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
-        <div class="px-6 py-4 border-b border-cream flex items-center justify-between">
-          <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Técnicos pendientes de aprobación</h2>
+      <!-- Técnicos pendientes — banner de atención: acento ámbar porque es la única sección de este
+           panel que representa una cola de acciones pendientes reales (el resto es solo lectura). -->
+      <div class={`bg-white rounded-2xl border overflow-hidden ${pendientes.length > 0 ? 'border-amber-200 shadow-sm' : 'border-cream-dark'}`}>
+        <div class={`px-6 py-4 flex items-center justify-between gap-3 ${pendientes.length > 0 ? 'bg-amber-50 border-b border-amber-100' : 'border-b border-cream'}`}>
+          <div class="flex items-center gap-2.5">
+            {pendientes.length > 0 && (
+              <span class="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-base shrink-0">⏳</span>
+            )}
+            <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Técnicos pendientes de aprobación</h2>
+          </div>
           {pendientes.length > 0 && (
-            <span class="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
-              {pendientes.length}
+            <span class="bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shrink-0">
+              {pendientes.length} por revisar
             </span>
           )}
         </div>
@@ -182,43 +230,92 @@ const ingresos = (completadas ?? []).reduce((sum, s) => sum + ((s.total_estimado
             No hay técnicos pendientes de aprobación
           </div>
         ) : (
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0 divide-y sm:divide-y-0 sm:divide-x divide-cream">
+          <div class="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {pendientes.map(t => (
-              <div class="px-6 py-5 flex flex-col gap-3">
+              <div class="rounded-2xl border border-amber-200 border-l-4 border-l-amber-400 bg-amber-50/40 shadow-sm p-4 flex flex-col gap-3">
                 <div class="flex flex-col gap-0.5">
-                  <p class="font-semibold text-gray-900 text-sm">{t.usuarios.nombre_completo}</p>
-                  <p class="text-xs text-gray-400">
+                  <p class="font-serif font-bold text-gray-900 text-sm">{t.usuarios.nombre_completo}</p>
+                  <p class="text-xs text-gray-500">
                     {t.especialidades_tecnico[0]?.categorias?.nombre ?? 'Sin especialidad'}
                     {t.zona_cobertura && ` · ${t.zona_cobertura}`}
                   </p>
-                  <p class="text-xs text-gray-400">
+                  <p class="text-xs text-gray-500">
                     Registrado el {new Date(t.usuarios.creado_en).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
                   </p>
                   <!-- Datos para validar identidad antes de aprobar (pedido de Agustín) -->
-                  <div class="mt-1 pt-1 border-t border-cream flex flex-col gap-0.5 text-xs text-gray-500">
+                  <div class="mt-1 pt-2 border-t border-amber-200/70 flex flex-col gap-0.5 text-xs text-gray-600">
                     <span>✉️ {t.usuarios.email}</span>
                     {t.usuarios.telefono && <span>📞 {t.usuarios.telefono}</span>}
                     {t.cvu && <span>💳 CVU/CBU: {t.cvu}</span>}
-                    {t.descripcion && <span class="text-gray-400 italic">"{t.descripcion}"</span>}
+                    {t.descripcion && <span class="text-gray-500 italic">"{t.descripcion}"</span>}
                   </div>
                 </div>
-                <div class="flex gap-2">
-                  <form method="POST">
+                <div class="flex gap-2 pt-1">
+                  <form method="POST" class="flex-1">
                     <input type="hidden" name="accion" value="aprobar" />
                     <input type="hidden" name="tecnicoId" value={t.id} />
-                    <button type="submit" class="text-xs bg-[#1B4D2E] hover:bg-primary-hover text-white font-medium px-4 py-1.5 rounded-full transition-colors">
-                      Aprobar
+                    <button type="submit" class="w-full text-xs bg-[#1B4D2E] hover:bg-primary-hover text-white font-semibold px-4 py-2 rounded-full transition-colors">
+                      ✓ Aprobar
                     </button>
                   </form>
-                  <form method="POST">
+                  <form method="POST" class="flex-1">
                     <input type="hidden" name="accion" value="rechazar" />
                     <input type="hidden" name="tecnicoId" value={t.id} />
-                    <button type="submit" class="text-xs border border-cream-dark hover:border-red-300 hover:text-red-500 text-gray-500 font-medium px-4 py-1.5 rounded-full transition-colors">
+                    <button type="submit" class="w-full text-xs border border-cream-dark bg-white hover:border-red-300 hover:text-red-500 text-gray-500 font-semibold px-4 py-2 rounded-full transition-colors">
                       Rechazar
                     </button>
                   </form>
                 </div>
               </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <!-- Cotizaciones pendientes (Fase 7b) — mismo tratamiento visual que técnicos pendientes,
+           es la otra cola de acciones reales que tiene este panel. -->
+      <div class={`bg-white rounded-2xl border overflow-hidden ${cotizaciones.length > 0 ? 'border-amber-200 shadow-sm' : 'border-cream-dark'}`}>
+        <div class={`px-6 py-4 flex items-center justify-between gap-3 ${cotizaciones.length > 0 ? 'bg-amber-50 border-b border-amber-100' : 'border-b border-cream'}`}>
+          <div class="flex items-center gap-2.5">
+            {cotizaciones.length > 0 && (
+              <span class="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-base shrink-0">💬</span>
+            )}
+            <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Cotizaciones pendientes</h2>
+          </div>
+          {cotizaciones.length > 0 && (
+            <span class="bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shrink-0">
+              {cotizaciones.length} por atender
+            </span>
+          )}
+        </div>
+
+        {cotizaciones.length === 0 ? (
+          <div class="px-6 py-6 text-center text-gray-400 text-sm">
+            No hay cotizaciones pendientes
+          </div>
+        ) : (
+          <div class="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {cotizaciones.map(c => (
+              <a
+                href={`/dashboard/admin/solicitud/${c.id}`}
+                class="rounded-2xl border border-amber-200 border-l-4 border-l-amber-400 bg-amber-50/40 shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col gap-2"
+              >
+                <p class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-bold text-white bg-gray-800/80 px-2 py-0.5 rounded-md">#{c.numero}</span>
+                  <span class="font-serif font-bold text-gray-900 text-sm">{c.titulo}</span>
+                </p>
+                <p class="text-xs text-gray-500">
+                  {c.categorias?.icono} {c.categorias?.nombre} · 👤 {c.usuarios?.nombre_completo ?? '—'}
+                </p>
+                <p class="text-xs text-gray-500">
+                  {new Date(c.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', timeZone: 'America/Argentina/Buenos_Aires' })}
+                </p>
+                <span class={`text-xs font-semibold px-2.5 py-1 rounded-full w-fit ${
+                  c.precio_base != null ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {c.precio_base != null ? 'Esperando respuesta del cliente' : 'Esperando tu cotización'}
+                </span>
+              </a>
             ))}
           </div>
         )}
@@ -231,6 +328,7 @@ const ingresos = (completadas ?? []).reduce((sum, s) => sum + ((s.total_estimado
           initialData={recientes}
           initialTotal={totalSolicitudes ?? 0}
           usuarioId={userId}
+          categorias={categoriasFiltro}
         />
       </div>
 

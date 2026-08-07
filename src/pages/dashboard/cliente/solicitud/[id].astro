@@ -6,6 +6,8 @@ import CancelarSolicitud from '../../../../components/CancelarSolicitud'
 import DarConformidad from '../../../../components/DarConformidad'
 import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 import MapaUbicacion from '../../../../components/MapaUbicacion'
+import ChatCotizacion from '../../../../components/ChatCotizacion'
+import ResponderCotizacion from '../../../../components/ResponderCotizacion'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
 import { actualizarPagoDesdeMP, obtenerLinkPago } from '../../../../lib/mercadopago'
 import { FRANJA_LABEL, type FranjaHoraria } from '../../../../lib/disponibilidad'
@@ -19,7 +21,7 @@ const userId   = Astro.locals.user!.id
 const { data: sol } = await supabase
   .from('solicitudes')
   .select(`
-    id, numero, titulo, descripcion, estado, creado_en, cliente_id,
+    id, numero, titulo, descripcion, estado, creado_en, cliente_id, es_cotizacion,
     tecnico_id, precio_base, tasa_aplicada, total_estimado,
     gastos_extra, descripcion_gastos, imagenes_trabajo,
     conformidad_cliente, conformidad_en,
@@ -96,31 +98,34 @@ const imagenesTrabajo  = (sol.imagenes_trabajo  as string[] | null) ?? []
 // "finalizada": es el cierre administrativo interno del técnico (después de cobrar) — para el
 // cliente no cambia nada respecto de "Completada", así que se muestra igual.
 const estadoLabel: Record<string, string> = {
-  pendiente:  'Pendiente',
-  asignada:   'Pendiente',
-  aceptada:   'Aceptada',
-  en_curso:   'En curso',
-  completada: 'Completada',
-  finalizada: 'Completada',
-  cancelada:  'Cancelada',
+  pendiente:     'Pendiente',
+  asignada:      'Pendiente',
+  aceptada:      'Aceptada',
+  en_curso:      'En curso',
+  completada:    'Completada',
+  finalizada:    'Completada',
+  cancelada:     'Cancelada',
+  en_cotizacion: 'En cotización',
 }
 const estadoColor: Record<string, string> = {
-  pendiente:  'bg-amber-100 text-amber-800',
-  asignada:   'bg-amber-100 text-amber-800',
-  aceptada:   'bg-blue-100 text-blue-800',
-  en_curso:   'bg-blue-100 text-blue-800',
-  completada: 'bg-[#E8F5E9] text-[#1B4D2E]',
-  finalizada: 'bg-[#E8F5E9] text-[#1B4D2E]',
-  cancelada:  'bg-red-100 text-red-700',
+  pendiente:     'bg-amber-100 text-amber-800',
+  asignada:      'bg-amber-100 text-amber-800',
+  aceptada:      'bg-blue-100 text-blue-800',
+  en_curso:      'bg-blue-100 text-blue-800',
+  completada:    'bg-[#E8F5E9] text-[#1B4D2E]',
+  finalizada:    'bg-[#E8F5E9] text-[#1B4D2E]',
+  cancelada:     'bg-red-100 text-red-700',
+  en_cotizacion: 'bg-amber-100 text-amber-800',
 }
 const estadoDot: Record<string, string> = {
-  pendiente:  'bg-amber-400',
-  asignada:   'bg-amber-400',
-  aceptada:   'bg-blue-400',
-  en_curso:   'bg-blue-400',
-  completada: 'bg-primary',
-  finalizada: 'bg-primary',
-  cancelada:  'bg-red-400',
+  pendiente:     'bg-amber-400',
+  asignada:      'bg-amber-400',
+  aceptada:      'bg-blue-400',
+  en_curso:      'bg-blue-400',
+  completada:    'bg-primary',
+  finalizada:    'bg-primary',
+  cancelada:     'bg-red-400',
+  en_cotizacion: 'bg-amber-400',
 }
 
 // El historial (Tanda 2) arranca desde el primer cambio real — "pendiente" no queda registrado
@@ -128,8 +133,11 @@ const estadoDot: Record<string, string> = {
 // Se filtran "asignada" y "finalizada" del historial real porque el cliente no debe enterarse de
 // esos pasos intermedios/administrativos (se le muestran igual que "pendiente"/"completada" en
 // toda la vista) — sin este filtro aparecerían como un "Pendiente"/"Completada" duplicado.
+// Si nació del canal de cotización, el primer paso real fue "en_cotizacion", no "pendiente" — la
+// solicitud llega a "pendiente" recién si el cliente acepta la cotización (y eso sí queda
+// registrado en el historial real, como cualquier otro cambio de estado).
 const timeline = [
-  { estado: 'pendiente', creado_en: sol.creado_en },
+  { estado: sol.es_cotizacion ? 'en_cotizacion' : 'pendiente', creado_en: sol.creado_en },
   ...(rawHistorial ?? []).filter(h => h.estado !== 'asignada' && h.estado !== 'finalizada'),
 ]
 
@@ -140,25 +148,39 @@ const fmtFechaHora = (iso: string) =>
 
 <Layout title={`Solicitud #${sol.numero} — ${sol.titulo}`}>
   <Navbar client:load />
-  <CambiosEnVivo client:load autoReload suscripciones={[{ tabla: 'solicitudes', filtro: `id=eq.${sol.id}` }]} />
+  <!-- Se agrega `notificaciones` como respaldo: la policy de SELECT de `solicitudes` combina la
+       del cliente (simple) con las de técnico/admin (con EXISTS/JOIN) en la misma tabla, y eso
+       rompe Realtime para todos los suscriptores (mismo hallazgo documentado en
+       guia-notificaciones-realtime-supabase.md) — se notó en la práctica: la card de "Desglose
+       financiero"/"¿Aceptás esta cotización?" no aparecía sola al recibir el precio, había que
+       recargar a mano. `notificaciones` tiene policy simple y el cliente ya recibe una por cada
+       evento de cotización, así que sirve como disparador confiable. -->
+  <CambiosEnVivo client:load autoReload suscripciones={[
+    { tabla: 'solicitudes', filtro: `id=eq.${sol.id}` },
+    { tabla: 'notificaciones', filtro: `usuario_id=eq.${userId}` },
+  ]} />
 
   <div class="bg-cream min-h-screen py-8 px-4">
     <div class="max-w-4xl mx-auto flex flex-col gap-6">
 
       <!-- Encabezado -->
-      <div>
-        <a href="/dashboard/cliente" class="text-primary hover:text-primary-hover text-sm font-medium flex items-center gap-1 w-fit mb-4">
+      <div class="card-metallic group p-6 sm:p-8">
+        <div class="card-metallic-shine" />
+        <a href="/dashboard/cliente" class="text-white/70 hover:text-white text-sm font-medium inline-flex items-center gap-1 w-fit mb-4 transition-colors">
           ← Volver al panel
         </a>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div class="flex flex-col gap-1">
-            <h1 class="font-serif font-bold text-[#1B4D2E] text-2xl"><span class="text-gray-400 font-sans font-normal">#{sol.numero}</span> {sol.titulo}</h1>
-            <p class="text-gray-400 text-sm">
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-bold text-white bg-white/15 px-2.5 py-1 rounded-md tracking-wide">#{sol.numero}</span>
+              <h1 class="font-serif font-bold text-white text-2xl sm:text-3xl leading-tight">{sol.titulo}</h1>
+            </div>
+            <p class="text-white/70 text-sm">
               {categoria?.icono} {categoria?.nombre} ·
               Creada el {new Date(sol.creado_en).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
             </p>
           </div>
-          <span class={`text-sm font-semibold px-4 py-1.5 rounded-full w-fit ${estadoColor[sol.estado]}`}>
+          <span class={`text-sm font-semibold px-4 py-1.5 rounded-full w-fit shrink-0 ${estadoColor[sol.estado]}`}>
             {estadoLabel[sol.estado]}
           </span>
         </div>
@@ -187,6 +209,18 @@ const fmtFechaHora = (iso: string) =>
               ))}
             </div>
           </div>
+
+          <!-- Cotización (Fase 7b) — chat con el equipo de Taita. Se muestra mientras esté en el
+               canal de cotización, y se deja como historial incluso después de aceptarla/rechazarla. -->
+          {sol.es_cotizacion && (
+            <div class="bg-white rounded-2xl border border-amber-200 shadow-sm p-6 flex flex-col gap-4">
+              <div class="flex items-center gap-2.5">
+                <span class="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-base shrink-0">💬</span>
+                <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Cotización</h2>
+              </div>
+              <ChatCotizacion client:load solicitudId={sol.id} usuarioId={userId} esAdmin={false} />
+            </div>
+          )}
 
           <!-- Técnico asignado — sin teléfono a propósito (privacidad); el contacto pasa siempre
                por la plataforma -->
@@ -295,34 +329,46 @@ const fmtFechaHora = (iso: string) =>
         <div class="flex flex-col gap-6">
 
           <!-- Desglose financiero -->
-          <div class="bg-white rounded-2xl border border-cream-dark overflow-hidden">
-            <div class="px-6 py-4 border-b border-cream">
-              <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Desglose financiero</h2>
+          <div class="card-metallic group overflow-hidden">
+            <div class="card-metallic-shine" />
+            <div class="px-6 py-4 border-b border-white/15">
+              <h2 class="font-serif font-bold text-white text-base">Desglose financiero</h2>
             </div>
 
             {precioBase == null ? (
-              <div class="px-6 py-5 text-sm text-gray-400 text-center">
+              <div class="px-6 py-5 text-sm text-white/60 text-center">
                 Tarifa a convenir — sin cálculo automático
               </div>
             ) : (
               <div class="px-6 py-5 flex flex-col gap-3 text-sm">
-                <div class="flex justify-between text-gray-600">
+                <div class="flex justify-between text-white/70">
                   <span>Precio base</span>
-                  <span class="font-medium text-gray-800">{fmt(precioBase)}</span>
+                  <span class="font-medium text-white">{fmt(precioBase)}</span>
                 </div>
                 {gastosExtra != null && gastosExtra > 0 && (
-                  <div class="flex justify-between text-amber-700">
+                  <div class="flex justify-between text-amber-300">
                     <span>Gastos extras</span>
                     <span class="font-medium">+ {fmt(gastosExtra)}</span>
                   </div>
                 )}
-                <div class="border-t border-cream pt-3 flex justify-between">
-                  <span class="font-semibold text-gray-900">Total</span>
-                  <span class="font-bold text-gray-900">{total != null ? fmt(total) : '—'}</span>
+                <div class="border-t border-white/15 pt-3 flex justify-between">
+                  <span class="font-semibold text-white">Total</span>
+                  <span class="font-bold text-amber-300 text-base">{total != null ? fmt(total) : '—'}</span>
                 </div>
               </div>
             )}
           </div>
+
+          <!-- Responder cotización — el admin ya mandó precio, esperando aceptar/rechazar -->
+          {sol.estado === 'en_cotizacion' && precioBase != null && (
+            <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-3">
+              <h2 class="font-serif font-bold text-[#1B4D2E] text-base">¿Aceptás esta cotización?</h2>
+              <p class="text-sm text-gray-500">
+                Si la aceptás, pasamos a asignarte un técnico. Si no te sirve, podés rechazarla.
+              </p>
+              <ResponderCotizacion client:load solicitudId={sol.id} titulo={sol.titulo} />
+            </div>
+          )}
 
           <!-- Conformidad + pago — solo cuando el servicio ya está completado -->
           {(sol.estado === 'completada' || sol.estado === 'finalizada') && (
@@ -343,7 +389,7 @@ const fmtFechaHora = (iso: string) =>
           )}
 
           <!-- Cancelar — solo en solicitudes que todavía no terminaron -->
-          {['pendiente', 'asignada', 'aceptada', 'en_curso'].includes(sol.estado) && (
+          {['pendiente', 'en_cotizacion', 'asignada', 'aceptada', 'en_curso'].includes(sol.estado) && (
             <div class="bg-white rounded-2xl border border-cream-dark p-6">
               <CancelarSolicitud client:load solicitudId={sol.id} titulo={sol.titulo} />
             </div>

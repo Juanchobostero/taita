@@ -5,7 +5,10 @@ interface Props {
   titulo:      string
 }
 
-export default function ResponderAsignacion({ solicitudId, titulo }: Props) {
+// UI del cliente para aceptar/rechazar la cotización que envió el admin (Fase 7b) — mismo patrón
+// de modal centrado que ResponderAsignacion.tsx/CancelarSolicitud.tsx para la confirmación del
+// rechazo (es la acción irreversible; aceptar es directa, igual que "Aceptar trabajo" del técnico).
+export default function ResponderCotizacion({ solicitudId, titulo }: Props) {
   const [confirmandoRechazo, setConfirmandoRechazo] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
@@ -13,7 +16,7 @@ export default function ResponderAsignacion({ solicitudId, titulo }: Props) {
   const responder = async (accion: 'aceptar' | 'rechazar') => {
     setLoading(true)
     setError('')
-    const res = await fetch('/api/tecnico/responder-asignacion', {
+    const res = await fetch('/api/cotizacion/responder', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ solicitudId, accion }),
@@ -29,7 +32,7 @@ export default function ResponderAsignacion({ solicitudId, titulo }: Props) {
 
   return (
     <div className="flex flex-col gap-2">
-      {error && !confirmandoRechazo && <p className="text-xs text-red-600 font-semibold">{error}</p>}
+      {error && !confirmandoRechazo && <p className="text-xs text-destructive font-semibold">{error}</p>}
       <div className="flex items-center gap-2 flex-wrap">
         <button
           type="button"
@@ -37,7 +40,7 @@ export default function ResponderAsignacion({ solicitudId, titulo }: Props) {
           onClick={() => responder('aceptar')}
           className="flex-1 sm:flex-none text-sm font-semibold bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-full transition-colors disabled:opacity-50"
         >
-          {loading ? 'Confirmando...' : '✓ Aceptar trabajo'}
+          {loading ? 'Confirmando...' : '✓ Aceptar cotización'}
         </button>
         <button
           type="button"
@@ -49,9 +52,6 @@ export default function ResponderAsignacion({ solicitudId, titulo }: Props) {
         </button>
       </div>
 
-      {/* Modal centrado en vez de un bloque inline — mismo criterio que CerrarServicio: en
-          listados con varios elementos en fila un bloque ancho desarmaba la fila, y un popover
-          anclado se hubiera recortado contra el `overflow-hidden` del contenedor de la lista. */}
       {confirmandoRechazo && (
         <div
           className="fixed inset-0 z-100 flex items-center justify-center bg-black/40 p-4"
@@ -62,7 +62,7 @@ export default function ResponderAsignacion({ solicitudId, titulo }: Props) {
             className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-5 flex flex-col gap-3 text-sm text-red-700"
             onClick={(e) => e.stopPropagation()}
           >
-            <p>¿Seguro que querés rechazar <strong>{titulo}</strong>? Va a volver a quedar disponible para que se le asigne a otro técnico.</p>
+            <p>¿Seguro que querés rechazar la cotización de <strong>{titulo}</strong>? La solicitud va a quedar cancelada.</p>
             {error && <p className="text-red-600 font-semibold text-xs">{error}</p>}
             <div className="flex items-center gap-4">
               <button

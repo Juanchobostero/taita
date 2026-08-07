@@ -19,8 +19,11 @@ const especialidades = cats ?? []
 <Layout title="Registrarse — Taita Soluciones" description="Creá tu cuenta en Taita Soluciones">
   <Navbar client:load />
 
-  <div class="min-h-screen bg-cream py-12 px-4">
-    <div class="max-w-lg mx-auto flex flex-col gap-8">
+  <div class="min-h-screen bg-cream py-10 px-4">
+    <!-- max-w-5xl (no max-w-lg como antes) — el form de técnico es un wizard con sidebar de pasos
+         que necesita más ancho; el de cliente se auto-centra angosto adentro igual, ver
+         RegistroForm.tsx. -->
+    <div class="max-w-5xl mx-auto flex flex-col gap-6">
 
       <div class="text-center flex flex-col items-center gap-3">
         <a href="/">
@@ -34,9 +37,7 @@ const especialidades = cats ?? []
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl p-6 sm:p-8 border border-cream-dark">
-        <RegistroForm especialidades={especialidades} client:load />
-      </div>
+      <RegistroForm especialidades={especialidades} client:load />
 
     </div>
   </div>

@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
+import { notificarNuevoTecnico } from '@/lib/notificaciones'
 
 export const POST: APIRoute = async ({ request }) => {
   const { userId, telefono, descripcion, zona, especialidades, subcategorias, cvu, nick, mostrarNombre } = await request.json()
@@ -52,6 +53,21 @@ export const POST: APIRoute = async ({ request }) => {
           }
         }))
     }
+  }
+
+  // Aviso "mejor esfuerzo": si falla el email/notificación, el registro igual quedó hecho (el
+  // técnico se creó bien) — no tiene sentido devolverle un error al usuario por esto.
+  try {
+    const { data: usuario } = await supabase
+      .from('usuarios')
+      .select('nombre_completo, email')
+      .eq('id', userId)
+      .single()
+    if (usuario) {
+      await notificarNuevoTecnico(supabase, userId, usuario.nombre_completo, usuario.email)
+    }
+  } catch (err) {
+    console.error('[api/registro-tecnico] error notificando alta de técnico:', err)
   }
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 })

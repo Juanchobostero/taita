@@ -36,6 +36,28 @@
   --animate-fade-up: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* ── Tarjeta "metálica" (Fase 6) ─────────────────────────────────────────
+   Degradé verde oscuro + brillo diagonal que barre la tarjeta al hover. Nació en la tarjeta de
+   estimación del wizard de solicitud (referencia visual que pasó Jota) y de ahí se fue repitiendo
+   en varios lugares — se centraliza acá para no repetir la misma clase larga en cada archivo.
+   IMPORTANTE: `.card-metallic` necesita la clase literal `group` al lado en el HTML (no se puede
+   meter con @apply, "group" no es una utilidad real con propiedades, es solo un marcador que
+   Tailwind busca en el DOM para resolver `group-hover:`).
+   Uso: <div class="card-metallic group p-6"><div class="card-metallic-shine"></div>...</div> */
+@layer components {
+  .card-metallic {
+    @apply relative overflow-hidden rounded-2xl text-white ring-1 ring-white/10
+      bg-linear-to-br from-[#1f5a37] via-[#123723] to-[#081a10]
+      shadow-[0_8px_30px_-8px_rgba(0,0,0,0.55)] transition-all duration-300
+      hover:shadow-[0_14px_40px_-8px_rgba(27,77,46,0.75)] hover:-translate-y-1;
+  }
+  .card-metallic-shine {
+    @apply pointer-events-none absolute inset-0 translate-x-[-120%] skew-x-[-20deg]
+      bg-linear-to-r from-transparent via-white/15 to-transparent
+      transition-transform duration-700 ease-out group-hover:translate-x-[120%];
+  }
+}
+
 /* ── Brand tokens estáticos ─────────────────────────────────────────────── */
 @theme {
   --color-primary-hover: #2D6A42;

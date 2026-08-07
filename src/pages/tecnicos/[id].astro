@@ -79,9 +79,32 @@ const jsonLd = {
   <div class="bg-gray-50 min-h-screen py-10 px-4">
     <div class="max-w-4xl mx-auto flex flex-col gap-6">
 
-      <a href="/tecnicos" class="text-primary hover:text-primary-hover font-medium flex items-center gap-1 w-fit text-sm">
+      <a id="volver-link" href="/tecnicos" class="text-primary hover:text-primary-hover font-medium flex items-center gap-1 w-fit text-sm">
         ← Volver a técnicos
       </a>
+
+      <script>
+        // Dinámico: si se llegó desde otra página del sitio (ej. el paso "¿Quién puede tocarte?"
+        // del wizard de solicitud, un listado, etc.), "volver" usa el historial del navegador para
+        // ir exactamente a donde estaba el usuario — antes el link era fijo a /tecnicos y sacaba a
+        // cualquiera del flujo en el que estaba (ej. perdía el wizard de solicitud a mitad de paso).
+        // Si no hay de dónde volver (entrada directa/link compartido), se deja el fallback a /tecnicos.
+        const link = document.getElementById('volver-link')
+        if (link && document.referrer) {
+          try {
+            const ref = new URL(document.referrer)
+            if (ref.origin === window.location.origin && window.history.length > 1) {
+              link.textContent = '← Volver'
+              link.addEventListener('click', (e) => {
+                e.preventDefault()
+                history.back()
+              })
+            }
+          } catch {
+            // document.referrer con formato inesperado — se deja el fallback a /tecnicos
+          }
+        }
+      </script>
 
       <!-- Perfil -->
       <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-6">

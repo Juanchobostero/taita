@@ -84,7 +84,7 @@ export default function CompletarTrabajo({ solicitudId, tecnicoId, precioBase, t
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-xs bg-primary-soft hover:bg-primary text-primary hover:text-white border border-primary-pale font-medium px-3 py-1.5 rounded-full transition-colors"
+        className="flex-1 sm:flex-none text-sm bg-primary-soft hover:bg-primary text-primary hover:text-white border border-primary-pale font-semibold px-5 py-2.5 rounded-full transition-colors"
       >
         ✓ Completar trabajo
       </button>

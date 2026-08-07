@@ -4,8 +4,10 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { supabase } from '@/lib/supabase'
 import { franjasHorarias } from '@/lib/disponibilidad'
 import MapaUbicacion from '@/components/MapaUbicacion'
+import { StepperSidebar, StepperMobileBar } from '@/components/WizardStepper'
 
 interface CategoriaOpt {
   id: string
@@ -16,10 +18,19 @@ interface CategoriaOpt {
   precio_base: number | null
 }
 
+interface SubitemOpt {
+  id:              string
+  categoria_id:    string
+  nombre:          string
+  precio:          number | null
+  porcentaje_tasa: number
+}
+
 interface Props {
   tecnicoId:           string | null
   tecnicoNombre:       string | null
   categorias:          CategoriaOpt[]
+  subitems?:           SubitemOpt[]
   defaultCategoriaId?: string | null
 }
 
@@ -72,12 +83,12 @@ function FieldError({ msg }: { msg?: string }) {
   return <p className="text-xs text-destructive mt-1">{msg}</p>
 }
 
-export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, defaultCategoriaId }: Props) {
+export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, subitems = [], defaultCategoriaId }: Props) {
   const [serverError, setServerError] = useState('')
   const [success, setSuccess]         = useState(false)
   const [paso, setPaso]               = useState(1)
 
-  const { register, handleSubmit, watch, setValue, trigger, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { register, handleSubmit, watch, setValue, trigger, setError, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       categoria_id: (defaultCategoriaId && categorias.find(c => c.id === defaultCategoriaId))
@@ -87,6 +98,76 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
   })
 
   const categoriaId = watch('categoria_id')
+  const [subitemId, setSubitemId] = useState<string | null>(null)
+  const subitemsCategoria = useMemo(
+    () => subitems.filter(s => s.categoria_id === categoriaId),
+    [subitems, categoriaId],
+  )
+  // Al cambiar de categoría, el sub-ítem elegido de la categoría anterior ya no aplica.
+  useEffect(() => { setSubitemId(null) }, [categoriaId])
+
+  // ── Canal de "Solicitar cotización" (Fase 7b) ──────────────────────────────
+  // Independiente de si la categoría tiene sub-ítems o no — es la opción para cuando el cliente
+  // no encuentra lo que necesita entre ellos. Se excluye mutuamente con elegir un sub-ítem: uno
+  // implica precio fijo conocido, el otro implica "no sé el precio, necesito que me cotice el
+  // admin" — no tiene sentido tener los dos a la vez.
+  const [esCotizacion, setEsCotizacion] = useState(false)
+  const [imagenesCotizacion, setImagenesCotizacion] = useState<string[]>([])
+  const [subiendoImagenCot, setSubiendoImagenCot] = useState(false)
+  const [errorImagenCot, setErrorImagenCot] = useState('')
+  const sesionIdRef = useRef(Math.random().toString(36).slice(2))
+  const imagenCotInputRef = useRef<HTMLInputElement>(null)
+
+  const toggleCotizacion = () => {
+    setEsCotizacion(v => {
+      const next = !v
+      if (next) setSubitemId(null)
+      return next
+    })
+  }
+
+  const elegirSubitem = (id: string) => {
+    setSubitemId(prev => prev === id ? null : id)
+    setEsCotizacion(false)
+  }
+
+  const handleFilesCotizacion = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    if (imagenesCotizacion.length + files.length > 5) {
+      setErrorImagenCot('Máximo 5 fotos.')
+      return
+    }
+    setSubiendoImagenCot(true)
+    setErrorImagenCot('')
+    const urls: string[] = []
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        setErrorImagenCot(`"${file.name}" no es una imagen válida.`)
+        continue
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setErrorImagenCot(`"${file.name}" pesa más de 5MB — subí una versión más liviana.`)
+        continue
+      }
+      const ext  = file.name.split('.').pop()
+      const path = `${sesionIdRef.current}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const { error: upErr } = await supabase.storage.from('cotizaciones').upload(path, file, { upsert: false })
+      if (upErr) {
+        setErrorImagenCot(`No se pudo subir "${file.name}": ${upErr.message}`)
+        continue
+      }
+      const { data: { publicUrl } } = supabase.storage.from('cotizaciones').getPublicUrl(path)
+      urls.push(publicUrl)
+    }
+    setImagenesCotizacion(prev => [...prev, ...urls])
+    setSubiendoImagenCot(false)
+    if (imagenCotInputRef.current) imagenCotInputRef.current.value = ''
+  }
+
+  const quitarImagenCotizacion = (idx: number) => {
+    setImagenesCotizacion(prev => prev.filter((_, i) => i !== idx))
+  }
   const tituloVal    = watch('titulo')
   const fechaVal     = watch('fecha_solicitada')
   const horaVal      = watch('hora_solicitada')
@@ -152,12 +233,16 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
   }, [categoriaId, tecnicoId])
 
   const { tasa, precioBase, total } = useMemo(() => {
-    const cat      = categorias.find(c => c.id === categoriaId)
-    const tasa     = cat?.porcentaje_tasa ?? 0
-    const precioBase = cat?.precio_base ?? null
-    const total    = precioBase != null ? Math.round(precioBase * (1 + tasa / 100)) : null
+    // Pedir cotización siempre gana — no hay precio para mostrar hasta que el admin lo defina.
+    if (esCotizacion) return { tasa: 0, precioBase: null, total: null }
+    const sub = subitemId ? subitemsCategoria.find(s => s.id === subitemId) : null
+    const cat = categorias.find(c => c.id === categoriaId)
+    // El sub-ítem elegido pisa el precio/tasa de la categoría "madre" — es más específico.
+    const tasa        = sub ? sub.porcentaje_tasa : cat?.porcentaje_tasa ?? 0
+    const precioBase   = sub ? sub.precio : cat?.precio_base ?? null
+    const total        = precioBase != null ? Math.round(precioBase * (1 + tasa / 100)) : null
     return { tasa, precioBase, total }
-  }, [categoriaId, categorias])
+  }, [categoriaId, categorias, subitemId, subitemsCategoria, esCotizacion])
 
   const categoriaSeleccionada = categorias.find(c => c.id === categoriaId)
 
@@ -166,6 +251,13 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
     if (campos.length > 0) {
       const ok = await trigger(campos)
       if (!ok) return
+    }
+    // En el canal de cotización la descripción es el primer mensaje del chat con el admin — no
+    // puede quedar vacía. `descripcion` es opcional en el schema base (se usa igual en el flujo
+    // normal), así que se valida acá aparte en vez de en el schema.
+    if (paso === 3 && esCotizacion && !watch('descripcion')?.trim()) {
+      setError('descripcion', { message: 'Describí el problema para pedir la cotización' })
+      return
     }
     setPaso(p => Math.min(p + 1, PASOS.length))
   }
@@ -199,7 +291,8 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         tecnicoId,
-        categoriaId:     data.categoria_id,
+        categoriaId:         data.categoria_id,
+        categoriaSubitemId: subitemId,
         titulo:          data.titulo,
         descripcion:     data.descripcion || null,
         precioBase,
@@ -210,6 +303,8 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
         direccion:       data.direccion,
         latitud:         ubicacion?.lat ?? null,
         longitud:        ubicacion?.lng ?? null,
+        esCotizacion,
+        imagenesCotizacion: esCotizacion ? imagenesCotizacion : undefined,
       }),
     })
     if (!res.ok) {
@@ -232,8 +327,13 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
     return (
       <div className="bg-green-50 border border-green-200 text-green-700 rounded-2xl p-8 text-center flex flex-col gap-3">
         <p className="text-2xl">✅</p>
-        <p className="font-bold text-lg">¡Solicitud enviada!</p>
-        <p className="text-sm">{tecnicoNombre ? `Le avisamos a ${tecnicoNombre}.` : 'Te asignaremos el técnico ideal.'} Podés ver el estado en tu panel.</p>
+        <p className="font-bold text-lg">{esCotizacion ? '¡Pedido de cotización enviado!' : '¡Solicitud enviada!'}</p>
+        <p className="text-sm">
+          {esCotizacion
+            ? 'El equipo de Taita va a revisar tu pedido y te va a escribir para coordinar el precio.'
+            : tecnicoNombre ? `Le avisamos a ${tecnicoNombre}.` : 'Te asignaremos el técnico ideal.'
+          } Podés ver el estado en tu panel.
+        </p>
         <a href="/dashboard/cliente" className="mt-2 text-primary hover:text-primary-hover font-medium text-sm">
           Ir a mi panel →
         </a>
@@ -247,34 +347,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
   return (
     <div className="flex flex-col lg:flex-row gap-6">
 
-      {/* Sidebar de pasos — solo desktop, en mobile se reemplaza por la barra compacta de abajo */}
-      <aside className="hidden lg:flex flex-col gap-1 w-56 shrink-0 pt-1">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tu solicitud</p>
-        {PASOS.map((p, idx) => {
-          const completado = p.n < paso
-          const actual     = p.n === paso
-          return (
-            <div key={p.n} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                  completado ? 'bg-primary text-white'
-                  : actual   ? 'bg-primary text-white ring-4 ring-amber-200'
-                  : 'bg-white border border-cream-dark text-gray-400'
-                }`}>
-                  {completado ? '✓' : p.n}
-                </span>
-                {idx < PASOS.length - 1 && (
-                  <span className={`w-px flex-1 min-h-7 ${completado ? 'bg-primary' : 'bg-cream-dark'}`} />
-                )}
-              </div>
-              <div className={`pb-7 ${actual ? '' : 'opacity-80'}`}>
-                <p className={`text-sm font-semibold ${actual ? 'text-primary' : completado ? 'text-gray-700' : 'text-gray-400'}`}>{p.label}</p>
-                <p className="text-xs text-gray-400">{p.sub}</p>
-              </div>
-            </div>
-          )
-        })}
-      </aside>
+      <StepperSidebar pasos={PASOS} actual={paso} titulo="Tu solicitud" />
 
       {/* Card principal — OJO: es un <form> pero ningún botón es type="submit" y su onSubmit
           siempre hace preventDefault. El envío real se dispara a mano, solo con el click
@@ -291,16 +364,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
         className="flex-1 bg-white rounded-2xl border border-cream-dark shadow-sm flex flex-col min-w-0"
       >
 
-        {/* Barra compacta de progreso — solo mobile */}
-        <div className="lg:hidden px-5 pt-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-primary uppercase tracking-wide">Paso {paso} de {PASOS.length}</span>
-            <span className="text-xs text-gray-400">{info.label}</span>
-          </div>
-          <div className="w-full h-1.5 bg-cream rounded-full overflow-hidden">
-            <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${(paso / PASOS.length) * 100}%` }} />
-          </div>
-        </div>
+        <StepperMobileBar total={PASOS.length} actual={paso} label={info.label} />
 
         <div className="flex-1 p-5 sm:p-8 flex flex-col gap-5">
           <div className="hidden lg:block">
@@ -336,6 +400,54 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
                 ))}
               </div>
               <FieldError msg={errors.categoria_id?.message} />
+
+              {/* Sub-ítems con precio (Fase 7a) — solo si la categoría elegida tiene alguno
+                  activo. Elegir uno fija el precio/tasa de ESE sub-ítem en vez del de la
+                  categoría; no elegir ninguno deja el comportamiento de antes (precio de la
+                  categoría, o "a convenir" si tampoco tiene). */}
+              {subitemsCategoria.length > 0 && (
+                <div className="flex flex-col gap-2 pt-2 border-t border-cream">
+                  <p className="text-sm font-semibold text-gray-700">¿Cuál de estos es tu caso?</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {subitemsCategoria.map(s => (
+                      <button
+                        type="button"
+                        key={s.id}
+                        onClick={() => elegirSubitem(s.id)}
+                        className={`flex items-center justify-between gap-2 px-4 py-3 rounded-xl border-2 text-left transition-all ${
+                          subitemId === s.id
+                            ? 'border-primary bg-primary-soft text-primary'
+                            : 'border-cream-dark hover:border-primary-pale bg-white text-gray-600'
+                        }`}
+                      >
+                        <span className="text-sm font-medium">{s.nombre}</span>
+                        <span className="text-sm font-semibold shrink-0">
+                          {s.precio != null ? `$${s.precio.toLocaleString('es-AR')}` : 'A convenir'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    {subitemId ? 'Tocá de nuevo para deseleccionar.' : 'Ninguno seleccionado — seguís con el precio general de la categoría.'}
+                  </p>
+                </div>
+              )}
+
+              {/* Canal de "Solicitar cotización" — independiente de si hay sub-ítems o no. */}
+              <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                esCotizacion ? 'border-primary bg-primary-soft' : 'border-cream-dark hover:border-primary-pale bg-white'
+              }`}>
+                <input type="checkbox" checked={esCotizacion} onChange={toggleCotizacion} className="mt-0.5 accent-primary w-4 h-4 shrink-0" />
+                <div>
+                  <p className={`text-sm font-semibold ${esCotizacion ? 'text-primary' : 'text-gray-700'}`}>
+                    ¿No encontrás lo que buscás? Pedí una cotización
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Contanos el problema con detalle y fotos, y el equipo de Taita te va a escribir
+                    para coordinar el precio antes de asignar un técnico.
+                  </p>
+                </div>
+              </label>
             </>
           )}
 
@@ -391,27 +503,26 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
                     <>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {(verTodos ? candidatos : candidatos.slice(0, 6)).map(c => (
-                          <div key={c.id} className="rounded-xl border border-cream-dark bg-white p-3 flex flex-col items-center gap-2 text-center">
+                          <div key={c.id} className="card-metallic group p-3 flex flex-col items-center gap-2 text-center">
+                            <div className="card-metallic-shine" />
                             {c.foto_url
-                              ? <img src={c.foto_url} alt={c.nombre_display} className="w-12 h-12 rounded-full object-cover" />
+                              ? <img src={c.foto_url} alt={c.nombre_display} className="w-12 h-12 rounded-full object-cover ring-2 ring-white/20" />
                               : (
-                                <div className="w-12 h-12 rounded-full bg-primary-soft flex items-center justify-center text-primary font-bold text-base">
+                                <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center text-primary font-bold text-base">
                                   {c.nombre_display.charAt(0).toUpperCase()}
                                 </div>
                               )
                             }
-                            <p className="text-xs font-semibold text-gray-800 leading-tight line-clamp-1">{c.nombre_display}</p>
+                            <p className="text-xs font-semibold text-white leading-tight line-clamp-1">{c.nombre_display}</p>
                             <div className="flex items-center gap-0.5">
                               <svg className="w-3 h-3 text-amber-400 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-                              <span className="text-xs text-gray-600">{c.calificacion_promedio > 0 ? c.calificacion_promedio.toFixed(1) : '—'}</span>
-                              {c.total_servicios > 0 && <span className="text-xs text-gray-400">({c.total_servicios})</span>}
+                              <span className="text-xs text-white/80">{c.calificacion_promedio > 0 ? c.calificacion_promedio.toFixed(1) : '—'}</span>
+                              {c.total_servicios > 0 && <span className="text-xs text-white/50">({c.total_servicios})</span>}
                             </div>
-                            {c.zona && <p className="text-xs text-gray-400 leading-tight line-clamp-1">{c.zona}</p>}
+                            {c.zona && <p className="text-xs text-white/50 leading-tight line-clamp-1">{c.zona}</p>}
                             <a
                               href={`/tecnicos/${c.id}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-xs font-semibold bg-primary-soft hover:bg-primary text-primary hover:text-white px-3 py-1.5 rounded-full transition-colors mt-0.5"
+                              className="relative inline-flex items-center gap-1 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-full transition-colors mt-0.5"
                             >
                               Ver perfil
                             </a>
@@ -451,13 +562,58 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
                 <FieldError msg={errors.titulo?.message} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">Descripción (opcional)</label>
+                <label className="text-sm font-medium text-gray-700">
+                  Descripción {esCotizacion ? '' : '(opcional)'}
+                </label>
                 <Textarea
                   rows={4}
-                  placeholder="Contá más detalles sobre el trabajo que necesitás..."
+                  placeholder={esCotizacion
+                    ? 'Contanos qué necesitás con el mayor detalle posible — esto es lo primero que va a leer el equipo de Taita.'
+                    : 'Contá más detalles sobre el trabajo que necesitás...'}
                   {...register('descripcion')}
+                  className={errors.descripcion ? 'border-destructive' : ''}
                 />
+                <FieldError msg={errors.descripcion?.message} />
               </div>
+
+              {esCotizacion && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-gray-700">Fotos del problema (opcional, hasta 5)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {imagenesCotizacion.map((url, i) => (
+                      <div key={url} className="relative w-20 h-20 rounded-xl overflow-hidden border border-cream-dark group">
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => quitarImagenCotizacion(i)}
+                          className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                    {imagenesCotizacion.length < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => imagenCotInputRef.current?.click()}
+                        disabled={subiendoImagenCot}
+                        className="w-20 h-20 rounded-xl border-2 border-dashed border-cream-dark hover:border-primary-pale flex items-center justify-center text-gray-400 hover:text-primary transition-colors text-2xl"
+                      >
+                        {subiendoImagenCot ? '…' : '+'}
+                      </button>
+                    )}
+                    <input
+                      ref={imagenCotInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      multiple
+                      className="hidden"
+                      onChange={handleFilesCotizacion}
+                    />
+                  </div>
+                  {errorImagenCot && <p className="text-xs text-destructive">{errorImagenCot}</p>}
+                </div>
+              )}
             </>
           )}
 
@@ -592,6 +748,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
                 <dl className="flex-1 flex flex-col divide-y divide-cream text-sm">
                   {[
                     ['Servicio',    categoriaSeleccionada?.nombre ?? '—'],
+                    ...(subitemId ? [['Detalle', subitemsCategoria.find(s => s.id === subitemId)?.nombre ?? '—']] : []),
                     ['Técnico',     tecnicoNombre ?? 'A asignar por Taita'],
                     ['Título',      tituloVal || '—'],
                     ['Fecha',       fechaVal || '—'],
@@ -605,17 +762,15 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
                   ))}
                 </dl>
 
-                <div className={`group relative overflow-hidden w-full lg:w-64 shrink-0 rounded-2xl p-5 flex flex-col gap-3 transition-all duration-300 ${
+                <div className={`w-full lg:w-64 shrink-0 p-5 flex flex-col gap-3 ${
                   precioBase != null
-                    ? 'bg-linear-to-br from-[#1f5a37] via-[#123723] to-[#081a10] text-white ring-1 ring-white/10 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.55)] hover:shadow-[0_14px_40px_-8px_rgba(27,77,46,0.75)] hover:-translate-y-1'
-                    : 'bg-gray-50 border border-gray-100 text-gray-500'
+                    ? 'card-metallic group'
+                    : 'rounded-2xl bg-gray-50 border border-gray-100 text-gray-500'
                 }`}>
                   {/* Brillo metálico que barre la tarjeta al pasar el mouse — referencia visual
                       que pasó Jota (estilo tarjeta "glass/metal" de su portfolio). Puro CSS, sin
-                      librerías nuevas: un overlay diagonal que se desplaza con `group-hover`. */}
-                  {precioBase != null && (
-                    <div className="pointer-events-none absolute inset-0 translate-x-[-120%] skew-x-[-20deg] bg-linear-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-[120%]" />
-                  )}
+                      librerías nuevas: clase compartida en global.css (`.card-metallic-shine`). */}
+                  {precioBase != null && <div className="card-metallic-shine" />}
                   {precioBase != null ? (
                     <>
                       <p className="text-sm font-semibold">Estimación de costo</p>
@@ -637,6 +792,11 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
                       </div>
                       <p className="text-xs text-white/60">El total final puede variar según materiales y complejidad del trabajo. Se confirma con el técnico antes de comenzar.</p>
                     </>
+                  ) : esCotizacion ? (
+                    <p className="text-sm text-center">
+                      💬 Tu pedido va a revisión del equipo de Taita. Te vamos a escribir para
+                      coordinar el precio antes de asignar un técnico.
+                    </p>
                   ) : (
                     <p className="text-sm text-center">La tarifa se acordará directamente con el técnico.</p>
                   )}
@@ -680,7 +840,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, de
                 disabled={isSubmitting || chequeando}
                 className="text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white px-6 py-2.5 rounded-full transition-colors disabled:opacity-50"
               >
-                {chequeando ? 'Verificando horario...' : isSubmitting ? 'Enviando...' : 'Enviar solicitud'}
+                {chequeando ? 'Verificando horario...' : isSubmitting ? 'Enviando...' : esCotizacion ? 'Pedir cotización' : 'Enviar solicitud'}
               </button>
             )}
           </div>

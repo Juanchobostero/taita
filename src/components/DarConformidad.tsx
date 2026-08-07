@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import MercadoPagoBadge from '@/components/MercadoPagoBadge'
 
 interface Props {
   solicitudId:   string
@@ -70,8 +71,9 @@ export default function DarConformidad({
 
         {pagoEstado === 'pagado' ? (
           <>
-            <p className="text-xs">
-              ✅ Pago acreditado{total != null ? ` por ${fmt(total)}` : ''}. Gracias por confiar en Taita.
+            <p className="text-xs flex items-center gap-1.5 flex-wrap">
+              <MercadoPagoBadge />
+              <span>✅ Pago acreditado{total != null ? ` por ${fmt(total)}` : ''}. Gracias por confiar en Taita.</span>
             </p>
             {reciboUrl && (
               <div className="flex items-center gap-2">
@@ -101,9 +103,9 @@ export default function DarConformidad({
             </p>
             <a
               href={initPoint}
-              className="w-full text-center bg-[#3483FA] hover:bg-[#2968C8] text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+              className="w-full inline-flex items-center justify-center gap-2 bg-[#3483FA] hover:bg-[#2968C8] text-white font-semibold py-3 rounded-xl transition-colors text-sm"
             >
-              Pagar
+              <MercadoPagoBadge /> · Pagar
             </a>
             <p className="text-center text-[11px] text-gray-400 flex items-center justify-center gap-1">
               🔒 Pago seguro
@@ -117,9 +119,9 @@ export default function DarConformidad({
               type="button"
               disabled={regenerando}
               onClick={reintentarPago}
-              className="w-full text-center bg-[#3483FA] hover:bg-[#2968C8] text-white font-semibold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
+              className="w-full inline-flex items-center justify-center gap-2 bg-[#3483FA] hover:bg-[#2968C8] text-white font-semibold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
             >
-              {regenerando ? 'Generando link...' : 'Pagar'}
+              {regenerando ? 'Generando link...' : <><MercadoPagoBadge /> · Pagar</>}
             </button>
             {!regenerando && (
               <p className="text-center text-[11px] text-gray-400 flex items-center justify-center gap-1">

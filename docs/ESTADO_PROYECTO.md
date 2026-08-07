@@ -3,16 +3,17 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-08-06 — arrancó la implementación de "mejoras finales" (ver
-`docs/taita-mejoras-finales.md`, requisitos de una meet con Agustín), yendo fase por fase,
-probando cada una antes de seguir con la próxima. Fases 1 a 3 (previsualizar el PDF del recibo, número de solicitud `#123` en toda la web, y mapa de
-ubicación con Leaflet) **implementadas y confirmadas por Jota**. Fase 4 (franja horaria del admin
-al asignar técnico) **implementada, falta correr el SQL y probar**. Fase 5 (botón del técnico para
-cerrar el servicio, nuevo estado `finalizada`) **implementada y confirmada por Jota** (con 3
-rondas de ajustes post-feedback ya resueltas — contadores, notificación al técnico, y modales de
-confirmación). Arrancó la Fase 6 (rediseño visual) — primer recorte, el wizard de "Solicitar
-servicio", **implementado, falta probar**. Ver sección "Mejoras finales — implementación por
-fases" más abajo para el plan completo y el detalle de cada fase.
+**Última actualización:** 2026-08-07 — Fase 6 (rediseño visual) **cerrada y confirmada por Jota**
+de punta a punta: wizard de "Solicitar servicio", bottom nav + navbar (mobile y escritorio), home
+de escritorio, formularios de registro, listados de solicitudes (cliente y técnico, cards
+diferenciadas por estado), pantalla `/tecnicos`, pantalla de detalle de solicitud (header y
+desglose financiero metalizados), stats de los dashboards (cliente/técnico) a cards metalizadas, e
+insignia de Mercado Pago en el botón de pago y en todos los estados "pagado" de la app. **Fase 7**
+("mejoras finales" — ver `docs/taita-mejoras-finales.md`) **implementada de punta a punta** (7a —
+subitems con precio en el wizard — y 7b — canal de "Solicitar cotización" con chat cliente↔admin,
+nuevo estado `en_cotizacion`), **falta correr el SQL pendiente en Supabase, crear el bucket
+`cotizaciones`, y probar de punta a punta con Jota**. Ver sección "Mejoras finales — implementación
+por fases" más abajo para el plan completo y el detalle de cada fase.
 
 **Actualización anterior:** 2026-07-31 — fix de husos horarios (todas las fechas/horas "reales" de
 la app ahora se muestran siempre en hora de Argentina, sin importar en qué huso corra el servidor)
@@ -1146,8 +1147,9 @@ probando cada fase en producción antes de arrancar la siguiente — no se imple
 | 3 | Mapa con Leaflet en el formulario de solicitud + detalle | ✅ Confirmado |
 | 4 | Admin elige franja horaria (mañana/tarde/noche) al asignar técnico | ✅ Implementado, falta probar |
 | 5 | Botón de técnico para cerrar el servicio después del pago | ✅ Implementado, falta probar |
-| 6 | Rediseño visual (formulario + dashboards cliente/técnico) | 🔄 En curso — wizard de solicitud implementado, falta probar |
-| 7 | Subcategorías con precio + canal de "Solicitar cotización" (con chat cliente↔admin) | Pendiente — la más grande, al final |
+| 6 | Rediseño visual (formulario + dashboards cliente/técnico) | ✅ Implementado y confirmado por Jota |
+| 7a | Subitems con precio en el wizard de "Solicitar servicio" | ✅ Implementado, falta correr el SQL y probar |
+| 7b | Canal de "Solicitar cotización" (con chat cliente↔admin) | ✅ Implementado, falta correr el SQL, crear el bucket, y probar |
 
 **Decisiones tomadas con Jota que valen para todo el plan:**
 - El chat interno para el flujo de cotización (Fase 7) **sí se incluye**, pese a que en una charla
@@ -1593,7 +1595,9 @@ sesión logueada disponible; se verificó que compila y que la ruta no rompe en 
 `src/components/MapaUbicacion.tsx`, `src/pages/api/geocodificar-inverso.ts` (nuevo).
 
 **Confirmado por Jota (2026-08-06):** el botón "Enviar solicitud" ya no aparece en "Enviando..."
-sin haber sido clickeado — el fix de sacar `type="submit"` de todos los botones funcionó.
+sin haber sido clickeado — el fix de sacar `type="submit"` de todos los botones funcionó. Probado
+también desde otra máquina (después del push) — todo OK, incluido el brillo metálico de la
+tarjeta de estimación. **Fase 6a queda cerrada.**
 
 **Último ajuste de la sesión — tarjeta de estimación con estilo "metálico"/glass:** a pedido de
 Jota (referencia: una tarjeta "DISPONIBLE" de su portfolio, con efecto de brillo que se mueve al
@@ -1630,6 +1634,595 @@ verificar visualmente en este entorno).
 aparece `Failed to fetch dynamically imported module` o cualquier error de módulo en la consola del
 navegador, es caché de Vite desactualizada del `pnpm dev` — reiniciar el servidor (`Ctrl+C` y
 `pnpm dev` de nuevo) antes de asumir que es un bug de código (ya pasó dos veces en esta sesión).
+
+**Confirmado por Jota (2026-08-06, sesión siguiente):** Fase 6a probada desde la otra máquina
+después del push — todo OK (wizard, fix del botón, brillo metálico).
+
+### Fase 6b — Bottom nav mobile + home mobile
+
+**✅ Implementado. Falta probar (no se pudo probar visualmente en este entorno).**
+
+**Cómo quedó:**
+- Nuevo componente `BottomNavMobile.tsx` — barra fija abajo, solo mobile (`md:hidden`). Detecta el
+  rol vía Supabase igual que `Navbar.tsx` (mismo patrón, sin compartir estado entre ambos — no
+  había un contexto de auth compartido en el proyecto, así que se repite el mismo hook chico en
+  vez de armar una abstracción nueva para esto solo).
+  **El admin no ve esta barra** — sigue usando el panel de escritorio, según la decisión ya tomada
+  de que el lado admin queda "de oficina".
+- **Ajuste post-feedback de Jota:** el primer set de accesos (Inicio/Servicios/Citas/Perfil, genérico
+  para todos) no tenía sentido — se pidió analizar qué necesita realmente cada tipo de usuario en
+  vez de reusar las mismas 4 etiquetas para todos. Quedó así:
+  - **Cliente / visitante sin sesión** (mismo set para los dos — `/solicitud` y `/dashboard/cliente`
+    ya están protegidos por el middleware, así que sin sesión el click manda a `/login` con
+    redirect, igual que ya hace el navbar de escritorio con "Solicitar servicio"): **Inicio**
+    (`/`) → **Técnicos** (`/tecnicos`, para buscar y elegir uno) → **Solicitar** (`/solicitud`,
+    la acción principal) → **Mis pedidos** (`/dashboard/cliente`).
+  - **Técnico**: **Inicio** (`/`) → **Mis trabajos** (`/dashboard/tecnico`) → **Mi perfil**
+    (`/dashboard/tecnico#mi-perfil` — se agregó `id="mi-perfil"` a esa sección de la página para
+    que el link haga scroll directo ahí) → **Ver público** (`/tecnicos/{id}`, cómo lo ve un
+    cliente — nuevo, requiere una consulta extra a `tecnicos.id` que no se hacía antes).
+- Se agregó a `Layout.astro` (global, una sola vez, no hubo que tocar cada página) — con
+  `pb-16 md:pb-0` en el `<body>` para que el contenido no quede tapado detrás de la barra fija en
+  mobile.
+- **Home mobile:** se agregó, solo en mobile (`md:hidden`), un buscador estilo app nativa (según
+  la referencia de Agustín) — un botón con forma de input que abre el mismo Command Palette
+  (Ctrl+K) que ya usa el buscador de escritorio del navbar, sin duplicar lógica de búsqueda — y un
+  botón grande "Solicitar servicio ahora". El resto del home (las 3 tarjetas "Seguridad
+  garantizada/Respuesta rápida/Calidad evaluada", que ya coincidían con la referencia, la grilla de
+  categorías, banners) **no se tocó** — ya funcionaba bien y ya era responsive.
+- **Decisión de alcance:** no se cambió el color del navbar global a verde (como se ve en la
+  referencia de Agustín) porque el navbar blanco ya es consistente en todo el sitio, desktop y
+  mobile — cambiarlo solo en mobile hubiera roto esa consistencia sin que se pidiera
+  explícitamente. Si Jota quiere ese look, es un cambio chico y separado para la próxima.
+
+**Falta probar:**
+- [ ] Ver el home en mobile → debe aparecer el buscador (abre el Command Palette al tocarlo) y el
+      botón "Solicitar servicio ahora".
+- [ ] Confirmar que la barra inferior aparece en todas las páginas en mobile (probar en el home, en
+      `/tecnicos`, en el dashboard) y que el contenido no queda tapado atrás.
+- [ ] Como admin, confirmar que la barra inferior NO aparece.
+- [ ] Sin sesión y como cliente: tocar Inicio/Técnicos/Solicitar/Mis pedidos → confirmar destino
+      correcto (sin sesión, Solicitar y Mis pedidos deben mandar a `/login` con redirect).
+- [ ] Como técnico: tocar Inicio/Mis trabajos/Mi perfil (debe hacer scroll directo a esa sección)/
+      Ver público (debe llevar a `/tecnicos/{id}`, el perfil público real).
+- [ ] Confirmar visualmente que el ítem activo se resalta en verde según la página actual.
+
+**Archivos:** `src/components/BottomNavMobile.tsx` (nuevo), `src/layouts/Layout.astro`,
+`src/pages/index.astro`, `src/pages/dashboard/tecnico.astro` (ancla `#mi-perfil`).
+
+**Ajuste post-feedback de Jota — navbar mobile a verde Taita:** el navbar superior en mobile
+(`Navbar.tsx`) pasó de fondo blanco a `bg-primary` (verde Taita), con texto e íconos en blanco —
+para acercarse más a la referencia de Agustín. **Solo mobile** (`md:bg-white` lo vuelve blanco en
+desktop, sin tocar el navbar de escritorio, que sigue igual). Detalles:
+- El logo dejó de usar `mix-blend-multiply` en la versión mobile — ese modo de mezcla está pensado
+  para fondo blanco (el desktop lo sigue usando tal cual); sobre verde se hubiera visto manchado.
+- `NotificacionesBell.tsx` ganó un prop nuevo `iconClassName` (default `text-primary`, como
+  siempre) para poder pasarle `text-white` solo en la instancia mobile — la campanita se comparte
+  entre el navbar de escritorio (fondo blanco, ícono verde) y el de mobile (fondo verde, ícono
+  blanco), así que no podía quedar con un color fijo.
+- El panel desplegable del menú hamburguesa (☰) se dejó **blanco a propósito** (no verde) —
+  agregando un `bg-white` explícito, porque antes heredaba el fondo del `<nav>` padre y sin eso
+  hubiera quedado verde sobre verde, poco legible.
+
+**Archivos:** `src/components/Navbar.tsx`, `src/components/NotificacionesBell.tsx`.
+
+**2 ajustes más post-feedback de Jota, mismo hilo:**
+- **`BottomNavMobile.tsx` también pasó a fondo verde** (antes blanco, quedaba desentonado con el
+  navbar de arriba ya verde) — texto/íconos en blanco, el ítem activo se resalta con un fondo
+  `bg-white/15` circular detrás del ícono en vez de cambiar de color (ya que todo el texto es
+  blanco ahora, no hay otro color para diferenciarlo salvo opacidad — el ítem activo queda a
+  blanco pleno y los demás a `white/55`).
+- **El menú ☰ desplegable se rediseñó** — antes quedaba pegado al navbar, del mismo blanco que el
+  fondo de la página, poco vistoso. Ahora es una tarjeta flotante separada (`shadow-2xl`,
+  `rounded-2xl`, con margen respecto al navbar) y cada link tiene un ícono dentro de una cajita
+  `bg-primary-soft` a la izquierda (mismo lenguaje visual que ya usan las tarjetas "por qué
+  usarnos" del home) en vez de ser solo texto plano.
+
+### Fase 6c — Navbar de escritorio a verde + avatar circular + home de escritorio
+
+**✅ Implementado. Falta probar (no se pudo probar visualmente en este entorno).**
+
+**Navbar de escritorio:**
+- Mismo tratamiento verde que ya tenía el navbar mobile, ahora también en escritorio — texto,
+  links y campanita en blanco, botón de usuario como píldora translúcida (`bg-white/10`), círculo
+  de iniciales invertido (`bg-white text-primary`) para que contraste. "Ingresar" pasó a píldora
+  translúcida blanca y "Registrate" a **ámbar** (mismo acento que el botón "Enviar solicitud" del
+  wizard) para que el CTA principal resalte sobre el verde.
+- **Bug propio encontrado y corregido en el momento:** al escribir los estilos nuevos me olvidé de
+  sacar el `md:bg-white` que había dejado en la ronda anterior (cuando el verde era mobile-only) —
+  el `<nav>` seguía blanco en escritorio con texto blanco encima, invisible. Se sacó esa clase
+  antes de que llegara a probarse.
+- **Ojo:** el navbar es un componente único y compartido — pintarlo verde en escritorio lo pinta
+  verde en **todas** las páginas, incluido el panel del admin (que se había dejado "de oficina").
+  No se hizo una excepción para admin porque no se pidió así — avisar si se prefiere que el admin
+  mantenga el navbar blanco.
+- **Avatar circular:** en vez del logo cuadrado suelto, ahora es un círculo blanco (`rounded-full
+  overflow-hidden bg-white`) con la mascota recortada adentro (`object-cover`, sin
+  `mix-blend-multiply` — ese modo de mezcla asume fondo blanco detrás y sobre un color tiñe los
+  colores propios de la mascota, mismo criterio ya aplicado al navbar mobile la ronda anterior).
+  Aplicado tanto en escritorio como en mobile, para que quede consistente entre los dos.
+
+**Home de escritorio — propuesta implementada:**
+- Tarjeta de confianza flotante junto a la mascota del hero, **con números reales** (no
+  inventados): cantidad de técnicos activos y de servicios realizados, ambos con una consulta en
+  vivo a Supabase. Mismo estilo "metálico" con brillo al hover que ya tiene la tarjeta de
+  estimación del wizard (Fase 6a) — reusa el mismo patrón CSS, le da continuidad visual al
+  rediseño. Solo visible en desktop (`hidden md:block`).
+- Las tarjetas de "¿Por qué usar Taita Soluciones?" y las de categorías ganaron elevación + sombra
+  al hover (antes eran estáticas).
+- El footer se dejó exactamente igual, a pedido explícito.
+
+**Falta probar:**
+- [ ] Ver el navbar de escritorio → confirmar que se lee bien (texto blanco sobre verde, no blanco
+      sobre blanco).
+- [ ] Confirmar que el avatar se ve como círculo bien recortado, no cuadrado, tanto en escritorio
+      como en mobile.
+- [ ] Ver el home de escritorio → la tarjeta de confianza debe aparecer junto a la mascota con
+      números reales (no "0 y 0" salvo que la base esté realmente vacía) y el efecto de brillo al
+      pasar el mouse.
+- [ ] Hover sobre las tarjetas de "por qué usarnos" y de categorías → deben elevarse con sombra.
+- [ ] Confirmar si el navbar verde en el panel del admin es aceptable o si hay que hacer una
+      excepción para ese rol (pendiente de definir).
+
+**Archivos:** `src/components/Navbar.tsx`, `src/pages/index.astro`.
+
+**Ajuste post-feedback de Jota — tarjeta "metálica" reutilizable:** a Jota le gustó mucho el estilo
+de la tarjeta de confianza del hero y pidió aplicarlo también a las 3 tarjetas de "¿Por qué usar
+Taita Soluciones?" y a donde más tuviera sentido. Antes de sumar más copias del mismo bloque largo
+de clases, se centralizó en `src/styles/global.css` como dos clases reusables:
+`.card-metallic` (el degradé + sombra + elevación al hover) y `.card-metallic-shine` (el overlay
+que barre la tarjeta). Se refactorizaron las 2 tarjetas que ya la usaban (estimación del wizard,
+confianza del hero) para consumir la clase compartida en vez de repetir el bloque, y se sumó a:
+- Las 3 tarjetas de "¿Por qué usar Taita Soluciones?" (antes claras, ahora oscuras con el mismo
+  degradé).
+- El banner "¿Sos taita y querés ofrecer tus servicios?" (antes verde clarito `bg-primary-soft`,
+  ahora la tarjeta metálica) — su botón pasó a ámbar para que siga resaltando sobre el fondo oscuro.
+- **A propósito NO se aplicó** a la grilla de categorías (9 tarjetas) — quedan claras para no
+  sobrecargar de oscuro una grilla con tantos elementos y mantener buena legibilidad/escaneo
+  rápido, ni a la sección de CTA final (ya es su propio bloque `bg-primary` de ancho completo,
+  hubiera quedado un verde oscuro sobre otro verde).
+- **Bug encontrado al armar la clase compartida:** `@apply group` no compila en Tailwind v4
+  (`group` es solo un marcador para `group-hover:`, no una utilidad con propiedades reales) — se
+  sacó del `@apply` y se dejó como una nota en el comentario de la clase para agregar `group` a
+  mano en cada lugar donde se usa `.card-metallic`. Se corrigió antes de que llegara a romper el
+  build.
+
+**Archivos (este ajuste):** `src/styles/global.css` (nuevo), `src/components/FormSolicitud.tsx`,
+`src/pages/index.astro`.
+
+### Fase 6d — Formulario de registro (técnico como wizard de 4 pasos)
+
+**✅ Implementado. Falta probar (no se pudo probar visualmente en este entorno — se verificó que
+compila y que la ruta `/registro` no rompe en el servidor).**
+
+**Contexto — qué pidió Jota exactamente:** no un rediseño de "los formularios" en general, sino
+puntualmente el de **registro** (cliente y técnico) y, de última, cualquier pantalla de
+cliente/técnico que hoy necesite mucho scroll. El único que realmente calificaba era el de
+**registro de técnico** — es el formulario más largo de toda la app (datos de cuenta + perfil
+público + especialidades con subcategorías dinámicas + cobro + términos, todo en una sola pantalla
+larga). El de cliente es corto (6 campos), así que no se tocó su estructura, solo el layout que lo
+envuelve.
+
+**Cómo quedó:**
+- **Nuevo componente compartido `src/components/WizardStepper.tsx`** (`StepperSidebar` +
+  `StepperMobileBar`) — se extrajo del wizard de "Solicitar servicio" (Fase 6a), que tenía esa
+  misma UI de progreso escrita inline. `FormSolicitud.tsx` se refactorizó para consumir este
+  componente compartido en vez de tener su propia copia — mismo comportamiento, menos código
+  repetido. Ahora que hay 2 wizards en la app (solicitud + registro técnico), vale la pena tenerlo
+  centralizado para el día que haya un tercero.
+- **`TecnicoForm` (dentro de `RegistroForm.tsx`) reescrito como wizard de 4 pasos:** 1) Cuenta
+  (nombre, apellido, email, teléfono, contraseña) → 2) Tu perfil (nombre público, nick, años de
+  experiencia, zona, descripción) → 3) Especialidades (checkboxes + subcategorías, tal cual
+  funcionaba antes, sin tocar esa lógica) → 4) Confirmar (CVU, términos, aviso de verificación de
+  identidad, botón final). Mismo criterio de seguridad que en el wizard de solicitud: **ningún
+  botón es `type="submit"`**, el `<form>` bloquea el envío nativo siempre, y el envío real solo
+  pasa con el click explícito en el botón del último paso — se aplicó desde el arranque para no
+  repetir el bug que encontramos en la Fase 6a.
+- **`ClienteForm` no se convirtió en wizard** (es corto, no lo necesita) — se dejó su lógica y
+  campos intactos, solo se ajustó el contenedor que lo envuelve.
+- **`RegistroForm` (el componente raíz que elige entre cliente/técnico) ajustado:** cuando el tab
+  es "cliente", todo queda centrado y angosto (`max-w-md`, como antes); cuando es "técnico", usa
+  todo el ancho disponible para que entre el sidebar de pasos — el ancho cambia solo, sin que haga
+  falta recargar la página.
+- `src/pages/registro.astro` ensanchado (`max-w-5xl`, antes `max-w-lg`) para que el wizard de
+  técnico tenga lugar — el formulario de cliente se sigue viendo angosto y centrado igual que
+  antes, porque `RegistroForm.tsx` ya lo autolimita internamente.
+
+**Bug real encontrado por Jota al probar (no visual) — el alta de técnico no avisaba a nadie:**
+al registrarse un técnico nuevo, `api/registro-tecnico.ts` ya creaba la fila en `tecnicos` con
+`activo: false` (pendiente de aprobación) pero **nunca notificaba a nadie** — ni al propio técnico
+(que no tenía forma de saber que su alta salió bien y que debía esperar aprobación, más allá del
+aviso pasivo dentro de su panel) ni al admin (que solo se enteraba si entraba al panel y miraba la
+sección "Técnicos pendientes de aprobación"). No estaba relacionado con el rediseño visual, ya
+existía desde antes — recién se notó ahora al volver a probar el flujo completo.
+
+Se agregó `notificarNuevoTecnico()` en `src/lib/notificaciones.ts` (mismo patrón que el resto de
+las notificaciones de la app — email + notificación in-app), llamada al final de
+`api/registro-tecnico.ts` como "mejor esfuerzo" (si falla el aviso, el alta del técnico igual queda
+hecha, no se le devuelve error al usuario por esto):
+- **Al admin:** email + notificación in-app avisando que hay un técnico nuevo esperando aprobación.
+- **Al técnico:** email + notificación in-app confirmando que se recibió el registro y que está
+  pendiente de aprobación.
+
+**Falta probar (este ajuste):**
+- [ ] Registrar un técnico nuevo → confirmar que llega el email al admin (`taitasoluciones@gmail.com`)
+      y que aparece la notificación in-app (campanita) la próxima vez que el admin entre al panel.
+- [ ] Confirmar que el técnico recién registrado recibe su propio email de "Recibimos tu registro"
+      y ve la notificación en su campanita al entrar a su panel.
+
+**Segundo ajuste post-feedback de Jota — dos huecos más en el mismo flujo:**
+
+1. **Faltaba avisarle al técnico cuando el admin lo aprueba.** El botón "Aprobar" del admin
+   (`dashboard/admin.astro`, acción `aprobar`) solo hacía `update({ activo: true })` sobre
+   `tecnicos` — no llamaba a ninguna notificación, así que el técnico no tenía forma de enterarse
+   de que ya podía recibir trabajos más que volviendo a entrar a su panel y notando que el aviso de
+   "pendiente" ya no estaba. Se agregó `notificarTecnicoAprobado()` en `notificaciones.ts` (email +
+   notificación in-app: "¡Tu cuenta fue aprobada!") y se llamó justo después del `update`, como
+   "mejor esfuerzo" (try/catch — si falla el aviso, la aprobación en sí ya quedó hecha).
+
+2. **Los emails al admin podían fallar en silencio.** El SDK de Resend (usado en `email.ts`) NO
+   lanza una excepción cuando la API rechaza un envío (dominio no verificado, destinatario
+   inválido, rate limit, etc.) — devuelve `{ data: null, error: {...} }` sin tirar error. Como
+   `enviarEmail()` solo tenía un `try/catch` (para errores de red) y nunca miraba ese campo
+   `error` de la respuesta, un envío rechazado por la API quedaba completamente invisible: no
+   llegaba el mail y tampoco quedaba ningún log para diagnosticarlo. Se agregó el chequeo de
+   `error` con un `console.error` — esto no garantiza por sí solo que el mail al admin llegue
+   (si la causa era, por ejemplo, algún límite de la cuenta de Resend, eso sigue sin resolverse a
+   nivel de código), pero de ahora en más cualquier rechazo va a quedar registrado en los logs de
+   Vercel en vez de desaparecer sin dejar rastro.
+
+**Falta probar (este segundo ajuste):**
+- [x] Aprobar un técnico pendiente desde el panel de admin → confirmar que le llega el email
+      "¡Tu cuenta de técnico fue aprobada!" y la notificación in-app correspondiente. **Confirmado
+      por Jota: la notificación in-app ya aparece en la cuenta del técnico aprobado.**
+- [x] Revisar en Resend si los emails de este flujo (`Nuevo técnico registrado: ...`) llegan al
+      admin. **Confirmado por Jota viendo el dashboard de Resend: llegan "Delivered" — el aviso
+      original de "no llega el correo" era un falso alarma, no un bug real.** El chequeo de `error`
+      agregado en `email.ts` se deja igual, como red de seguridad para futuros rechazos silenciosos.
+
+**Falta probar (resto de la fase):**
+- [ ] Registro de cliente → confirmar que se ve igual de bien que antes (angosto, centrado) y que
+      sigue funcionando el flujo completo de alta.
+- [ ] Registro de técnico → recorrer los 4 pasos, confirmar que "Continuar" valida bien cada paso,
+      que las especialidades/subcategorías siguen funcionando igual que antes, y que el alta
+      completa (incluye la llamada a `/api/registro-tecnico`) sigue funcionando de punta a punta.
+- [ ] Confirmar que Enter en cualquier campo del wizard de técnico NO dispara un envío prematuro
+      (mismo bug que ya cazamos una vez en el wizard de solicitud, corregido preventivamente acá).
+- [ ] Ver en mobile → sidebar reemplazado por la barra compacta "Paso X de 4".
+- [ ] Confirmar que `/solicitud` (el otro wizard, que ahora comparte el componente `WizardStepper`)
+      sigue funcionando exactamente igual que antes de la refactorización — riesgo bajo (extracción
+      mecánica) pero vale la pena confirmarlo.
+
+**Archivos:** `src/components/WizardStepper.tsx` (nuevo), `src/components/RegistroForm.tsx`,
+`src/components/FormSolicitud.tsx` (refactor para usar el stepper compartido),
+`src/pages/registro.astro`.
+
+### Fase 6 — cierre (resto de las pantallas)
+
+**✅ Implementado y confirmado por Jota (2026-08-07).** Se completó todo lo que había quedado
+pendiente al cerrar Fase 6d:
+
+- **Cards de técnico en el wizard** (paso "¿Quién puede tocarte?" de `FormSolicitud.tsx`) — pasaron
+  a ser cards metalizadas verdes (mismo estilo que el resto de la app), con botón "Ver perfil" en
+  ámbar para contraste.
+- **`/tecnicos`** (listado general) — header en banda verde, buscador+filtros en card blanca
+  flotante, cards de técnico rediseñadas (avatar con anillo, badge de disponibilidad con punto de
+  estado, rating con íconos SVG en vez de emojis, botón "Ver perfil" full-width). Archivos:
+  `src/pages/tecnicos/index.astro`, `src/components/FiltroTecnicos.tsx`.
+- **Listados de solicitudes** (`MisSolicitudes.tsx` cliente, `SolicitudesTecnico.tsx` técnico) —
+  cada solicitud es su propia card (`rounded-3xl`, sombra, `border-l-8` de acento + fondo con tinte
+  suave del color del estado — nunca color sólido, para no perder legibilidad), `#numero` como chip
+  + título grande en serif, badge de estado más grande, botones de acción agrupados al pie con
+  tamaño más grande (`text-sm`, `flex-1` en mobile para ocupar todo el ancho). Mismo tratamiento de
+  tamaño de texto/botones aplicado a los componentes de acción compartidos (`CancelarSolicitud`,
+  `ResenaForm`, `ResponderAsignacion`, `CompletarTrabajo`, `CerrarServicio`), que también se usan
+  en las pantallas de detalle.
+- **Admin — banner de técnicos pendientes** (`dashboard/admin.astro`) — acento ámbar en el header
+  con ícono y contador ("N por revisar"), cada técnico pendiente es su propia card con acento
+  ámbar, botones Aprobar/Rechazar full-width y más prominentes. Resto del dashboard admin (stats,
+  accesos rápidos, tabla de solicitudes recientes) revisado y dejado igual — ya estaba alineado con
+  la paleta del resto del sitio; la tabla es intencionalmente una tabla de gestión, no cards.
+- **Pantallas de detalle de solicitud** (cliente y técnico) — header convertido a card metalizada
+  verde (número + título + badge de estado), "Desglose financiero"/"Tu ganancia" también
+  metalizados, con el total en ámbar.
+- **Stats de los dashboards** (`dashboard/cliente.astro`, `dashboard/tecnico.astro`) — las cards de
+  estadísticas (pendientes, en curso, completadas, finalizadas, ganancias) pasaron a ser cards
+  metalizadas verdes, con cada número en un color claro que contrasta contra el fondo oscuro (ámbar,
+  celeste, blanco, verde claro, violeta claro).
+- **Insignia de Mercado Pago** — como no hay forma segura de descargar el logo oficial de la marca
+  (se evitó hotlinkear una URL externa inventada), se armó una insignia propia liviana (ícono de
+  tarjeta + texto "Mercado Pago", colores de marca) en `src/components/MercadoPagoBadge.tsx` /
+  `.astro`. Se agregó en el botón "Pagar" del cliente, en el aviso "Pago acreditado", en el detalle
+  y listado del técnico, y en la tabla/detalle de solicitud del admin. Si se consigue el asset
+  oficial más adelante, reemplazar ahí nomás.
+- **Ajuste de navegación** — el link "Ver perfil" de las cards de técnico en el wizard ya no abre
+  pestaña nueva (navega en la misma pestaña); en `/tecnicos/[id].astro`, el link "Volver" ahora es
+  dinámico: si `document.referrer` es del mismo origen, usa `history.back()` (vuelve exactamente a
+  donde estaba el usuario, ej. al paso 2 del wizard con su progreso intacto vía `bfcache` del
+  navegador) en vez de siempre ir a `/tecnicos`.
+
+**Archivos:** `src/components/FormSolicitud.tsx`, `src/pages/tecnicos/index.astro`,
+`src/components/FiltroTecnicos.tsx`, `src/components/MisSolicitudes.tsx`,
+`src/components/SolicitudesTecnico.tsx`, `src/components/{CancelarSolicitud,ResenaForm,
+ResponderAsignacion,CompletarTrabajo,CerrarServicio}.tsx`, `src/pages/dashboard/admin.astro`,
+`src/pages/dashboard/{cliente,tecnico}.astro`, `src/pages/dashboard/{cliente,tecnico,admin}/
+solicitud/[id].astro`, `src/components/MercadoPagoBadge.{tsx,astro}` (nuevos),
+`src/pages/tecnicos/[id].astro`.
+
+---
+
+## Mejoras finales — Fase 7 — sesión 2026-08-07 en adelante
+
+### Fase 7a — Subitems con precio en el wizard
+
+**✅ Implementado, falta correr el SQL en Supabase y probar.**
+
+La tabla `categoria_subitems` (sub-ítems de una categoría, cada uno con su propio precio y % de
+tasa) y su UI de administración (`GestionCategorias.tsx`) ya existían de antes, pero nunca se
+usaban del lado del cliente — el wizard de "Solicitar servicio" solo dejaba elegir la categoría
+"madre". Ahora, en el Paso 1 "Servicio", si la categoría elegida tiene sub-ítems activos, aparecen
+como botones seleccionables con precio debajo del grid de categorías ("¿Cuál de estos es tu
+caso?"). Elegir uno pisa el precio/tasa de la categoría por el del sub-ítem específico en toda la
+solicitud (estimación del Paso 6, payload que se envía al crear). No elegir ninguno (o categoría
+sin sub-ítems) deja el comportamiento de siempre.
+
+**SQL pendiente de correr en Supabase:**
+```sql
+ALTER TABLE solicitudes ADD COLUMN categoria_subitem_id uuid REFERENCES categoria_subitems(id);
+```
+
+**Archivos:**
+- `src/pages/solicitud.astro` — consulta `categoria_subitems` (activos) y los pasa al wizard.
+- `src/components/FormSolicitud.tsx` — UI de selección en el Paso 1, estado `subitemId` (se
+  resetea al cambiar de categoría), cálculo de precio/tasa/total prioriza el sub-ítem elegido,
+  resumen del Paso 6 muestra el sub-ítem si hay uno, payload incluye `categoriaSubitemId`.
+- `src/pages/api/crear-solicitud.ts` — acepta `categoriaSubitemId` opcional, lo guarda en
+  `solicitudes.categoria_subitem_id`.
+- `src/pages/dashboard/admin/solicitud/[id].astro` — muestra el sub-ítem elegido (si lo hay) en
+  "Detalles del trabajo".
+
+**Falta probar:**
+- [ ] Correr el `ALTER TABLE` de arriba en el SQL Editor de Supabase (si no se corre, el insert de
+      `crear-solicitud.ts` va a fallar en cuanto se elija un sub-ítem, porque la columna no existe).
+- [ ] Crear una solicitud eligiendo una categoría con sub-ítems cargados, elegir uno con precio →
+      confirmar que el Paso 6 muestra el precio de ESE sub-ítem (no el de la categoría) y que la
+      solicitud creada tiene `precio_base`/`tasa_aplicada`/`categoria_subitem_id` correctos.
+    - Nota: para probar esto hace falta que el admin haya cargado al menos un sub-ítem con precio
+      en `/dashboard/admin/categorias` (expandir una categoría con la flechita ▸).
+- [ ] Crear una solicitud con una categoría SIN sub-ítems (o sin elegir ninguno) → confirmar que
+      sigue funcionando exactamente igual que antes.
+- [ ] Ver el detalle de la solicitud como admin → confirmar que aparece "Detalle del servicio: X"
+      cuando se eligió un sub-ítem.
+
+### Fase 7b — Canal de "Solicitar cotización" con chat cliente↔admin
+
+**✅ Implementado, falta correr el SQL en Supabase, crear el bucket de Storage, y probar de punta a
+punta.** Es la fase más grande del plan — resumen del flujo completo:
+
+```
+Cliente tilda "Solicitar cotización" (Paso 1 del wizard) → describe el problema + sube fotos
+(Paso 3) → se crea la solicitud en estado `en_cotizacion`, sin precio, con el primer mensaje del
+chat ya cargado (la descripción + fotos)
+        │
+        ▼
+Admin la ve en la cola "Cotizaciones pendientes" del panel → entra al detalle → chatea con el
+cliente (`ChatCotizacion`) → cuando tiene un precio, lo envía con `EnviarCotizacion` (precio + %
+tasa) → la solicitud SIGUE en `en_cotizacion`, pero ahora con precio cargado
+        │
+        ▼
+Cliente ve el precio en su panel (card "Desglose financiero", que ya soportaba precio null desde
+antes) y responde con `ResponderCotizacion`:
+        ├── Acepta → estado pasa a `pendiente` → sigue el flujo normal (admin asigna técnico)
+        └── Rechaza → estado pasa a `cancelada`
+```
+
+**Notificaciones (email + in-app), en cada paso — punto por punto, tal como se pidió:**
+- Solicitud de cotización creada → `notificarNuevaSolicitud` (ya existía, sin cambios) avisa al
+  cliente (confirmación) y al admin (nueva solicitud a atender).
+- Cada mensaje nuevo del chat → `notificarMensajeCotizacion` avisa siempre al OTRO participante
+  (nunca a quien escribió), con preview del mensaje.
+- Admin envía el precio → `notificarCotizacionEnviada` avisa al cliente con el monto.
+- Cliente responde → **dos avisos separados, a propósito** (ver "hueco encontrado" más abajo):
+  `notificarCambioEstado` hace la transición real de estado (con su aviso genérico de siempre), y
+  además `notificarCotizacionRespuesta` le manda al admin un mensaje explícito ("El cliente aceptó
+  / rechazó la cotización") — sin esto, el rechazo (→ `cancelada`) no le llegaba nada al admin (esa
+  función genérica no tiene caso especial para admin en `cancelada`), y la aceptación solo le
+  llegaba como el mensaje genérico de "volvió a pendiente", sin decir que fue por una cotización.
+
+**SQL pendiente de correr en Supabase:**
+```sql
+-- 1. Nuevo estado en el CHECK constraint (mismo mecanismo que Fase 4/5: drop + recreate)
+ALTER TABLE solicitudes DROP CONSTRAINT solicitudes_estado_check;
+ALTER TABLE solicitudes ADD CONSTRAINT solicitudes_estado_check
+  CHECK (estado IN ('pendiente','asignada','aceptada','en_curso','completada','finalizada','cancelada','en_cotizacion'));
+
+-- 2. Columna que marca que la solicitud pasó por el canal de cotización (se mantiene en true
+-- aunque el estado ya haya avanzado a pendiente/cancelada, para conservar el chat visible como historial)
+ALTER TABLE solicitudes ADD COLUMN es_cotizacion boolean NOT NULL DEFAULT false;
+
+-- 3. Tabla del chat
+CREATE TABLE cotizacion_mensajes (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  solicitud_id  uuid NOT NULL REFERENCES solicitudes(id) ON DELETE CASCADE,
+  usuario_id    uuid NOT NULL REFERENCES usuarios(id),
+  mensaje       text NOT NULL,
+  imagenes      text[],
+  creado_en     timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE cotizacion_mensajes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "cotizacion_mensajes: cliente o admin ven" ON cotizacion_mensajes FOR SELECT
+  USING (
+    EXISTS (SELECT 1 FROM solicitudes s WHERE s.id = solicitud_id AND s.cliente_id = auth.uid())
+    OR EXISTS (SELECT 1 FROM usuarios u WHERE u.id = auth.uid() AND u.tipo = 'admin')
+  );
+-- Los INSERT los hace siempre el servidor con el service role (createSupabaseAdmin), como el resto
+-- de la app — no hace falta política de INSERT para el flujo normal.
+
+-- 4. Bucket de Storage para las fotos que sube el cliente (público, mismo criterio que 'trabajos')
+INSERT INTO storage.buckets (id, name, public) VALUES ('cotizaciones', 'cotizaciones', true) ON CONFLICT DO NOTHING;
+CREATE POLICY "cotizaciones_insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'cotizaciones');
+CREATE POLICY "cotizaciones_select" ON storage.objects FOR SELECT TO public USING (bucket_id = 'cotizaciones');
+```
+
+**Nota sobre Realtime:** la política de SELECT de `cotizacion_mensajes` tiene un `EXISTS`/JOIN, que
+por el mismo motivo documentado en `docs/guia-notificaciones-realtime-supabase.md` rompe Realtime
+en silencio. Por eso el chat NO escucha esa tabla directo — escucha `notificaciones` (política
+simple) como disparador de refetch, igual que `MisSolicitudes.tsx`/`SolicitudesTecnico.tsx`/
+`NotificacionesBell.tsx`. Cada mensaje nuevo genera una notificación normal para el otro
+participante, así que ya sirve como esa señal.
+
+**Archivos nuevos:**
+- `src/pages/api/cotizacion/mensaje.ts` (POST — mandar un mensaje), `mensajes.ts` (GET — historial),
+  `enviar.ts` (POST, solo admin — fija precio/tasa), `responder.ts` (POST, solo cliente dueño —
+  aceptar/rechazar).
+- `src/components/ChatCotizacion.tsx` (widget de chat, cliente y admin comparten el componente),
+  `EnviarCotizacion.tsx` (form del admin para el precio), `ResponderCotizacion.tsx` (aceptar/
+  rechazar del cliente, mismo patrón de modal que `ResponderAsignacion.tsx`).
+
+**Archivos modificados:**
+- `src/lib/notificaciones.ts` — `notificarMensajeCotizacion`, `notificarCotizacionEnviada`,
+  `notificarCotizacionRespuesta` (nuevas), `ESTADO_LABEL` con `en_cotizacion`.
+- `src/components/FormSolicitud.tsx` — checkbox "¿No encontrás lo que buscás? Pedí una cotización"
+  en el Paso 1 (excluyente con elegir un sub-ítem — uno implica precio conocido, el otro no);
+  Paso 3 pide descripción obligatoria (antes opcional, validado a mano en `siguiente()` porque el
+  schema Zod base la sigue teniendo opcional para el flujo normal) + carga de hasta 5 fotos (mismo
+  patrón de subida directa a Storage que `CompletarTrabajo.tsx`, bucket `cotizaciones`); Paso 6 y
+  pantalla de éxito con copy distinto para este canal.
+- `src/pages/api/crear-solicitud.ts` — acepta `esCotizacion`/`imagenesCotizacion`; si viene tildado,
+  fuerza `estado: 'en_cotizacion'`, `es_cotizacion: true`, precio/tasa/total en `null` (server-side,
+  sin confiar en lo que mande el cliente), e inserta el primer mensaje del chat con la descripción
+  + fotos ya cargadas en el wizard.
+- `src/pages/dashboard/admin.astro` — nueva sección "Cotizaciones pendientes" (mismo banner ámbar
+  que "Técnicos pendientes de aprobación"), cards linkeando al detalle, con badge "Esperando tu
+  cotización" o "Esperando respuesta del cliente" según si ya se mandó precio.
+- `src/pages/dashboard/admin/solicitud/[id].astro` — card "Cotización" (chat + form de enviar
+  precio) cuando `es_cotizacion`; la sección de asignar técnico se reemplaza por un aviso mientras
+  el estado siga en `en_cotizacion`; `en_cotizacion` agregado al `<select>` de cambiar estado como
+  opción deshabilitada (para que se muestre bien seleccionada en vez de caer a "Pendiente" por
+  default cuando ese es el estado real).
+- `src/pages/dashboard/cliente/solicitud/[id].astro` — card "Cotización" (chat) cuando
+  `es_cotizacion`; card "¿Aceptás esta cotización?" cuando hay precio esperando respuesta; el
+  timeline ahora arranca en "En cotización" en vez de "Pendiente" para estas solicitudes; se puede
+  cancelar directamente desde `en_cotizacion` (antes de recibir precio, no hace falta esperar).
+- `src/components/MisSolicitudes.tsx`, `src/components/TablaSolicitudesAdmin.tsx` — label/color de
+  `en_cotizacion` agregado a los mapas de estado (mismo patrón que cada fase que suma un estado).
+- `src/pages/dashboard/cliente.astro` — el contador "Solicitudes pendientes" ahora incluye
+  `en_cotizacion` (para el cliente, esperar un precio es tan "pendiente" como esperar un técnico).
+
+**Falta probar:**
+- [ ] Correr el SQL de arriba (constraint + columna + tabla + bucket) — sin esto nada de lo demás
+      funciona.
+- [ ] Pedir una cotización desde el wizard (categoría + descripción + 2 fotos) → confirmar que la
+      solicitud queda en `en_cotizacion`, sin precio, y que el primer mensaje del chat tiene las
+      fotos.
+- [ ] Como admin: aparece en "Cotizaciones pendientes" → entrar, mandar un mensaje → el cliente
+      recibe notificación + email y lo ve en su panel.
+- [ ] Admin envía la cotización (precio + tasa) → cliente recibe notificación + email con el monto,
+      ve la card "¿Aceptás esta cotización?".
+- [ ] Cliente acepta → pasa a `pendiente`, el admin ya puede asignar técnico con el precio cargado,
+      y le llega al admin el aviso explícito de "El cliente aceptó la cotización".
+- [ ] Cliente rechaza (en otra solicitud de prueba) → pasa a `cancelada`, y le llega al admin el
+      aviso explícito de "El cliente rechazó la cotización" (antes de este ajuste, este caso no le
+      avisaba nada al admin).
+- [ ] Cancelar una solicitud en `en_cotizacion` antes de recibir precio (desde el detalle del
+      cliente) → confirmar que funciona igual que cancelar cualquier otra solicitud.
+- [ ] Revisar en mobile — el chat, el form de enviar cotización, y las cards de la cola de admin.
+
+**Ajustes post-feedback de Jota (primera ronda de pruebas, funcionó bien de punta a punta):**
+
+1. **El chat arrastraba el scroll de toda la página.** `ChatCotizacion.tsx` usaba
+   `scrollIntoView()` sobre el último mensaje para bajar solo al final de la conversación, pero eso
+   también arrastraba el scroll de la página entera hacia el chat cada vez que se entraba al
+   detalle o llegaba un mensaje nuevo. Se rediseñó el componente para que arranque **colapsado**
+   (botón "💬 Abrir chat" con badge de mensajes no leídos, calculado comparando contra la última vez
+   que se abrió — guardado en `localStorage`, no en la base) y solo se despliegue al hacer click;
+   el scroll interno ahora usa `scrollTop` sobre el contenedor del chat en vez de `scrollIntoView`,
+   así nunca vuelve a mover la página.
+2. **La cotización enviada por el admin no aparecía sola en el panel del cliente** — había que
+   recargar a mano para ver el precio y el botón de aceptar/rechazar. Causa: la policy de SELECT de
+   `solicitudes` combina la del cliente (simple, `cliente_id = auth.uid()`) con las de técnico/admin
+   (con `EXISTS`/JOIN) sobre la misma tabla — y como está documentado en
+   `guia-notificaciones-realtime-supabase.md`, eso rompe Realtime para todos los suscriptores de esa
+   tabla, no solo para el rol con la policy problemática. Se agregó una segunda suscripción de
+   `CambiosEnVivo` sobre `notificaciones` (policy simple, sin JOIN) como disparador de respaldo, en
+   ambas pantallas de detalle (cliente y admin) — mismo patrón ya usado en el resto de la app.
+
+3. **Al aceptar/rechazar, el cliente no recibía una confirmación clara de su propia acción** — solo
+   le llegaba el aviso genérico de `notificarCambioEstado` ("Cambió de estado a Pendiente/
+   Cancelada"), sin contexto de que fue por responder la cotización. `notificarCotizacionRespuesta`
+   ahora también le manda al cliente un email + notificación explícitos ("Aceptaste la cotización" /
+   "Rechazaste la cotización"), además del aviso al admin que ya tenía.
+
+**Archivos de este ajuste:** `src/components/ChatCotizacion.tsx`,
+`src/pages/dashboard/{cliente,admin}/solicitud/[id].astro`, `src/lib/notificaciones.ts`.
+
+---
+
+## ¿Qué queda del plan de "mejoras finales"?
+
+Repaso contra los 8 puntos originales de `docs/taita-mejoras-finales.md` (2026-08-07):
+
+| # | Punto original | Estado |
+|---|---|---|
+| 1 | Subitems con precio al elegir categoría, con opción de cotización si no hay match | ✅ Fase 7a/7b |
+| 2 | Mapa (Leaflet) en el form de solicitud + detalle | ✅ Fase 3 |
+| 3 | Nueva opción "Solicitar Cotización" (chat cliente↔admin) | ✅ Fase 7b |
+| 4 | Rediseño visual del form + demás pantallas | ✅ Fase 6 |
+| 5 | Botón del técnico para dar por terminado el servicio | ✅ Fase 5 |
+| 6 | Previsualizar PDF del recibo | ✅ Fase 1 |
+| 7 | Mostrar `#numero` de solicitud en toda la web | ✅ Fase 2 |
+| 8 | Admin elige franja horaria al asignar técnico | ✅ Fase 4 |
+
+**Los 8 puntos ya están implementados en código.** Lo único que queda de este plan es lo
+operativo: correr el SQL pendiente de 7a/7b en Supabase y que Jota/Agustín prueben de punta a
+punta (checklist en las secciones de Fase 7a/7b más arriba). No hay ningún punto del plan original
+sin arrancar.
+
+**Fuera del plan de "mejoras finales" pero anotado en el doc de antes** (no bloquea nada de lo de
+arriba, son frentes aparte): cron externo para automatizar `Aceptada → En curso` en producción,
+WhatsApp, y cargar credenciales reales de Mercado Pago en Vercel — los tres son pasos operativos/
+de cuentas de terceros, no código pendiente (ver "Pendientes externos" al principio del documento).
+
+**Agregado el 2026-08-07, fuera del plan original (pedido nuevo de Jota):** búsqueda con filtros
+seleccionables (no de texto) para los listados de solicitudes de cliente/técnico/admin, con
+resultados en tiempo real — ver sección más abajo.
+
+---
+
+## Búsqueda por filtros seleccionables en los listados de solicitudes
+
+**✅ Implementado.** Pedido de Jota: en vez de una barra de texto, filtros por estado (chips,
+multi-selección) y categoría (dropdown) en los tres listados de solicitudes — cliente, técnico y
+admin —, incluyendo el estado `en_cotizacion`. Los resultados se traen del servidor (no es un
+filtro solo de la página cargada — respeta la paginación existente) y conviven con el refresco en
+tiempo real que ya tenía cada listado (vía `notificaciones`): tocar un filtro dispara su propio
+refetch desde la página 1, y cuando llega una notificación nueva el refetch "silencioso" reusa los
+filtros activos en ese momento (se guardan en un `ref`, mismo patrón que ya se usaba para la
+página actual).
+
+- **Cliente** (`MisSolicitudes.tsx`): 6 chips agrupados igual que ya se le muestran los estados
+  (ej. "Pendiente" cubre `pendiente`+`asignada`, "Completada" cubre `completada`+`finalizada`) —
+  no tiene sentido exponerle los 8 valores crudos si en el resto de la pantalla ya se los agrupa.
+- **Técnico** (`SolicitudesTecnico.tsx`): 6 chips, sin agrupar ni incluir `pendiente`/
+  `en_cotizacion` — estructuralmente un técnico nunca tiene una solicitud en esos estados (esta
+  lista ya viene filtrada por su propio `tecnico_id`, que recién existe desde `asignada`).
+- **Admin** (`TablaSolicitudesAdmin.tsx`): los 8 estados crudos, sin agrupar — es la vista de
+  gestión.
+
+**Archivos:** `src/components/FiltrosSolicitudes.tsx` (nuevo, compartido por los tres), los tres
+componentes de listado de arriba, `src/pages/api/{cliente,tecnico,admin}/solicitudes.ts` (aceptan
+`estados` (csv) y `categoriaId` como query params), y `src/pages/dashboard/{cliente,tecnico,
+admin}.astro` (pasan la lista de categorías activas como prop nueva).
+
+**Falta probar:**
+- [ ] Tocar chips de estado (incluyendo "En cotización") y el dropdown de categoría en cada uno de
+      los tres paneles → confirmar que la lista se actualiza sola, sin recargar la página.
+- [ ] Combinar estado + categoría a la vez, y "Limpiar filtros".
+- [ ] Con un filtro activo, generar un evento que dispare el refresco en tiempo real (ej. otra
+      solicitud cambiando de estado) → confirmar que el resultado sigue respetando el filtro activo
+      en vez de mostrar todo de nuevo.
+- [ ] Paginado del admin/cliente con un filtro activo — confirmar que pasar de página mantiene el
+      filtro.
 
 ---
 
