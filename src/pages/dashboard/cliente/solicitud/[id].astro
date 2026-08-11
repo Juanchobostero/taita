@@ -286,11 +286,15 @@ const fmtFechaHora = (iso: string) =>
                   {sol.franja_solicitada && ` · ${FRANJA_LABEL[sol.franja_solicitada as FranjaHoraria] ?? sol.franja_solicitada}`}
                 </p>
               </div>
-              {sol.franja_asignada && sol.estado !== 'pendiente' && (
+              {sol.franja_asignada && (
                 <div class="flex flex-col gap-1">
-                  <span class="text-gray-400 text-xs uppercase tracking-wide">Franja horaria propuesta</span>
+                  <span class="text-gray-400 text-xs uppercase tracking-wide">Horario propuesto</span>
                   <p class="text-gray-800 font-medium">
-                    🕒 {FRANJA_LABEL[sol.franja_asignada as FranjaHoraria] ?? sol.franja_asignada}
+                    🕒 {sol.fecha_solicitada
+                      ? new Date(sol.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
+                      : ''}
+                    {sol.hora_solicitada && ` ${(sol.hora_solicitada as string).slice(0, 5)}`}
+                    {' '}({FRANJA_LABEL[sol.franja_asignada as FranjaHoraria] ?? sol.franja_asignada})
                     {sol.horario_confirmado_cliente
                       ? <span class="text-primary font-semibold"> · ✅ Confirmado</span>
                       : <span class="text-amber-600 font-semibold"> · ⏳ Pendiente de tu confirmación</span>
@@ -378,15 +382,21 @@ const fmtFechaHora = (iso: string) =>
             </div>
           )}
 
-          <!-- Responder horario (Fase 8.4) — el admin ya asignó técnico + horario, esperando que
-               el cliente lo confirme o pida reprogramar. -->
-          {sol.tecnico_id && !sol.horario_confirmado_cliente && (
+          <!-- Responder horario (Fase 8.9) — el admin propone fecha/franja/hora, sin técnico
+               comprometido todavía; esperando que el cliente lo confirme o lo rechace. Ya no
+               depende de que haya técnico asignado (antes de la Fase 8.9 sí dependía). -->
+          {sol.franja_asignada && !sol.horario_confirmado_cliente && (
             <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-3">
               <h2 class="font-serif font-bold text-[#1B4D2E] text-base">¿Te sirve este horario?</h2>
               <p class="text-sm text-gray-500">
-                {sol.franja_asignada
-                  ? <>Te proponemos <strong>{FRANJA_LABEL[sol.franja_asignada as FranjaHoraria] ?? sol.franja_asignada}</strong>. Si no te sirve, lo reprogramamos.</>
-                  : 'Confirmá el horario propuesto para tu solicitud, o pedí que se reprograme.'}
+                Te proponemos{' '}
+                <strong>
+                  {sol.fecha_solicitada
+                    ? new Date(sol.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
+                    : ''}
+                  {sol.hora_solicitada && ` a las ${(sol.hora_solicitada as string).slice(0, 5)}`}
+                  {' '}({FRANJA_LABEL[sol.franja_asignada as FranjaHoraria] ?? sol.franja_asignada})
+                </strong>. Si no te sirve, avisanos y te proponemos otro horario.
               </p>
               <ResponderHorario client:load solicitudId={sol.id} titulo={sol.titulo} />
             </div>

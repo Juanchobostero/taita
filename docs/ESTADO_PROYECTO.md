@@ -3,7 +3,14 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-08-10 — **Fase 8 implementada de punta a punta**: verificación de
+**Última actualización:** 2026-08-11 — dos frentes: (1) fix del redirect de confirmación de email
+en producción (`detectSessionInUrl` desactivado + entrada exacta de `/login` en Redirect URLs de
+Supabase, ver detalle en el hilo de soporte de esa sesión) y (2) **análisis y plan** (sin
+implementar todavía) para desacoplar la negociación de horario de la asignación de técnico — ver
+sección "Negociación de horario desacoplada de la asignación de técnico" más abajo, con preguntas
+abiertas a confirmar antes de escribir código.
+
+**Actualización anterior:** 2026-08-10 — **Fase 8 implementada de punta a punta**: verificación de
 email restrictiva del cliente (Supabase Auth + chequeo de MX, técnico queda con validación de
 formato en vivo nomás), franja horaria negociada con confirmación del cliente y reprogramación si
 la rechaza, sub-ítems de categoría con descripción y UI rediseñada, categorías del técnico visibles
@@ -2450,6 +2457,238 @@ solo el admin.
       asignada.
 - [ ] Abrir la campanita de notificaciones en un celular angosto → confirmar que el texto se lee
       completo y el dropdown no queda cortado.
+
+---
+
+## Fix: redirect de confirmación de email en producción llevaba a home, no a `/login` — sesión 2026-08-11
+
+**Síntoma:** al confirmar el email en producción, el link llevaba a `taitasoluciones.com.ar/` (a
+veces con el usuario ya logueado sin pasar por ningún banner, a veces con un `?code=...` colgando
+en la home) en vez de a `/login` con el cartel "✓ Tu correo fue confirmado".
+
+**Dos causas independientes, encontradas y arregladas ambas:**
+
+1. **Auto-login no deseado.** `src/lib/supabase.ts` creaba el cliente browser sin
+   `detectSessionInUrl: false` — por default el SDK de Supabase detecta cualquier `?code=` en la
+   URL (en cualquier página, porque el cliente es un singleton que carga el Navbar en todo el
+   sitio) y lo canjea por una sesión solo, sin pasar por el paso explícito de login que ya estaba
+   diseñado a propósito (ver comentario en `login.astro`). Arreglado agregando
+   `{ auth: { detectSessionInUrl: false } }` — la app no usa magic link/OAuth en ningún lado, solo
+   `signInWithPassword`, así que no hacía falta esa detección automática.
+2. **El `redirect_to` no matcheaba el allow-list de Supabase.** Aunque `RegistroForm.tsx` ya pedía
+   dinámicamente `emailRedirectTo: \`${origin}/login\`` y `https://taitasoluciones.com.ar/**`
+   estaba cargado en Redirect URLs, Supabase seguía cayendo al Site URL a secas (sin `/login`) —
+   comportamiento no resuelto del todo (posible bug/particularidad del matching de wildcards de
+   Supabase, no se llegó a diagnosticar la causa exacta). **Fix pragmático aplicado:**
+   - Se agregó `https://taitasoluciones.com.ar/login` como entrada **exacta** (no wildcard) en
+     Redirect URLs, además del wildcard ya existente.
+   - Se cambió el **Site URL** de `https://taitasoluciones.com.ar` a
+     `https://taitasoluciones.com.ar/login` — así, si el matching contra el allow-list volviera a
+     fallar por lo que sea, el *fallback* (Site URL) ya es el destino correcto, en vez de la home.
+     Sin downside hoy: ningún otro flujo (magic link, recuperar contraseña, OAuth) depende de que
+     el Site URL sea la home pelada.
+
+**A tener en cuenta a futuro:** si se agrega otro flujo con redirect propio (ej. recuperar
+contraseña a `/reset-password`), puede hacer falta repetir el mismo patrón (entrada exacta en
+Redirect URLs) en vez de confiar solo en el wildcard, dado que no se pudo confirmar por qué el
+wildcard no estaba matcheando.
+
+**Probado y confirmado por Jota en producción, 2026-08-11.**
+
+---
+
+## Negociación de horario desacoplada de la asignación de técnico — diseño confirmado (sesión 2026-08-11)
+
+**Pedido de Jota (2026-08-11):** hoy, "asignar técnico" y "proponer horario" son una sola acción
+del admin (ver Fase 8.4 más arriba) — el cliente solo puede aceptar/rechazar el horario **después**
+de que ya hay un técnico comprometido, y si rechaza, la solicitud vuelve a `pendiente` en blanco
+(se pierde su preferencia, el admin tiene que reproponer a ciegas). El pedido es separar esto en
+dos pasos: primero negociar el horario (admin propone fecha+franja+hora concretas, ya coordinadas
+con un técnico por fuera de la app, y el cliente acepta o rechaza) hasta que haya acuerdo — recién
+ahí se habilita asignar técnico. Todo con notificaciones en tiempo real a ambos lados, como ya
+funciona para el resto de la app.
+
+**Respuestas de Jota a las preguntas abiertas (confirmado, ya no son preguntas):**
+1. El admin ajusta **fecha + rango horario (franja) + hora puntual** al proponer — no solo franja
+   como en el análisis inicial, porque en este paso ya habló con un técnico real y sabe su
+   disponibilidad exacta.
+2. "Asignar técnico" queda **desactivado sin excepción** hasta que `horario_confirmado_cliente = true`
+   — no se deja ningún atajo para saltear la negociación.
+3. Sin límite de rondas de ida y vuelta — queda abierto a propósito.
+
+**Dato nuevo que cambia el diseño:** al rechazar, ese horario puntual (fecha+hora) tiene que quedar
+**inhabilitado** para que el admin no lo vuelva a proponer por error — hace falta un historial de
+horarios rechazados por solicitud, algo que no existía en el análisis inicial. Sí hace falta una
+tabla nueva (chica, aditiva) para esto — a diferencia de lo que decía la primera versión de este
+plan.
+
+**Contexto importante antes de tocar nada:** la Fase 8.4 (línea ~2360 de este documento) fue
+**deliberadamente simplificada** a la versión actual — la alternativa "más compleja" que se
+consideró en su momento fue descartada a propósito para no arriesgar el flujo ya probado de
+`ResponderAsignacion.tsx` (confirmación del técnico). El plan de abajo respeta ese mismo principio:
+**no toca nada de la confirmación del técnico** — solo interviene en lo que pasa *antes* de que
+haya un técnico asignado.
+
+### Estado actual (verificado en código, no de memoria)
+
+- El admin tiene un único formulario en `dashboard/admin/solicitud/[id].astro` con selector de
+  técnico + selector de franja + botón "Asignar técnico", que en una sola escritura setea
+  `tecnico_id`, `franja_asignada`, y resetea `horario_confirmado_cliente = false`.
+- El cliente solo ve el bloque "¿Te sirve este horario?" (`ResponderHorario.tsx`) cuando
+  `sol.tecnico_id` ya existe (`dashboard/cliente/solicitud/[id].astro:383`) — es decir, el gate
+  está atado al técnico, no al horario en sí.
+- `api/cliente/responder-horario.ts` **exige** `sol.tecnico_id` para aceptar procesar una
+  respuesta (línea 31) — hoy no puede funcionar sin técnico asignado.
+- Al rechazar, se desasigna el técnico por completo (`tecnico_id = null`, `franja_asignada = null`)
+  y la solicitud vuelve a `pendiente` sin ninguna preferencia nueva del cliente — el admin repropone
+  a ciegas.
+- Columnas que **ya existen** y alcanzan sin tocar nada: `franja_asignada`, `fecha_solicitada`,
+  `hora_solicitada`, `horario_confirmado_cliente`, `tecnico_id` (nullable). Sí hace falta **una
+  tabla nueva** para el historial de horarios rechazados (ver SQL más abajo) — no existía nada
+  parecido antes de este pedido.
+- Notificaciones que **ya existen** y se pueden reusar/extender: `notificarHorarioPropuesto`,
+  `notificarHorarioRespuesta` (`src/lib/notificaciones.ts`). El tiempo real ya está resuelto de
+  fondo — todas las pantallas (cliente/técnico/admin) se refrescan solas al insertarse una fila en
+  `notificaciones`, patrón ya probado en toda la app; no hace falta plomería nueva.
+
+### Diseño propuesto
+
+**Sin estado nuevo en `solicitudes.estado`.** Se sigue usando `'pendiente'` durante toda la
+negociación (todavía no hay técnico comprometido) — el sub-estado de la negociación queda
+representado por las columnas que ya existen:
+
+```
+franja_asignada = null                    → nadie propuso nada todavía (o se rechazó la última propuesta)
+franja_asignada = 'tarde', horario_confirmado_cliente = false → admin propuso fecha+hora+franja, esperando al cliente
+franja_asignada = 'tarde', horario_confirmado_cliente = true  → acordado, listo para asignar técnico
+```
+
+`fecha_solicitada`/`hora_solicitada` pasan a representar **la propuesta concreta del admin**
+(fecha + hora puntual) en vez del valor representativo que calculaba el sistema hasta ahora — el
+admin las escribe directo al proponer.
+
+**Flujo:**
+```
+Cliente pide franja amplia (franja_solicitada) al crear la solicitud — sin cambios
+  → Admin, ya coordinado con un técnico por fuera de la app, propone fecha + franja + hora puntual
+    (fecha_solicitada, franja_asignada, hora_solicitada) — SIN elegir técnico todavía
+    → Cliente ve "¿Te sirve este horario?" con la fecha/hora/franja exactas:
+        ├── Acepta → horario_confirmado_cliente = true
+        │     → Admin ahora ve "Asignar técnico" (sin campos de horario, ya quedaron fijos)
+        │       → (acá arranca la Fase 8.4 sin cambios: ResponderAsignacion.tsx, etc.)
+        └── Rechaza → se guarda esa fecha+hora en el historial de rechazados (no se puede volver
+              a proponer igual) → franja_asignada vuelve a null → admin recibe notificación
+              → vuelve al paso "Admin propone horario", ahora sin poder repetir lo ya rechazado
+```
+
+### SQL a correr en Supabase (aditivo)
+
+```sql
+CREATE TABLE IF NOT EXISTS solicitud_horarios_rechazados (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  solicitud_id  uuid NOT NULL REFERENCES solicitudes(id) ON DELETE CASCADE,
+  fecha         date NOT NULL,
+  hora          time NOT NULL,
+  franja        text NOT NULL,
+  rechazado_en  timestamptz NOT NULL DEFAULT now()
+);
+```
+(Política RLS a agregar en `supabase/rls_policies.sql`, mismo patrón que
+`solicitud_historial_estados` — la app la usa siempre vía `service_role`, así que la policy es
+más por consistencia con el resto de las tablas que una necesidad estricta.)
+
+**Cambios concretos por archivo:**
+
+1. **`dashboard/admin/solicitud/[id].astro`** — separar el formulario único en dos, mutuamente
+   excluyentes según el estado de la negociación:
+   - Si `!franja_asignada || !horario_confirmado_cliente`: formulario "Proponer horario" — fecha
+     (date input), franja (mañana/tarde/noche), hora puntual (`franjasHorarias()`, ya existe en
+     `disponibilidad.ts`). Al enviar, valida contra `solicitud_horarios_rechazados` de esa
+     solicitud — si la fecha+hora ya fue rechazada, error inline en vez de guardar. Sin selector
+     de técnico en este formulario.
+   - Si `horario_confirmado_cliente && !tecnico_id`: formulario "Asignar técnico" — el actual,
+     menos los campos de horario (ya están fijos y confirmados). El chequeo de disponibilidad del
+     técnico (`chequearDisponibilidad`, ya existe) se sigue haciendo acá, contra la fecha/hora ya
+     acordada — si el técnico puntual elegido choca, se usa la misma UI de conflicto que ya existe
+     hoy (sugerir horario / "Asignar igual").
+   - Si `tecnico_id`: sigue exactamente igual que hoy (nada que cambiar de acá para adelante).
+
+2. **`api/cliente/responder-horario.ts`** — sacar el requisito de `tecnico_id` en el guard (línea
+   31); pasa a exigir solo `franja_asignada && !horario_confirmado_cliente`. En el rechazo:
+   - Insertar en `solicitud_horarios_rechazados` (fecha_solicitada, hora_solicitada, franja_asignada
+     actuales de la solicitud).
+   - `franja_asignada = null` (vuelve a "sin propuesta viva"; `fecha_solicitada`/`hora_solicitada`
+     quedan como quedaron, es solo referencia histórica, no se usan para nada mientras
+     `franja_asignada` sea null).
+   - Ya no hay técnico que desasignar en el caso nuevo (queda el código viejo como no-op defensivo,
+     por si quedara alguna solicitud en el modelo bundleado anterior en producción al momento del
+     deploy).
+
+3. **`ResponderHorario.tsx`** — sin selector nuevo (el rechazo ya no necesita que el cliente
+   proponga nada — eso ahora lo decide el admin, que habla directo con el técnico). Se actualiza
+   el texto para mostrar la fecha/hora/franja puntual propuesta, no solo la franja.
+
+4. **`dashboard/cliente/solicitud/[id].astro:383`** — cambiar el gate de
+   `sol.tecnico_id && !sol.horario_confirmado_cliente` a
+   `sol.franja_asignada && !sol.horario_confirmado_cliente` (ya no depende del técnico).
+
+5. **`notificaciones.ts`** — `notificarHorarioPropuesto` deja de decir "le asignamos un técnico"
+   en el texto del mail (ya no es cierto en el nuevo flujo) → "te proponemos este horario", con la
+   fecha/hora concreta. `notificarHorarioRespuesta`, en el caso de rechazo, avisa al admin que
+   quedó libre para proponer un horario distinto (ya no puede repetir el rechazado).
+
+### Qué NO cambia (a propósito, mismo principio que la Fase 8.4 original)
+
+- `ResponderAsignacion.tsx` y todo el flujo de confirmación del técnico (`asignada` → `aceptada`/
+  rechazo) — cero cambios.
+- El resto del ciclo de vida de la solicitud (`en_curso`, `completada`, conformidad, pagos) — cero
+  cambios, arranca recién después de que el técnico confirma, igual que hoy.
+
+### Riesgo conocido a verificar (no nuevo, ya documentado antes)
+
+El admin viendo el detalle de una solicitud puntual ya tiene `CambiosEnVivo` escuchando cambios en
+esa fila de `solicitudes` — pero quedó anotado en la sesión de Realtime (2026-07-29) que las
+policies de `solicitudes` con JOIN pueden no entregarle eventos a Realtime de forma confiable. Si
+al probar el admin no ve la respuesta del cliente reflejarse sola, el fix es el mismo patrón ya
+usado en el resto de la app: escuchar inserts en `notificaciones` en vez de `solicitudes` directo.
+
+### Checklist de implementación
+
+**✅ Código implementado (2026-08-11). Falta correr el SQL y probar.**
+
+- [ ] Correr el SQL de arriba en Supabase (tabla `solicitud_horarios_rechazados`) — la policy RLS
+      ya está agregada a `supabase/rls_policies.sql`, correr ese bloque también.
+- [x] `dashboard/admin/solicitud/[id].astro` — separado en dos formularios ("Proponer horario" con
+      fecha+franja+hora, y "Asignar técnico" sin franja) según `horario_confirmado_cliente`, con
+      validación server-side contra horarios ya rechazados y lista de "ya rechazados" visible al
+      admin.
+- [x] `api/cliente/responder-horario.ts` — ya no exige `tecnico_id`; en el rechazo inserta en
+      `solicitud_horarios_rechazados` y limpia `franja_asignada`.
+- [x] `ResponderHorario.tsx` — sin cambios (no tenía texto específico de técnico; la fecha/hora/
+      franja puntual ya se muestran en el texto de `dashboard/cliente/solicitud/[id].astro`, que sí
+      se actualizó).
+- [x] `dashboard/cliente/solicitud/[id].astro` — gate de `ResponderHorario` y del bloque "Horario
+      propuesto" actualizados para depender de `franja_asignada`, no de `tecnico_id`.
+- [x] `notificaciones.ts` — textos de `notificarHorarioPropuesto`/`notificarHorarioRespuesta`
+      actualizados.
+- [x] `supabase/rls_policies.sql` — policy para `solicitud_horarios_rechazados` agregada.
+
+**Falta probar (checklist):**
+- [ ] Proponer un horario (fecha+franja+hora) sin técnico → confirmar que el cliente ve el cartel
+      "¿Te sirve este horario?" con la fecha/hora exactas, y que **no** aparece ningún selector de
+      técnico todavía del lado del admin.
+- [ ] Rechazar ese horario como cliente → confirmar que el admin ve "Ya rechazados: ..." con esa
+      fecha/hora, y que si intenta proponer exactamente la misma, aparece el error inline.
+- [ ] Proponer una fecha/hora distinta → aceptar como cliente → confirmar que recién ahí aparece el
+      selector de "Asignar técnico" (sin campo de franja) del lado del admin.
+- [ ] Asignar técnico → confirmar que el flujo de acá en adelante (`ResponderAsignacion.tsx`,
+      `aceptada`, etc.) sigue funcionando exactamente igual que antes, sin tocar nada.
+- [ ] Caso conflicto: elegir un técnico que ya esté ocupado en el horario acordado → confirmar que
+      sigue apareciendo el aviso de conflicto con "Reagendar y asignar"/"Asignar igual" (mismo
+      mecanismo de siempre).
+- [ ] Verificar tiempo real: con el admin viendo el detalle abierto en una pestaña, que el cliente
+      acepte/rechace desde otra → confirmar si el admin ve el cambio reflejarse solo o si hace falta
+      el fix de Realtime ya documentado (escuchar `notificaciones` en vez de `solicitudes`).
 
 ---
 

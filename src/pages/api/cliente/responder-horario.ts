@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro'
 import { createSupabaseServer } from '@/lib/supabase-server'
 import { createSupabaseAdmin }  from '@/lib/supabase-admin'
-import { notificarCambioEstado, notificarDesasignacion, notificarHorarioRespuesta } from '@/lib/notificaciones'
+import { notificarDesasignacion, notificarHorarioRespuesta } from '@/lib/notificaciones'
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   try {
@@ -19,7 +19,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const { data: sol } = await supabase
       .from('solicitudes')
       .select(`
-        cliente_id, tecnico_id, horario_confirmado_cliente, numero, titulo,
+        cliente_id, tecnico_id, horario_confirmado_cliente,
+        fecha_solicitada, hora_solicitada, franja_asignada, numero, titulo,
         tecnicos ( usuario_id, usuarios ( nombre_completo, email ) )
       `)
       .eq('id', solicitudId)
@@ -28,7 +29,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (!sol || sol.cliente_id !== user.id) {
       return new Response(JSON.stringify({ error: 'Sin permisos' }), { status: 403 })
     }
-    if (!sol.tecnico_id || sol.horario_confirmado_cliente) {
+    // Fase 8.9 — ya no depende de que haya un técnico asignado: el horario se negocia antes.
+    if (!sol.franja_asignada || sol.horario_confirmado_cliente) {
       return new Response(JSON.stringify({ error: 'No hay un horario pendiente de confirmar' }), { status: 409 })
     }
 
@@ -39,18 +41,31 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         .eq('id', solicitudId)
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
     } else {
-      // Mismo criterio que "volver a Pendiente" del admin (dashboard/admin/solicitud/[id].astro):
-      // desasignar al técnico para no dejarle una reserva fantasma en la agenda, y avisarle.
+      // Registrar el horario rechazado para que el admin no lo vuelva a proponer (Fase 8.9).
+      if (sol.fecha_solicitada && sol.hora_solicitada && sol.franja_asignada) {
+        const { error: histError } = await supabase.from('solicitud_horarios_rechazados').insert({
+          solicitud_id: solicitudId,
+          fecha:        (sol.fecha_solicitada as string).slice(0, 10),
+          hora:         sol.hora_solicitada,
+          franja:       sol.franja_asignada,
+        })
+        if (histError) console.error('[api/cliente/responder-horario] error guardando horario rechazado:', histError.message)
+      }
+
+      // La solicitud vuelve a esperar una propuesta nueva del admin — sin técnico comprometido
+      // en el nuevo flujo, así que normalmente no hay nada que desasignar acá. Se deja el aviso
+      // de desasignación como no-op defensivo por si quedara alguna solicitud del modelo anterior
+      // (técnico+horario asignados juntos) todavía en curso al momento del deploy.
       const tecnicoInfo = (sol.tecnicos as any)?.usuarios ?? null
       const tecnicoUsuarioId = (sol.tecnicos as any)?.usuario_id ?? null
 
       const { error } = await supabase
         .from('solicitudes')
-        .update({ tecnico_id: null, franja_asignada: null, horario_confirmado_cliente: false })
+        .update({ franja_asignada: null, horario_confirmado_cliente: false, ...(sol.tecnico_id ? { tecnico_id: null } : {}) })
         .eq('id', solicitudId)
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
 
-      if (tecnicoUsuarioId && tecnicoInfo) {
+      if (sol.tecnico_id && tecnicoUsuarioId && tecnicoInfo) {
         try {
           await notificarDesasignacion(
             supabase, tecnicoUsuarioId, tecnicoInfo.email, tecnicoInfo.nombre_completo,
@@ -59,12 +74,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         } catch (err) {
           console.error('[api/cliente/responder-horario] error notificando desasignación:', err)
         }
-      }
-
-      try {
-        await notificarCambioEstado(supabase, solicitudId, 'pendiente', user.id)
-      } catch (err) {
-        console.error('[api/cliente/responder-horario] error notificando cambio de estado:', err)
       }
     }
 

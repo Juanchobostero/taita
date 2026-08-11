@@ -338,12 +338,11 @@ export async function notificarFranjaAsignada(
 }
 
 /**
- * Se llama cuando el admin asigna técnico + horario a una solicitud (Fase 8.4) — el horario final
- * (coordinado por el admin con el técnico, dentro o fuera de la app) puede no coincidir con la
- * franja que había pedido el cliente. Antes esto era solo informativo (`notificarFranjaAsignada`,
- * arriba); ahora el cliente tiene que aceptarlo o rechazarlo explícitamente
- * (`ResponderHorario.tsx` / `api/cliente/responder-horario.ts`), así que el aviso tiene que
- * pedirle una acción, no solo informar.
+ * Se llama cuando el admin propone un horario para una solicitud (Fase 8.9) — el admin ya
+ * coordinó fecha/franja/hora con un técnico por fuera de la app, pero todavía no se le asigna
+ * ningún técnico a la solicitud en este paso; eso pasa recién después de que el cliente confirme
+ * (`ResponderHorario.tsx` / `api/cliente/responder-horario.ts`). El aviso pide una acción, no solo
+ * informa.
  */
 export async function notificarHorarioPropuesto(
   supabase:    SupabaseClient,
@@ -363,7 +362,7 @@ export async function notificarHorarioPropuesto(
       subject: `Te proponemos un horario para tu solicitud ${etiqueta(sol)}`,
       html: `
         <p>Hola ${cliente.nombre_completo},</p>
-        <p>Le asignamos un técnico a tu solicitud <strong>${etiqueta(sol)}</strong>, con este horario:
+        <p>Te proponemos este horario para tu solicitud <strong>${etiqueta(sol)}</strong>:
         <strong>${fechaHora ?? '—'} (${label})</strong>.</p>
         <p>Entrá a tu panel para aceptarlo o pedir que se reprograme.</p>
       `,
@@ -378,11 +377,10 @@ export async function notificarHorarioPropuesto(
 }
 
 /**
- * Se llama cuando el cliente responde (acepta/rechaza) el horario propuesto (Fase 8.4) — aparte
- * del efecto que ya tiene la respuesta en sí (aceptar solo guarda el flag; rechazar dispara
- * `notificarCambioEstado(..., 'pendiente', ...)`, que ya avisa genérico), esta función le manda al
- * admin un aviso explícito de qué pasó, mismo criterio que `notificarCotizacionRespuesta` en
- * Fase 7b.
+ * Se llama cuando el cliente responde (acepta/rechaza) el horario propuesto (Fase 8.9) — le manda
+ * al admin un aviso explícito de qué pasó, mismo criterio que `notificarCotizacionRespuesta` en
+ * Fase 7b. En el rechazo, ese horario puntual ya queda registrado como rechazado (no se puede
+ * volver a proponer) — el mensaje se lo recuerda al admin.
  */
 export async function notificarHorarioRespuesta(
   supabase:    SupabaseClient,
@@ -396,8 +394,8 @@ export async function notificarHorarioRespuesta(
     ? `El cliente confirmó el horario — ${etiqueta(sol)}`
     : `El cliente rechazó el horario — ${etiqueta(sol)}`
   const mensaje = aceptado
-    ? 'Ya quedó confirmado.'
-    : 'Quedó disponible para reprogramar con otro horario.'
+    ? 'Ya quedó confirmado — se puede asignar técnico.'
+    : 'Ese horario quedó descartado (no se puede volver a proponer) — proponé uno distinto.'
 
   await enviarEmail({ to: ADMIN_EMAIL, subject: titulo, html: `<p>${mensaje}</p>` })
   await crearNotificacionesAdmin(supabase, titulo, mensaje, sol.id)

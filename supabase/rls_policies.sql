@@ -339,3 +339,30 @@ CREATE POLICY "notificaciones: usuario marca las suyas como leidas"
 -- Los inserts se hacen desde el backend con service_role (notificarCambioEstado,
 -- notificarNuevaSolicitud, notificarConformidad, notificarMensajeAdmin) — no hace falta policy de
 -- INSERT para usuarios normales.
+
+-- ============================================================
+-- SOLICITUD_HORARIOS_RECHAZADOS (Fase 8.9 — negociación de horario)
+-- ============================================================
+
+ALTER TABLE solicitud_horarios_rechazados ENABLE ROW LEVEL SECURITY;
+
+-- El cliente ve los horarios rechazados de sus propias solicitudes
+CREATE POLICY "horarios_rechazados: cliente ve los de sus solicitudes"
+  ON solicitud_horarios_rechazados FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM solicitudes s WHERE s.id = solicitud_id AND s.cliente_id = auth.uid()
+    )
+  );
+
+-- Admin ve todos los horarios rechazados
+CREATE POLICY "horarios_rechazados: admin ve todos"
+  ON solicitud_horarios_rechazados FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM usuarios u WHERE u.id = auth.uid() AND u.tipo = 'admin'
+    )
+  );
+
+-- Los inserts se hacen desde el backend con service_role (api/cliente/responder-horario.ts) —
+-- no hace falta policy de INSERT para usuarios normales.
