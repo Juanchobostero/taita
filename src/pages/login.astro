@@ -2,9 +2,46 @@
 import Layout from '../layouts/Layout.astro'
 import Navbar from '../components/Navbar'
 import LoginForm from '../components/LoginForm'
+import AuthRedirectBanner from '../components/AuthRedirectBanner'
 ---
 
 <Layout title="Ingresar — Taita Soluciones" description="Ingresá a tu cuenta de Taita Soluciones">
+  <!--
+    El link de confirmación de email (registro) vuelve acá. Según cómo esté configurado el
+    proyecto de Supabase puede llegar de dos formas distintas: con `?code=...` (flujo PKCE, lo que
+    se vio en la práctica) o con `type=signup` + tokens en el `#hash` (flujo implícito). Este script
+    corre síncrono, antes de que hidrate ningún island — se adelanta a leer cuál de los dos es y lo
+    guarda en sessionStorage para que AuthRedirectBanner lo muestre.
+
+    No usamos el `code`/tokens para loguear solo (deliberado — ver AuthRedirectBanner: el login
+    después de confirmar siempre queda como paso explícito, más simple y confiable entre
+    dispositivos/navegadores que un auto-login). Por eso es seguro limpiar acá mismo el `code` y
+    los parámetros de error apenas se leen — nada más los va a necesitar. El único caso que NO se
+    toca es el hash con tokens del flujo implícito: ese si lo puede llegar a consumir el SDK de
+    Supabase por su cuenta (detectSessionInUrl), así que se deja intacto para no pisarle la lectura.
+  -->
+  <script is:inline>
+    (function () {
+      try {
+        var url    = new URL(window.location.href)
+        var search = url.searchParams
+        var hash   = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+        var errorCode = search.get('error_code') || hash.get('error_code') || search.get('error') || hash.get('error')
+
+        if (errorCode) {
+          sessionStorage.setItem('taita_auth_error', errorCode)
+          window.history.replaceState(null, '', url.pathname)
+        } else if (search.get('code')) {
+          sessionStorage.setItem('taita_email_confirmado', '1')
+          search.delete('code')
+          window.history.replaceState(null, '', url.pathname + (search.toString() ? '?' + search.toString() : ''))
+        } else if (hash.get('type') === 'signup' && hash.get('access_token')) {
+          sessionStorage.setItem('taita_email_confirmado', '1')
+        }
+      } catch (e) {}
+    })()
+  </script>
+  <AuthRedirectBanner client:load />
   <Navbar client:load />
 
   <div class="min-h-screen bg-cream flex flex-col justify-center py-12 px-4">

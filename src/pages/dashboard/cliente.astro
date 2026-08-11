@@ -4,6 +4,7 @@ import Navbar from '../../components/Navbar'
 import AvatarUpload from '../../components/AvatarUpload'
 import MisSolicitudes from '../../components/MisSolicitudes'
 import { createSupabaseAdmin } from '../../lib/supabase-admin'
+import { notificarEmailVerificado } from '../../lib/notificaciones'
 
 const PAGE_SIZE = 5
 
@@ -20,7 +21,7 @@ const [
 ] = await Promise.all([
   supabase
     .from('usuarios')
-    .select('nombre_completo, email, telefono, foto_url')
+    .select('nombre_completo, email, telefono, foto_url, email_verificado, email_verificado_notificado')
     .eq('id', userId)
     .single(),
   supabase
@@ -54,6 +55,20 @@ const [
 const solicitudes = rawSolicitudes ?? []
 const categoriasFiltro = rawCategorias ?? []
 
+// Fase 8.1 — se detecta acá (en vez de con un listener client-side de Supabase Auth, que no
+// distingue de forma confiable "recién confirmó" de "es un login normal") que el cliente ya
+// confirmó su email pero todavía no se le avisó — pasa una sola vez, la próxima carga del panel
+// después de haber clickeado el link de confirmación. Reusa la consulta que ya se hacía para el
+// perfil, no agrega una llamada nueva.
+if (usuario?.email_verificado && !usuario?.email_verificado_notificado) {
+  try {
+    await notificarEmailVerificado(supabase, userId, usuario.nombre_completo, usuario.email)
+    await supabase.from('usuarios').update({ email_verificado_notificado: true }).eq('id', userId)
+  } catch (err) {
+    console.error('[dashboard/cliente] error notificando email verificado:', err)
+  }
+}
+
 const stats = {
   pendientes:  pendientesCount ?? 0,
   en_curso:    enCursoCount ?? 0,
@@ -68,6 +83,14 @@ const nombre = usuario?.nombre_completo?.split(' ')[0] ?? 'Cliente'
 
   <div class="bg-cream min-h-screen py-8 px-4">
     <div class="max-w-5xl mx-auto flex flex-col gap-6">
+
+      <!-- Aviso de email sin confirmar (Fase 8.1) — no bloquea navegar, sí pedir un servicio nuevo
+           (ese bloqueo está en el propio wizard, /solicitud). -->
+      {!usuario?.email_verificado && (
+        <div class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-2xl px-5 py-3.5">
+          📩 Todavía no confirmaste tu email — revisá tu casilla y confirmalo para poder pedir servicios.
+        </div>
+      )}
 
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

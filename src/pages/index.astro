@@ -5,6 +5,7 @@ import { createSupabaseAdmin } from '../lib/supabase-admin'
 import { toSlug } from '../lib/types'
 
 const supabase = createSupabaseAdmin()
+
 // Solo las categorías que el admin marcó como "destacada" (máximo 9, se controla desde
 // /dashboard/admin/categorias) — el resto se ve en /categorias ("Ver más"). El .limit(9) queda
 // como respaldo por si alguna vez hubiera más de 9 marcadas.

@@ -162,6 +162,76 @@ export async function notificarNuevoTecnico(
 }
 
 /**
+ * Se llama cuando se registra un cliente nuevo (Fase 8.1) — a diferencia del técnico, el cliente
+ * no espera aprobación manual, sino que confirme su email (link que le manda Supabase Auth) antes
+ * de poder pedir un servicio. Avisa al admin (que hay un registro nuevo sin confirmar) y deja una
+ * notificación in-app para el propio cliente — **sin mandarle un email aparte**: Supabase Auth ya
+ * le manda el suyo con el link real de confirmación (ver Custom SMTP/template en Fase 8.1), así
+ * que un segundo email desde acá solo sería ruido duplicado (probado por Jota: dos correos por un
+ * mismo registro, confuso — el de acá ni siquiera tenía el link, solo decía "mirá el otro mail").
+ */
+export async function notificarClientePendienteVerificacion(
+  supabase:         SupabaseClient,
+  clienteUsuarioId: string,
+  nombreCompleto:   string,
+): Promise<void> {
+  await enviarEmail({
+    to:      ADMIN_EMAIL,
+    subject: `Nuevo cliente registrado: ${nombreCompleto}`,
+    html: `
+      <p><strong>${nombreCompleto}</strong> se registró como cliente y está esperando confirmar su email.</p>
+    `,
+  })
+  await crearNotificacionesAdmin(
+    supabase,
+    `Nuevo cliente registrado: ${nombreCompleto}`,
+    'Todavía no confirmó su correo.',
+    null,
+  )
+
+  await crearNotificacion(
+    supabase, clienteUsuarioId,
+    'Confirmá tu correo',
+    'Todavía no podés pedir servicios — confirmá tu correo desde el link que te mandamos.',
+    null,
+  )
+}
+
+/**
+ * Se llama cuando el cliente confirma su email (Fase 8.1) — ya puede pedir servicios. Avisa al
+ * propio cliente (confirmación) y al admin (deja de estar "pendiente de verificar").
+ */
+export async function notificarEmailVerificado(
+  supabase:         SupabaseClient,
+  clienteUsuarioId: string,
+  nombreCompleto:   string,
+  clienteEmail:     string | null,
+): Promise<void> {
+  if (clienteEmail) {
+    await enviarEmail({
+      to:      clienteEmail,
+      subject: '¡Tu correo fue verificado!',
+      html: `
+        <p>Hola ${nombreCompleto},</p>
+        <p>Confirmamos tu correo — ya podés pedir servicios en Taita Soluciones.</p>
+      `,
+    })
+  }
+  await crearNotificacion(
+    supabase, clienteUsuarioId,
+    '¡Tu correo fue verificado!',
+    'Ya podés pedir servicios.',
+    null,
+  )
+  await crearNotificacionesAdmin(
+    supabase,
+    `${nombreCompleto} confirmó su correo`,
+    'Ya puede pedir servicios.',
+    null,
+  )
+}
+
+/**
  * Se llama cuando el admin aprueba a un técnico pendiente (`activo` pasa a `true` desde el panel).
  * Antes esto no avisaba nada — el técnico solo se enteraba si volvía a entrar a su panel y notaba
  * que el aviso de "pendiente de aprobación" ya no estaba.
@@ -265,6 +335,72 @@ export async function notificarFranjaAsignada(
     `Nueva franja asignada: ${label}.`,
     sol.id,
   )
+}
+
+/**
+ * Se llama cuando el admin asigna técnico + horario a una solicitud (Fase 8.4) — el horario final
+ * (coordinado por el admin con el técnico, dentro o fuera de la app) puede no coincidir con la
+ * franja que había pedido el cliente. Antes esto era solo informativo (`notificarFranjaAsignada`,
+ * arriba); ahora el cliente tiene que aceptarlo o rechazarlo explícitamente
+ * (`ResponderHorario.tsx` / `api/cliente/responder-horario.ts`), así que el aviso tiene que
+ * pedirle una acción, no solo informar.
+ */
+export async function notificarHorarioPropuesto(
+  supabase:    SupabaseClient,
+  solicitudId: string,
+  franja:      FranjaHoraria,
+): Promise<void> {
+  const sol = await fetchSolicitudNotif(supabase, solicitudId)
+  if (!sol?.usuarios) return
+
+  const cliente   = sol.usuarios
+  const label     = FRANJA_LABEL[franja]
+  const fechaHora = formatearFechaHora(sol)
+
+  if (cliente.email) {
+    await enviarEmail({
+      to:      cliente.email,
+      subject: `Te proponemos un horario para tu solicitud ${etiqueta(sol)}`,
+      html: `
+        <p>Hola ${cliente.nombre_completo},</p>
+        <p>Le asignamos un técnico a tu solicitud <strong>${etiqueta(sol)}</strong>, con este horario:
+        <strong>${fechaHora ?? '—'} (${label})</strong>.</p>
+        <p>Entrá a tu panel para aceptarlo o pedir que se reprograme.</p>
+      `,
+    })
+  }
+  await crearNotificacion(
+    supabase, cliente.id,
+    `Te proponemos un horario — ${etiqueta(sol)}`,
+    `${fechaHora ?? ''} (${label}). Entrá a tu panel para aceptarlo o rechazarlo.`,
+    sol.id,
+  )
+}
+
+/**
+ * Se llama cuando el cliente responde (acepta/rechaza) el horario propuesto (Fase 8.4) — aparte
+ * del efecto que ya tiene la respuesta en sí (aceptar solo guarda el flag; rechazar dispara
+ * `notificarCambioEstado(..., 'pendiente', ...)`, que ya avisa genérico), esta función le manda al
+ * admin un aviso explícito de qué pasó, mismo criterio que `notificarCotizacionRespuesta` en
+ * Fase 7b.
+ */
+export async function notificarHorarioRespuesta(
+  supabase:    SupabaseClient,
+  solicitudId: string,
+  aceptado:    boolean,
+): Promise<void> {
+  const sol = await fetchSolicitudNotif(supabase, solicitudId)
+  if (!sol) return
+
+  const titulo = aceptado
+    ? `El cliente confirmó el horario — ${etiqueta(sol)}`
+    : `El cliente rechazó el horario — ${etiqueta(sol)}`
+  const mensaje = aceptado
+    ? 'Ya quedó confirmado.'
+    : 'Quedó disponible para reprogramar con otro horario.'
+
+  await enviarEmail({ to: ADMIN_EMAIL, subject: titulo, html: `<p>${mensaje}</p>` })
+  await crearNotificacionesAdmin(supabase, titulo, mensaje, sol.id)
 }
 
 /**

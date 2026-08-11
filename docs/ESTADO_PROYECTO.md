@@ -3,17 +3,15 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-08-07 — Fase 6 (rediseño visual) **cerrada y confirmada por Jota**
-de punta a punta: wizard de "Solicitar servicio", bottom nav + navbar (mobile y escritorio), home
-de escritorio, formularios de registro, listados de solicitudes (cliente y técnico, cards
-diferenciadas por estado), pantalla `/tecnicos`, pantalla de detalle de solicitud (header y
-desglose financiero metalizados), stats de los dashboards (cliente/técnico) a cards metalizadas, e
-insignia de Mercado Pago en el botón de pago y en todos los estados "pagado" de la app. **Fase 7**
-("mejoras finales" — ver `docs/taita-mejoras-finales.md`) **implementada de punta a punta** (7a —
-subitems con precio en el wizard — y 7b — canal de "Solicitar cotización" con chat cliente↔admin,
-nuevo estado `en_cotizacion`), **falta correr el SQL pendiente en Supabase, crear el bucket
-`cotizaciones`, y probar de punta a punta con Jota**. Ver sección "Mejoras finales — implementación
-por fases" más abajo para el plan completo y el detalle de cada fase.
+**Última actualización:** 2026-08-10 — **Fase 8 implementada de punta a punta**: verificación de
+email restrictiva del cliente (Supabase Auth + chequeo de MX, técnico queda con validación de
+formato en vivo nomás), franja horaria negociada con confirmación del cliente y reprogramación si
+la rechaza, sub-ítems de categoría con descripción y UI rediseñada, categorías del técnico visibles
+para el admin, teléfono del cliente ya no visible para el técnico (privacidad), label del wizard
+("Técnicos Sugeridos"), y notificaciones responsive en mobile. **Falta correr el SQL pendiente en
+Supabase (bloque único, ver sección "Fase 8" más abajo), configurar Custom SMTP + template de
+confirmación, y probar todo con Jota/Agustín.** Fases 6 y 7 (rediseño visual + subitems/cotización)
+siguen cerradas y confirmadas — ver sus secciones más abajo para el detalle de cada una.
 
 **Actualización anterior:** 2026-07-31 — fix de husos horarios (todas las fechas/horas "reales" de
 la app ahora se muestran siempre en hora de Argentina, sin importar en qué huso corra el servidor)
@@ -2223,6 +2221,235 @@ admin}.astro` (pasan la lista de categorías activas como prop nueva).
       en vez de mostrar todo de nuevo.
 - [ ] Paginado del admin/cliente con un filtro activo — confirmar que pasar de página mantiene el
       filtro.
+
+---
+
+## Fase 8 — Verificación de email, privacidad, franja horaria negociada, y ajustes de admin
+
+**✅ Implementada de punta a punta (8.1 a 8.8), falta correr el SQL en Supabase, la configuración
+de Custom SMTP/template de confirmación, y probar todo.** Plan completo (con el análisis punto por
+punto) guardado en la sesión — acá el resumen ejecutable.
+
+### SQL pendiente de correr en Supabase (todo junto, un solo bloque)
+
+```sql
+-- Fase 8.1 — verificación de email del cliente
+ALTER TABLE usuarios ADD COLUMN email_verificado boolean NOT NULL DEFAULT false;
+ALTER TABLE usuarios ADD COLUMN email_verificado_notificado boolean NOT NULL DEFAULT false;
+
+CREATE OR REPLACE FUNCTION public.sync_email_verificado()
+RETURNS trigger AS $$
+BEGIN
+  UPDATE public.usuarios
+  SET email_verificado = (NEW.email_confirmed_at IS NOT NULL)
+  WHERE id = NEW.id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_email_confirmed
+  AFTER UPDATE OF email_confirmed_at ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.sync_email_verificado();
+
+-- Fase 8.5 — descripción de sub-ítems
+ALTER TABLE categoria_subitems ADD COLUMN descripcion text;
+
+-- Fase 8.4 — franja horaria negociada
+ALTER TABLE solicitudes ADD COLUMN franja_solicitada text;
+ALTER TABLE solicitudes ADD COLUMN horario_confirmado_cliente boolean NOT NULL DEFAULT false;
+```
+
+**Además, dos pasos de configuración en el panel de Supabase (no son SQL):**
+1. **Authentication → Providers → Email → "Confirm email"**: confirmar que esté activado (se
+   había prendido en junio, verificar que siga así).
+2. **Authentication → Settings → SMTP Settings**: cargar Custom SMTP con las credenciales de Resend
+   (`host: smtp.resend.com`, `port: 465`, `user: resend`, `password: <RESEND_API_KEY>`) para que el
+   mail de confirmación salga desde el dominio propio en vez del genérico de Supabase (que además
+   tiene un límite muy bajo de envíos/hora). Después, en **Authentication → Email Templates →
+   "Confirm signup"**, pegar un HTML con el estilo de Taita (mismo header verde + logo que ya usa
+   `plantillaEmail()` en `src/lib/email.ts`) — pedime el HTML armado cuando vayas a cargarlo y te lo
+   paso listo para pegar.
+
+### 8.1 — Verificación de email restrictiva (solo cliente)
+
+El técnico **no** pasa por este flujo (ya tiene su propia aprobación manual del admin) — para el
+registro de técnico se hizo más simple: `RegistroForm.tsx` (`TecnicoForm`) pasó a `mode: 'onBlur'`
+en el `useForm`, así el error de formato de email (y del resto de los campos) aparece apenas se
+sale del campo, no recién al mandar el wizard entero.
+
+Para el cliente:
+- Chequeo de MX del dominio (gratis, con el módulo `dns` de Node, sin servicio externo) antes del
+  signup — `src/pages/api/verificar-dominio-email.ts`, llamado desde `ClienteForm` en
+  `RegistroForm.tsx`. Bloquea el registro si el dominio no tiene servidores de correo.
+- Si "Confirm email" está activo en Supabase, `signUp()` no deja sesión iniciada — `ClienteForm`
+  ahora detecta esto (`!authData.session`) y muestra una pantalla de "confirmá tu correo" en vez de
+  redirigir a un panel al que todavía no puede entrar.
+- **Importante:** "Confirm email" es una config **global** de Supabase Auth — no se puede activar
+  "solo para cliente" desde el panel, porque `tipo` (cliente/técnico/admin) es un concepto de la
+  tabla `usuarios` de la app, no algo que Supabase Auth conozca. Por eso `TecnicoForm` (mismo
+  archivo) recibió el mismo fix de `!authData.session` que `ClienteForm` — si no, el registro de
+  técnico se hubiera roto en cuanto se activara el toggle (quedaba redirigiendo a `/dashboard/
+  tecnico`, ruta protegida, sin sesión). La diferencia es que al técnico **no** se le exige nada
+  extra por esto — no tiene botón bloqueado ni banner — solo evita el redirect roto; ya tiene su
+  propio gate (aprobación manual del admin) independientemente de si confirmó el email o no.
+- `usuarios.email_verificado` se mantiene sincronizado solo (trigger de arriba) — no hace falta
+  ninguna llamada a la Admin API de Supabase Auth para leerlo, es una columna más.
+- El botón "Enviar solicitud" (`FormSolicitud.tsx`) queda `disabled` mientras `email_verificado`
+  sea `false`, con un botón de "Reenviar email" (`supabase.auth.resend`). `src/pages/solicitud.astro`
+  resuelve el flag server-side.
+- Banner ámbar persistente en `dashboard/cliente.astro` mientras no esté verificado.
+- Notificaciones nuevas en `notificaciones.ts`: `notificarClientePendienteVerificacion` (al
+  registrarse — cliente y admin) y `notificarEmailVerificado` (al confirmar — cliente y admin). El
+  momento de "recién confirmó" se detecta server-side en `dashboard/cliente.astro` (reusa la
+  consulta que ya hacía para el perfil, sin llamadas nuevas) comparando `email_verificado` contra
+  `email_verificado_notificado`, en vez de un listener client-side de Supabase Auth — más simple y
+  sin ambigüedad entre "recién confirmó" y "es un login normal".
+
+**Archivos:** `src/lib/notificaciones.ts`, `src/pages/api/verificar-dominio-email.ts` (nuevo),
+`src/pages/api/cliente/registro-notificar.ts` (nuevo), `src/components/RegistroForm.tsx`,
+`src/components/FormSolicitud.tsx`, `src/pages/solicitud.astro`, `src/pages/dashboard/cliente.astro`.
+
+**Ajustes hechos durante las pruebas en vivo (11-ago):**
+- **Email duplicado al registrarse:** `notificarClientePendienteVerificacion` le mandaba al cliente
+  un segundo correo ("confirmá tu correo") además del que ya manda Supabase con el link real —
+  quedaba confuso (dos correos, uno sin link). Se sacó ese email del cliente; la función ahora solo
+  avisa al admin por correo + deja la notificación in-app al cliente (sin email aparte).
+- **`?error=access_denied&error_code=otp_expired...` crudo en la URL:** el link de confirmación, al
+  fallar (vencido, ya usado), volvía a la home con el error crudo en la URL sin ningún mensaje.
+  Faltaba además un lugar claro para pedir que reenvíen el link sin estar logueado.
+- **La redirección post-confirmación mandaba a la home, deslogueado, sin indicación de qué hacer:**
+  se decidió que el flujo correcto es que la confirmación **no** intente loguear solo (poco fiable
+  entre navegadores/dispositivos) sino que lleve siempre a un paso explícito de login. Cambios:
+  - `emailRedirectTo` en `RegistroForm.tsx` (cliente y técnico) pasa de `origin + '/'` a
+    `origin + '/login'`.
+  - `src/components/AuthRedirectBanner.tsx` (nuevo, reemplaza el intento anterior
+    `AuthErrorBanner.tsx`) se monta en `login.astro` y cubre los dos casos: error (banner ámbar con
+    mensaje claro según `error_code` + campo de email para reenviar la confirmación vía
+    `supabase.auth.resend`) y éxito (banner verde "tu correo fue confirmado, iniciá sesión").
+  - El caso de éxito se detecta con un `<script is:inline>` síncrono en `login.astro` que lee
+    `type=signup` + `access_token` del hash **antes** de que hidrate ningún island, y lo guarda en
+    `sessionStorage` — a propósito no toca el hash él mismo, porque el SDK de Supabase todavía lo
+    necesita intacto para su propio intento de auto-login (`detectSessionInUrl`). El caso de error sí
+    se limpia de la URL directamente (confirmado en el código de `@supabase/auth-js` que ese caso
+    nunca lo toca el SDK, no hay conflicto).
+- **Login sin confirmar mostraba "Email o contraseña incorrectos":** Supabase distingue el error
+  `email_not_confirmed` de credenciales inválidas — `LoginForm.tsx` ahora lo detecta aparte y
+  muestra un banner ámbar específico ("todavía no confirmaste tu correo") con su propio botón de
+  reenviar, en vez del mensaje genérico que hacía pensar que la contraseña estaba mal.
+- **Sin botón de guardar visible en sub-ítems de categoría** (`GestionCategorias.tsx`): se guardaba
+  solo, con `onBlur`, sin ningún indicio visual. Se extrajo `SubitemRow` con estado controlado y un
+  botón explícito "Guardar" con ícono de guardado, que pasa a "Guardando…" / "¡Guardado!" (reusa el
+  hook `useSaveState` que ya existía en el archivo).
+
+**Archivos de estos ajustes:** `src/lib/notificaciones.ts`, `src/components/AuthRedirectBanner.tsx`
+(nuevo), `src/pages/login.astro`, `src/components/RegistroForm.tsx`, `src/components/LoginForm.tsx`,
+`src/components/GestionCategorias.tsx`.
+
+### 8.2 — Badge de verificación en Gestión de usuarios (admin)
+
+Badge "✅ Verificado" / "⏳ Sin verificar" junto al email, solo en la pestaña "Clientes" de
+`GestionUsuarios.tsx` (el técnico no pasa por este flujo). **Archivos:**
+`src/pages/dashboard/admin/usuarios.astro`, `src/components/GestionUsuarios.tsx`.
+
+### 8.3 — Categorías del técnico visibles en Gestión de usuarios (admin)
+
+El dato ya existía (`especialidades_tecnico`) — era un hueco de display nomás. Chips de categoría
+en la fila expandida de cada técnico. **Archivos:** `src/pages/dashboard/admin/usuarios.astro`,
+`src/components/GestionUsuarios.tsx`.
+
+### 8.4 — Franja horaria negociada con confirmación del cliente + reprogramación
+
+**Diseño finalmente implementado (más simple que el planificado originalmente, mismo resultado,
+bastante menos riesgo):** en vez de que la confirmación del cliente y la del técnico se combinen
+para gatillar juntas el pasaje a `aceptada` (lo que hubiera obligado a tocar el flujo de
+`ResponderAsignacion.tsx` ya probado y funcionando), quedaron como **dos cosas independientes que
+corren en paralelo**:
+- El técnico sigue confirmando la asignación exactamente igual que siempre (`ResponderAsignacion.tsx`
+  sin cambios) — eso sigue moviendo el estado a `aceptada` como ya hacía.
+- El cliente, por su lado, tiene que confirmar el horario (`horario_confirmado_cliente`) — si lo
+  rechaza, la solicitud vuelve a `pendiente` (desasigna al técnico, mismo mecanismo que ya usaba el
+  dropdown "volver a Pendiente" del admin) para que se reprograme, sin importar en qué estado
+  estuviera. Cero cambios en el código ya probado del técnico.
+
+**Otro cambio pedido durante la sesión:** el cliente ya no elige un horario puntual en el wizard
+(se sacó la grilla de franjas de 30') — solo elige la franja amplia (mañana/tarde/noche),
+obligatoria. Internamente se sigue guardando una `hora_solicitada` representativa de esa franja
+(09:00/14:00/19:00 según corresponda) porque `chequearDisponibilidad`/`franjaDeHora` (flujo de
+pedir directo a un técnico fijo desde su perfil) siguen necesitando un horario puntual para
+detectar choques de agenda — el cliente nunca ve ni elige ese valor, es interno.
+
+**⚠️ Atención — efecto secundario de sacar el horario puntual:** para el flujo de "pedir servicio
+directo a un técnico" (`/solicitud?tecnico=...`), el chequeo de choque de agenda
+(`chequearDisponibilidad`) ahora compara contra esos 3 horarios representativos fijos en vez de 30
+minutos de granularidad real — dos clientes eligiendo la misma franja "chocan" en el chequeo
+aunque en la realidad el técnico tuviera lugar para los dos en horarios distintos dentro de esa
+franja. No bloquea nada (el sistema ya sabe sugerir la fecha/hora libre más cercana), pero vale la
+pena que lo tengas en cuenta si notás que sugiere reprogramar más seguido de lo esperado en ese
+flujo puntual — quedó anotado para una vuelta futura si hace falta afinarlo.
+
+**Flujo final:**
+```
+Cliente elige franja (Paso 4 del wizard) → admin asigna técnico + horario + franja (coordinado
+con el técnico, en la app o por fuera) → cliente ve "¿Te sirve este horario?" en su panel:
+  ├── Confirma → horario_confirmado_cliente = true (independiente de que el técnico ya haya
+  │   confirmado o no la asignación en sí)
+  └── Rechaza → vuelve a `pendiente`, se desasigna el técnico (con su aviso), el admin la ve de
+      nuevo en su cola normal para reprogramar con otro horario
+```
+
+**Notificaciones nuevas:** `notificarHorarioPropuesto` (admin asigna → cliente) y
+`notificarHorarioRespuesta` (cliente responde → admin, explícito, igual criterio que
+`notificarCotizacionRespuesta` en Fase 7b). Reemplaza a la vieja `notificarFranjaAsignada` (Fase 4,
+solo informativa cuando la franja no coincidía) — ahora se avisa siempre, porque hace falta una
+respuesta activa, coincida o no con lo que pidió el cliente.
+
+**Archivos nuevos:** `src/components/ResponderHorario.tsx`, `src/pages/api/cliente/
+responder-horario.ts`. **Modificados:** `src/lib/notificaciones.ts`, `src/components/
+FormSolicitud.tsx` (Paso 4 sin grilla de hora, franja obligatoria), `src/pages/api/crear-solicitud.ts`,
+`src/pages/dashboard/admin/solicitud/[id].astro`, `src/pages/dashboard/cliente/solicitud/[id].astro`.
+
+### 8.6 — Privacidad: el técnico ya no ve el teléfono del cliente
+
+Bug confirmado y corregido en `src/pages/dashboard/tecnico/solicitud/[id].astro` — mostraba
+`cliente.telefono` directo en la card "Cliente". El lado cliente→técnico ya estaba bien (nunca
+mostró el teléfono del técnico, a propósito). Ahora ninguno de los dos ve el contacto del otro —
+solo el admin.
+
+### 8.7 y 8.8 — Label del wizard + notificaciones responsive
+
+- `FormSolicitud.tsx`: el paso 2 del wizard pasó de "Técnico" a "Técnicos Sugeridos" (label del
+  stepper, sin tocar el título interno del paso).
+- `NotificacionesBell.tsx`: el dropdown pasó de `absolute right-0 w-80` (podía quedar parcialmente
+  fuera del viewport en pantallas angostas — Agustín reportó que no se leía completo en el celu) a
+  `fixed inset-x-4` en mobile, con el comportamiento de siempre desde `sm:` en adelante.
+
+### Falta probar (Fase 8 completa)
+
+- [ ] Correr el SQL de arriba + la config de Supabase (Confirm email, Custom SMTP, template).
+- [ ] Registrar un cliente con un dominio de email inventado (ej. `test@asdqwe123.com`) → confirmar
+      que se bloquea antes de llegar a Supabase.
+- [ ] Registrar un cliente con un email real → confirmar que no queda logueado, ve la pantalla de
+      "confirmá tu correo", y que el link del mail lo lleva a la app ya logueado.
+- [ ] Antes de confirmar: entrar a `/solicitud`, llenar el wizard → confirmar que el botón final
+      queda deshabilitado con el aviso, y que "Reenviar email" funciona.
+- [ ] Confirmar el email → entrar al panel → confirmar que aparece la notificación de "¡Tu correo
+      fue verificado!" (al propio cliente y al admin) y que ya se puede enviar una solicitud.
+- [ ] Panel de admin → Gestión de usuarios → pestaña Clientes: ver el badge de verificado/sin
+      verificar; pestaña Técnicos: ver las categorías registradas en la fila expandida.
+- [ ] Registrar un técnico con un email mal formado → confirmar que el error aparece apenas se sale
+      del campo, sin tener que llegar al final del wizard.
+- [ ] `/dashboard/admin/categorias` → expandir una categoría → cargar un sub-ítem con descripción →
+      confirmar que se ve prolijo (cards, no filas grises chicas) y que la descripción se guarda.
+- [ ] Pedir una solicitud nueva → confirmar que el Paso 4 solo pide franja (sin grilla de horario
+      puntual) y que es obligatorio elegir una.
+- [ ] Como admin, asignar técnico + horario a esa solicitud → como cliente, ver la card "¿Te sirve
+      este horario?" → confirmarlo → revisar que el admin ve "✅ El cliente confirmó" en el detalle.
+- [ ] Repetir con otra solicitud de prueba pero rechazando el horario → confirmar que vuelve a
+      `pendiente`, se desasigna el técnico (con su aviso), y el admin puede reasignar de nuevo.
+- [ ] Como técnico, revisar que ya no se ve el teléfono del cliente en el detalle de una solicitud
+      asignada.
+- [ ] Abrir la campanita de notificaciones en un celular angosto → confirmar que el texto se lee
+      completo y el dropdown no queda cortado.
 
 ---
 

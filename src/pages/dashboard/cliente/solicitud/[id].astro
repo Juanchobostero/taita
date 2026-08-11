@@ -8,6 +8,7 @@ import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 import MapaUbicacion from '../../../../components/MapaUbicacion'
 import ChatCotizacion from '../../../../components/ChatCotizacion'
 import ResponderCotizacion from '../../../../components/ResponderCotizacion'
+import ResponderHorario from '../../../../components/ResponderHorario'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
 import { actualizarPagoDesdeMP, obtenerLinkPago } from '../../../../lib/mercadopago'
 import { FRANJA_LABEL, type FranjaHoraria } from '../../../../lib/disponibilidad'
@@ -26,6 +27,7 @@ const { data: sol } = await supabase
     gastos_extra, descripcion_gastos, imagenes_trabajo,
     conformidad_cliente, conformidad_en,
     fecha_solicitada, hora_solicitada, direccion, latitud, longitud, franja_asignada,
+    franja_solicitada, horario_confirmado_cliente,
     tecnicos (
       descripcion, calificacion_promedio, total_servicios,
       usuarios ( nombre_completo, foto_url ),
@@ -276,18 +278,24 @@ const fmtFechaHora = (iso: string) =>
                 <p class="text-gray-800 font-medium">📍 {sol.direccion ?? '—'}</p>
               </div>
               <div class="flex flex-col gap-1">
-                <span class="text-gray-400 text-xs uppercase tracking-wide">Fecha y hora preferida</span>
+                <span class="text-gray-400 text-xs uppercase tracking-wide">Fecha y franja preferida</span>
                 <p class="text-gray-800 font-medium">
                   📅 {sol.fecha_solicitada
                     ? new Date(sol.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
                     : '—'}
-                  {sol.hora_solicitada && ` · ${(sol.hora_solicitada as string).slice(0, 5)} hs`}
+                  {sol.franja_solicitada && ` · ${FRANJA_LABEL[sol.franja_solicitada as FranjaHoraria] ?? sol.franja_solicitada}`}
                 </p>
               </div>
               {sol.franja_asignada && sol.estado !== 'pendiente' && (
                 <div class="flex flex-col gap-1">
-                  <span class="text-gray-400 text-xs uppercase tracking-wide">Franja horaria asignada</span>
-                  <p class="text-gray-800 font-medium">🕒 {FRANJA_LABEL[sol.franja_asignada as FranjaHoraria] ?? sol.franja_asignada}</p>
+                  <span class="text-gray-400 text-xs uppercase tracking-wide">Franja horaria propuesta</span>
+                  <p class="text-gray-800 font-medium">
+                    🕒 {FRANJA_LABEL[sol.franja_asignada as FranjaHoraria] ?? sol.franja_asignada}
+                    {sol.horario_confirmado_cliente
+                      ? <span class="text-primary font-semibold"> · ✅ Confirmado</span>
+                      : <span class="text-amber-600 font-semibold"> · ⏳ Pendiente de tu confirmación</span>
+                    }
+                  </p>
                 </div>
               )}
             </div>
@@ -367,6 +375,20 @@ const fmtFechaHora = (iso: string) =>
                 Si la aceptás, pasamos a asignarte un técnico. Si no te sirve, podés rechazarla.
               </p>
               <ResponderCotizacion client:load solicitudId={sol.id} titulo={sol.titulo} />
+            </div>
+          )}
+
+          <!-- Responder horario (Fase 8.4) — el admin ya asignó técnico + horario, esperando que
+               el cliente lo confirme o pida reprogramar. -->
+          {sol.tecnico_id && !sol.horario_confirmado_cliente && (
+            <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-3">
+              <h2 class="font-serif font-bold text-[#1B4D2E] text-base">¿Te sirve este horario?</h2>
+              <p class="text-sm text-gray-500">
+                {sol.franja_asignada
+                  ? <>Te proponemos <strong>{FRANJA_LABEL[sol.franja_asignada as FranjaHoraria] ?? sol.franja_asignada}</strong>. Si no te sirve, lo reprogramamos.</>
+                  : 'Confirmá el horario propuesto para tu solicitud, o pedí que se reprograme.'}
+              </p>
+              <ResponderHorario client:load solicitudId={sol.id} titulo={sol.titulo} />
             </div>
           )}
 

@@ -22,6 +22,9 @@ const DASHBOARD: Record<string, string> = {
 
 export default function LoginForm() {
   const [serverError, setServerError] = useState('')
+  const [sinConfirmar, setSinConfirmar] = useState('') // email pendiente de confirmar, si es ese el motivo del error
+  const [reenviando, setReenviando] = useState(false)
+  const [reenviado,  setReenviado]  = useState(false)
   const params     = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
   const redirectTo = params.get('redirect')
 
@@ -29,14 +32,31 @@ export default function LoginForm() {
     resolver: zodResolver(loginSchema),
   })
 
+  const reenviarConfirmacion = async () => {
+    if (!sinConfirmar) return
+    setReenviando(true)
+    await supabase.auth.resend({ type: 'signup', email: sinConfirmar })
+    setReenviando(false)
+    setReenviado(true)
+  }
+
   const onSubmit = async (data: LoginData) => {
     setServerError('')
+    setSinConfirmar('')
+    setReenviado(false)
     const { data: authData, error } = await supabase.auth.signInWithPassword({
       email: data.email,
       password: data.password,
     })
     if (error) {
-      setServerError('Email o contraseña incorrectos.')
+      // Supabase distingue "email not confirmed" de credenciales inválidas — sin esto, un cliente
+      // que todavía no clickeó el link de confirmación ve "contraseña incorrecta" y piensa que se
+      // equivocó al tipear, cuando en realidad la contraseña está bien.
+      if (error.code === 'email_not_confirmed' || error.message?.toLowerCase().includes('email not confirmed')) {
+        setSinConfirmar(data.email)
+      } else {
+        setServerError('Email o contraseña incorrectos.')
+      }
       return
     }
 
@@ -85,6 +105,20 @@ export default function LoginForm() {
       {serverError && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 text-center">
           {serverError}
+        </div>
+      )}
+
+      {sinConfirmar && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3 flex flex-col items-center gap-2 text-center">
+          <span>📩 Todavía no confirmaste tu correo. Revisá tu bandeja de entrada (o spam) y hacé click en el link que te mandamos.</span>
+          <button
+            type="button"
+            onClick={reenviarConfirmacion}
+            disabled={reenviando || reenviado}
+            className="text-xs font-semibold bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-1.5 rounded-full transition-colors disabled:opacity-60 whitespace-nowrap"
+          >
+            {reenviado ? '✓ Reenviado' : reenviando ? 'Enviando…' : 'Reenviar confirmación'}
+          </button>
         </div>
       )}
 

@@ -13,7 +13,7 @@ if (self?.tipo !== 'admin') return Astro.redirect('/dashboard/cliente')
 const [{ data: rawClientes }, { data: rawTecnicos }] = await Promise.all([
   supabase
     .from('usuarios')
-    .select('id, nombre_completo, email, telefono, creado_en')
+    .select('id, nombre_completo, email, telefono, creado_en, email_verificado')
     .eq('tipo', 'cliente')
     .order('creado_en', { ascending: false })
     .limit(50),
@@ -21,7 +21,8 @@ const [{ data: rawClientes }, { data: rawTecnicos }] = await Promise.all([
     .from('tecnicos')
     .select(`
       id, activo, zona_cobertura, tarifa_hora, nick, mostrar_nombre, descripcion, cvu,
-      usuarios!inner ( id, nombre_completo, email, telefono, creado_en )
+      usuarios!inner ( id, nombre_completo, email, telefono, creado_en ),
+      especialidades_tecnico ( categorias ( nombre, icono ) )
     `)
     .order('usuarios(nombre_completo)')
     .limit(50),
@@ -42,6 +43,7 @@ const tecnicos = (rawTecnicos ?? []).map((t: any) => ({
   email:           t.usuarios.email,
   telefono:        t.usuarios.telefono,
   creado_en:       t.usuarios.creado_en,
+  categorias:      (t.especialidades_tecnico ?? []).map((e: any) => e.categorias).filter(Boolean),
 }))
 ---
 

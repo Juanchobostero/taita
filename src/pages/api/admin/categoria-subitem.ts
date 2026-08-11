@@ -17,7 +17,7 @@ export const GET: APIRoute = async ({ url, request, cookies }) => {
 
     const { data, error } = await supabase
       .from('categoria_subitems')
-      .select('id, nombre, precio, porcentaje_tasa, activo')
+      .select('id, nombre, descripcion, precio, porcentaje_tasa, activo')
       .eq('categoria_id', categoriaId)
       .order('nombre')
 
@@ -49,20 +49,21 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       }
       const { data, error } = await supabase
         .from('categoria_subitems')
-        .insert({ categoria_id: categoriaId, nombre: nombre.trim(), precio: null, porcentaje_tasa: 0, activo: true })
-        .select('id, nombre, precio, porcentaje_tasa, activo')
+        .insert({ categoria_id: categoriaId, nombre: nombre.trim(), descripcion: null, precio: null, porcentaje_tasa: 0, activo: true })
+        .select('id, nombre, descripcion, precio, porcentaje_tasa, activo')
         .single()
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
       return new Response(JSON.stringify({ ok: true, subitem: data }), { status: 200 })
     }
 
     if (accion === 'editar') {
-      const { subitemId, nombre, precio, porcentaje } = body
+      const { subitemId, nombre, descripcion, precio, porcentaje } = body
       if (!subitemId) return new Response(JSON.stringify({ error: 'subitemId requerido' }), { status: 400 })
       const { error } = await supabase
         .from('categoria_subitems')
         .update({
           nombre:          nombre?.trim() || undefined,
+          descripcion:     descripcion?.trim() || null,
           precio:          precio != null ? (parseFloat(precio) || null) : null,
           porcentaje_tasa: parseFloat(porcentaje) || 0,
         })

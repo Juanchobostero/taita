@@ -130,7 +130,12 @@ export default function NotificacionesBell({ userId, tipo, iconClassName = 'text
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white rounded-2xl shadow-lg border border-cream-dark z-50 overflow-hidden">
+        // Mobile: `fixed` con márgenes seguros a los costados en vez de `absolute right-0` anclado
+        // al botón — con un ancho fijo, en pantallas angostas parte del dropdown podía quedar fuera
+        // del viewport (un elemento `absolute` que se sale no genera scroll horizontal, así que esa
+        // parte quedaba directamente invisible, no solo recortada). Desde `sm:` se vuelve al
+        // comportamiento de siempre, anclado al botón.
+        <div className="fixed inset-x-4 top-20 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 max-w-full sm:max-w-[90vw] bg-white rounded-2xl shadow-lg border border-cream-dark z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-cream">
             <p className="text-sm font-semibold text-gray-800">Notificaciones</p>
             {unread > 0 && (

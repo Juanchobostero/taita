@@ -3,7 +3,7 @@ import Layout from '../../../../layouts/Layout.astro'
 import Navbar from '../../../../components/Navbar'
 import GaleriaFotos from '../../../../components/GaleriaFotos'
 import { createSupabaseAdmin } from '../../../../lib/supabase-admin'
-import { notificarCambioEstado, notificarDesasignacion, notificarFranjaAsignada } from '../../../../lib/notificaciones'
+import { notificarCambioEstado, notificarDesasignacion, notificarHorarioPropuesto } from '../../../../lib/notificaciones'
 import { chequearDisponibilidad, franjaDeHora, FRANJA_LABEL, type FranjaHoraria } from '../../../../lib/disponibilidad'
 import CambiosEnVivo from '../../../../components/CambiosEnVivo'
 import MapaUbicacion from '../../../../components/MapaUbicacion'
@@ -112,8 +112,11 @@ if (Astro.request.method === 'POST') {
         if (reagendarError) console.error('[asignar-tecnico] error reagendando:', reagendarError.message)
       }
 
+      // `horario_confirmado_cliente` se resetea a false en cada asignación (Fase 8.4) — es un
+      // horario nuevo, cualquier confirmación previa del cliente (de una asignación anterior) ya
+      // no aplica.
       const { error } = await supabase.from('solicitudes')
-        .update({ tecnico_id: tecnicoId, franja_asignada: franjaAsignada })
+        .update({ tecnico_id: tecnicoId, franja_asignada: franjaAsignada, horario_confirmado_cliente: false })
         .eq('id', id)
       if (error) {
         console.error('[asignar-tecnico]', error.message)
@@ -123,14 +126,13 @@ if (Astro.request.method === 'POST') {
         } catch (err) {
           console.error('[asignar-tecnico] error notificando:', err)
         }
-        // Si la franja que terminó asignándose no coincide con la que pidió el cliente
-        // originalmente, avisarle — el admin decide igual, no se bloquea nada (acordado con Jota).
-        if (actual?.hora_solicitada && franjaDeHora(actual.hora_solicitada) !== franjaAsignada) {
-          try {
-            await notificarFranjaAsignada(supabase, id, franjaAsignada)
-          } catch (err) {
-            console.error('[asignar-tecnico] error notificando franja:', err)
-          }
+        // Fase 8.4: el cliente ahora tiene que confirmar el horario explícitamente (antes era solo
+        // informativo con `notificarFranjaAsignada` cuando difería de lo pedido — ahora se le pide
+        // siempre, coincida o no, porque necesita responder aceptar/rechazar).
+        try {
+          await notificarHorarioPropuesto(supabase, id, franjaAsignada)
+        } catch (err) {
+          console.error('[asignar-tecnico] error notificando horario:', err)
         }
         if (forzar && nuevaFecha && nuevaHora) {
           const params = new URLSearchParams({ reagendado: '1', fecha: nuevaFecha, hora: nuevaHora })
@@ -161,6 +163,7 @@ const { data: sol } = await supabase
     gastos_extra, descripcion_gastos, imagenes_trabajo,
     conformidad_cliente, conformidad_en,
     fecha_solicitada, hora_solicitada, direccion, latitud, longitud, franja_asignada,
+    franja_solicitada, horario_confirmado_cliente,
     usuarios!cliente_id ( nombre_completo, telefono, email ),
     tecnicos ( tarifa_hora, usuarios ( nombre_completo, telefono ) ),
     categorias ( nombre, icono, porcentaje_tasa ),
@@ -334,6 +337,17 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                         ⏳ Esperando que el técnico confirme o rechace esta asignación.
                       </p>
                     )}
+                    <!-- Confirmación del horario por parte del cliente (Fase 8.4) — independiente
+                         de la confirmación del técnico de arriba. -->
+                    {sol.horario_confirmado_cliente ? (
+                      <p class="text-xs text-primary bg-primary-soft border border-primary-pale rounded-xl px-3 py-2">
+                        ✅ El cliente confirmó este horario.
+                      </p>
+                    ) : (
+                      <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                        ⏳ Esperando que el cliente confirme el horario.
+                      </p>
+                    )}
                   </div>
                 ) : sol.estado === 'en_cotizacion' ? (
                   <p class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
@@ -466,12 +480,12 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                 <p class="text-gray-800 font-medium">📍 {sol.direccion ?? '—'}</p>
               </div>
               <div class="flex flex-col gap-1">
-                <span class="text-gray-400 text-xs uppercase tracking-wide">Fecha y hora preferida</span>
+                <span class="text-gray-400 text-xs uppercase tracking-wide">Fecha y franja preferida</span>
                 <p class="text-gray-800 font-medium">
                   📅 {sol.fecha_solicitada
                     ? new Date(sol.fecha_solicitada).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
                     : '—'}
-                  {sol.hora_solicitada && ` · ${(sol.hora_solicitada as string).slice(0, 5)} hs`}
+                  {sol.franja_solicitada && ` · ${FRANJA_LABEL[sol.franja_solicitada as FranjaHoraria] ?? sol.franja_solicitada}`}
                 </p>
               </div>
             </div>

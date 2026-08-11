@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { supabase } from '@/lib/supabase'
-import { franjasHorarias } from '@/lib/disponibilidad'
+import { FRANJA_LABEL, type FranjaHoraria } from '@/lib/disponibilidad'
 import MapaUbicacion from '@/components/MapaUbicacion'
 import { StepperSidebar, StepperMobileBar } from '@/components/WizardStepper'
 
@@ -22,6 +22,7 @@ interface SubitemOpt {
   id:              string
   categoria_id:    string
   nombre:          string
+  descripcion:     string | null
   precio:          number | null
   porcentaje_tasa: number
 }
@@ -32,6 +33,7 @@ interface Props {
   categorias:          CategoriaOpt[]
   subitems?:           SubitemOpt[]
   defaultCategoriaId?: string | null
+  emailVerificado?:    boolean
 }
 
 interface Candidato {
@@ -48,7 +50,7 @@ const schema = z.object({
   titulo:           z.string().min(5, 'Mínimo 5 caracteres'),
   descripcion:      z.string().optional(),
   fecha_solicitada: z.string().min(1, 'Ingresá una fecha'),
-  hora_solicitada:  z.string().min(1, 'Elegí un horario'),
+  hora_solicitada:  z.string().min(1, 'Elegí una franja horaria'),
   direccion:        z.string().min(5, 'Ingresá la dirección del trabajo'),
 })
 
@@ -67,11 +69,19 @@ interface SugerenciaDireccion {
 }
 
 const DEBOUNCE_DIRECCION_MS = 900
-const FRANJAS = franjasHorarias()
+// El cliente ya no elige un horario puntual (Fase 8.4) — solo la franja amplia. Internamente se
+// sigue guardando una `hora_solicitada` representativa de esa franja (mismo campo que ya usan
+// `chequearDisponibilidad`/`franjaDeHora` para el flujo de técnico fijo y para sugerirle al admin
+// una franja por default al asignar) — el horario puntual real lo termina coordinando el admin.
+const HORA_REPRESENTATIVA_FRANJA: Record<FranjaHoraria, string> = {
+  manana: '09:00',
+  tarde:  '14:00',
+  noche:  '19:00',
+}
 
 const PASOS: { n: number; label: string; sub: string; campos: FieldName[] }[] = [
   { n: 1, label: 'Servicio',  sub: 'Qué necesitás',      campos: ['categoria_id'] },
-  { n: 2, label: 'Técnico',   sub: 'Quién puede tocarte', campos: [] },
+  { n: 2, label: 'Técnicos Sugeridos', sub: 'Quién puede tocarte', campos: [] },
   { n: 3, label: 'Detalles',  sub: 'El trabajo',          campos: ['titulo'] },
   { n: 4, label: 'Cuándo',    sub: 'Fecha y horario',     campos: ['fecha_solicitada', 'hora_solicitada'] },
   { n: 5, label: 'Dónde',     sub: 'Dirección',           campos: ['direccion'] },
@@ -83,7 +93,17 @@ function FieldError({ msg }: { msg?: string }) {
   return <p className="text-xs text-destructive mt-1">{msg}</p>
 }
 
-export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, subitems = [], defaultCategoriaId }: Props) {
+export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, subitems = [], defaultCategoriaId, emailVerificado = true }: Props) {
+  const [reenviando, setReenviando] = useState(false)
+  const [reenviado,  setReenviado]  = useState(false)
+
+  const reenviarEmail = async () => {
+    setReenviando(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user?.email) await supabase.auth.resend({ type: 'signup', email: user.email })
+    setReenviando(false)
+    setReenviado(true)
+  }
   const [serverError, setServerError] = useState('')
   const [success, setSuccess]         = useState(false)
   const [paso, setPaso]               = useState(1)
@@ -99,6 +119,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
 
   const categoriaId = watch('categoria_id')
   const [subitemId, setSubitemId] = useState<string | null>(null)
+  const [franjaSolicitada, setFranjaSolicitada] = useState<FranjaHoraria | null>(null)
   const subitemsCategoria = useMemo(
     () => subitems.filter(s => s.categoria_id === categoriaId),
     [subitems, categoriaId],
@@ -170,7 +191,6 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
   }
   const tituloVal    = watch('titulo')
   const fechaVal     = watch('fecha_solicitada')
-  const horaVal      = watch('hora_solicitada')
   const direccionVal = watch('direccion')
 
   const [candidatos, setCandidatos]         = useState<Candidato[]>([])
@@ -305,6 +325,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
         longitud:        ubicacion?.lng ?? null,
         esCotizacion,
         imagenesCotizacion: esCotizacion ? imagenesCotizacion : undefined,
+        franjaSolicitada,
       }),
     })
     if (!res.ok) {
@@ -414,16 +435,23 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
                         type="button"
                         key={s.id}
                         onClick={() => elegirSubitem(s.id)}
-                        className={`flex items-center justify-between gap-2 px-4 py-3 rounded-xl border-2 text-left transition-all ${
+                        className={`flex flex-col gap-1 px-4 py-3 rounded-xl border-2 text-left transition-all ${
                           subitemId === s.id
                             ? 'border-primary bg-primary-soft text-primary'
                             : 'border-cream-dark hover:border-primary-pale bg-white text-gray-600'
                         }`}
                       >
-                        <span className="text-sm font-medium">{s.nombre}</span>
-                        <span className="text-sm font-semibold shrink-0">
-                          {s.precio != null ? `$${s.precio.toLocaleString('es-AR')}` : 'A convenir'}
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium">{s.nombre}</span>
+                          <span className="text-sm font-semibold shrink-0">
+                            {s.precio != null ? `$${s.precio.toLocaleString('es-AR')}` : 'A convenir'}
+                          </span>
                         </span>
+                        {s.descripcion && (
+                          <span className={`text-xs leading-snug ${subitemId === s.id ? 'text-primary/70' : 'text-gray-400'}`}>
+                            {s.descripcion}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -622,7 +650,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
             <>
               <div>
                 <h2 className="font-serif font-bold text-gray-900 text-2xl">¿Cuándo te viene bien?</h2>
-                <p className="text-gray-500 text-sm mt-1">Elegí fecha y horario de preferencia.</p>
+                <p className="text-gray-500 text-sm mt-1">Elegí fecha y franja horaria de preferencia.</p>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-gray-700">Fecha preferida</label>
@@ -634,28 +662,37 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
                 />
                 <FieldError msg={errors.fecha_solicitada?.message} />
               </div>
+
+              {/* Franja amplia (Fase 8.4) — el cliente ya no elige un horario puntual, solo el
+                  rango. El admin coordina el horario exacto con el técnico y te va a proponer un
+                  horario final que vas a poder aceptar o rechazar antes de que quede confirmado. */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">Horario preferido</label>
-                <div className={`grid grid-cols-4 sm:grid-cols-6 gap-2 ${errors.hora_solicitada ? 'ring-1 ring-destructive rounded-xl p-1' : ''}`}>
-                  {FRANJAS.map(f => (
-                    <label
+                <label className="text-sm font-medium text-gray-700">Franja horaria preferida</label>
+                <div className={`grid grid-cols-3 gap-2 ${errors.hora_solicitada ? 'ring-1 ring-destructive rounded-xl p-1' : ''}`}>
+                  {(Object.keys(FRANJA_LABEL) as FranjaHoraria[]).map(f => (
+                    <button
+                      type="button"
                       key={f}
-                      className={`text-center text-xs font-semibold py-2 rounded-full border cursor-pointer transition-colors ${
-                        horaVal === f
+                      onClick={() => {
+                        setFranjaSolicitada(f)
+                        setValue('hora_solicitada', HORA_REPRESENTATIVA_FRANJA[f], { shouldValidate: true })
+                      }}
+                      className={`text-center text-xs font-semibold py-2.5 rounded-full border transition-colors ${
+                        franjaSolicitada === f
                           ? 'bg-primary border-primary text-white'
                           : 'border-cream-dark text-gray-600 hover:border-primary-pale bg-white'
                       }`}
                     >
-                      <input type="radio" value={f} {...register('hora_solicitada')} className="hidden" />
-                      {f}
-                    </label>
+                      {FRANJA_LABEL[f]}
+                    </button>
                   ))}
                 </div>
                 <FieldError msg={errors.hora_solicitada?.message} />
+                <p className="text-xs text-gray-400">
+                  La franja es preferencial — el horario exacto se coordina con el técnico y te lo
+                  vamos a confirmar antes de agendar el trabajo.
+                </p>
               </div>
-              <p className="text-xs text-gray-400 -mt-2">
-                El horario que elegís es preferencial — puede ajustarse según la disponibilidad del técnico que te asignemos.
-              </p>
 
               {conflicto && !conflicto.disponible && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3 flex flex-col gap-2">
@@ -752,7 +789,7 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
                     ['Técnico',     tecnicoNombre ?? 'A asignar por Taita'],
                     ['Título',      tituloVal || '—'],
                     ['Fecha',       fechaVal || '—'],
-                    ['Horario',     horaVal || '—'],
+                    ['Franja horaria', franjaSolicitada ? FRANJA_LABEL[franjaSolicitada] : '—'],
                     ['Dirección',   direccionVal || '—'],
                   ].map(([label, value]) => (
                     <div key={label} className="flex items-center justify-between py-2.5 gap-4">
@@ -803,6 +840,20 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
                 </div>
               </div>
 
+              {!emailVerificado && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  <span className="flex-1">📩 Confirmá tu email para poder enviar la solicitud — te mandamos un link al registrarte.</span>
+                  <button
+                    type="button"
+                    onClick={reenviarEmail}
+                    disabled={reenviando || reenviado}
+                    className="text-xs font-semibold bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-1.5 rounded-full transition-colors disabled:opacity-60 shrink-0 whitespace-nowrap"
+                  >
+                    {reenviado ? '✓ Reenviado' : reenviando ? 'Enviando…' : 'Reenviar email'}
+                  </button>
+                </div>
+              )}
+
               {serverError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 text-center">
                   {serverError}
@@ -837,7 +888,8 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
               <button
                 type="button"
                 onClick={handleSubmit(onSubmit)}
-                disabled={isSubmitting || chequeando}
+                disabled={isSubmitting || chequeando || !emailVerificado}
+                title={!emailVerificado ? 'Confirmá tu email para poder enviar la solicitud' : undefined}
                 className="text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white px-6 py-2.5 rounded-full transition-colors disabled:opacity-50"
               >
                 {chequeando ? 'Verificando horario...' : isSubmitting ? 'Enviando...' : esCotizacion ? 'Pedir cotización' : 'Enviar solicitud'}

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 
 interface Cliente {
-  id:              string
-  nombre_completo: string
-  email:           string
-  telefono:        string | null
-  creado_en:       string
+  id:               string
+  nombre_completo:  string
+  email:            string
+  telefono:         string | null
+  creado_en:        string
+  email_verificado: boolean
 }
 
 interface TecnicoRow {
@@ -22,6 +23,7 @@ interface TecnicoRow {
   email:           string
   telefono:        string | null
   creado_en:       string
+  categorias:      { nombre: string; icono: string | null }[]
 }
 
 type SaveState = 'idle' | 'saving' | 'ok' | 'error'
@@ -89,6 +91,11 @@ function FilaCliente({ c }: { c: Cliente }) {
           <p className="text-sm font-medium text-gray-900 truncate">{nombre}</p>
           <p className="text-xs text-gray-400 truncate">{c.email}</p>
         </div>
+        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+          c.email_verificado ? 'bg-primary-soft text-[#1B4D2E]' : 'bg-amber-100 text-amber-700'
+        }`}>
+          {c.email_verificado ? '✅ Verificado' : '⏳ Sin verificar'}
+        </span>
         <span className="text-xs text-gray-300 shrink-0">
           {new Date(c.creado_en).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
         </span>
@@ -356,6 +363,18 @@ function FilaTecnico({ t: inicial }: { t: TecnicoRow }) {
               </div>
             </div>
           </div>
+          {t.categorias.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-gray-400">Categorías registradas</label>
+              <div className="flex flex-wrap gap-1.5">
+                {t.categorias.map(c => (
+                  <span key={c.nombre} className="bg-primary-soft text-primary text-xs font-medium px-2.5 py-1 rounded-full">
+                    {c.icono} {c.nombre}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex gap-2 items-center">
             <button
               onClick={e => { e.stopPropagation(); guardar() }}

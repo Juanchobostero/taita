@@ -5,7 +5,7 @@ import FormSolicitud from '../components/FormSolicitud'
 import { createSupabaseAdmin } from '../lib/supabase-admin'
 
 type CategoriaOpt = { id: string; nombre: string; icono: string | null; imagen_url: string | null; porcentaje_tasa: number; precio_base: number | null }
-type SubitemOpt   = { id: string; categoria_id: string; nombre: string; precio: number | null; porcentaje_tasa: number }
+type SubitemOpt   = { id: string; categoria_id: string; nombre: string; descripcion: string | null; precio: number | null; porcentaje_tasa: number }
 
 const tecnicoParam   = Astro.url.searchParams.get('tecnico')
 const categoriaParam = Astro.url.searchParams.get('categoria')
@@ -53,11 +53,20 @@ if (tecnicoParam) {
 // en registro.astro. No depende de si viene del flujo de técnico fijo o del flujo libre.
 const { data: rawSubitems } = await supabase
   .from('categoria_subitems')
-  .select('id, categoria_id, nombre, precio, porcentaje_tasa')
+  .select('id, categoria_id, nombre, descripcion, precio, porcentaje_tasa')
   .eq('activo', true)
   .order('nombre')
 
 const subitems = (rawSubitems ?? []) as SubitemOpt[]
+
+// Fase 8.1 — el email verificado solo aplica a cuentas de cliente (el técnico/admin no pasan por
+// este flujo). Si por algún motivo alguien de otro tipo llega a esta pantalla, no se lo bloquea.
+const { data: yo } = await supabase
+  .from('usuarios')
+  .select('tipo, email_verificado')
+  .eq('id', Astro.locals.user!.id)
+  .single()
+const emailVerificado = yo?.tipo !== 'cliente' ? true : !!yo?.email_verificado
 ---
 
 <Layout
@@ -94,6 +103,7 @@ const subitems = (rawSubitems ?? []) as SubitemOpt[]
           categorias={categorias}
           subitems={subitems}
           defaultCategoriaId={categoriaParam}
+          emailVerificado={emailVerificado}
         />
       )}
 

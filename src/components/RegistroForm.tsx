@@ -100,6 +100,7 @@ function Tabs({ tipo, onChange }: { tipo: 'cliente' | 'tecnico'; onChange: (t: '
 // ── Cliente form ───────────────────────────────────────────────────────────
 function ClienteForm() {
   const [serverError, setServerError] = useState('')
+  const [registrado,  setRegistrado]  = useState(false)
   const params     = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
   const redirectTo = params.get('redirect')
 
@@ -109,11 +110,29 @@ function ClienteForm() {
 
   const onSubmit = async (data: ClienteData) => {
     setServerError('')
+
+    // Chequeo de MX del dominio (gratis, sin servicio externo) antes de gastar el signup —
+    // descarta dominios inventados/con typos que Zod no puede detectar solo con el formato.
+    try {
+      const chequeo = await fetch(`/api/verificar-dominio-email?email=${encodeURIComponent(data.email)}`)
+      const { valido } = await chequeo.json()
+      if (!valido) {
+        setServerError('Ese dominio de email no existe o no puede recibir correo — revisá que esté bien escrito.')
+        return
+      }
+    } catch {
+      // Si el chequeo en sí falla (problema de red del lado del server, no del dominio), no se
+      // bloquea el registro por un error nuestro — sigue de largo.
+    }
+
     const { data: authData, error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        // Va a /login (no a la home) — así el flujo siempre termina en un paso explícito de
+        // "iniciá sesión" en vez de dejar al usuario en la home sin indicación de qué hacer
+        // (la confirmación por sí sola no inicia sesión automáticamente).
+        emailRedirectTo: `${window.location.origin}/login`,
         data: {
           nombre_completo: `${data.nombre} ${data.apellido}`,
           tipo: 'cliente',
@@ -126,7 +145,40 @@ function ClienteForm() {
       setServerError('Este mail ya está registrado, ¿ya tenés cuenta?')
       return
     }
+
+    // Aviso "mejor esfuerzo" — si falla, el registro en sí ya quedó hecho.
+    if (authData.user) {
+      fetch('/api/cliente/registro-notificar', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ userId: authData.user.id }),
+      }).catch(() => {})
+    }
+
+    // Con "Confirm email" activo en Supabase, `signUp` no deja sesión iniciada hasta que el
+    // cliente confirme desde el link — redirigir directo al panel (ruta protegida) lo mandaría a
+    // /login sin explicación. Se le pide confirmar antes de seguir.
+    if (!authData.session) {
+      setRegistrado(true)
+      return
+    }
     window.location.href = '/dashboard/cliente'
+  }
+
+  if (registrado) {
+    return (
+      <div className="bg-primary-soft border border-primary-pale rounded-2xl p-8 text-center flex flex-col gap-3">
+        <p className="text-3xl">📩</p>
+        <p className="font-bold text-lg text-[#1B4D2E]">¡Ya casi! Confirmá tu correo</p>
+        <p className="text-sm text-gray-600">
+          Te mandamos un link de confirmación. Entrá a tu casilla y confirmalo para poder empezar a
+          pedir servicios.
+        </p>
+        <a href="/login" className="mt-2 text-primary hover:text-primary-hover font-medium text-sm">
+          Ir a iniciar sesión →
+        </a>
+      </div>
+    )
   }
 
   const err = (f: keyof ClienteData) => errors[f]?.message
@@ -208,9 +260,14 @@ function TecnicoForm({ especialidades }: { especialidades: CategoriaOpcion[] }) 
   const [serverError, setServerError] = useState('')
   const [subcats, setSubcats]         = useState<Record<string, string[]>>({})
   const [paso, setPaso]               = useState(1)
+  const [registrado, setRegistrado]   = useState(false)
 
   const { register, handleSubmit, watch, trigger, formState: { errors, isSubmitting } } = useForm<TecnicoData>({
     resolver: zodResolver(tecnicoSchema),
+    // `onBlur` en vez del `onSubmit` por default — el error de formato de email (y del resto de
+    // los campos) aparece apenas el usuario sale del campo, no recién al mandar el wizard entero
+    // (pedido de Jota: validación de email "restrictiva y en vivo" para el registro de técnico).
+    mode: 'onBlur',
   })
 
   const raw = watch('especialidades')
@@ -249,7 +306,7 @@ function TecnicoForm({ especialidades }: { especialidades: CategoriaOpcion[] }) 
       email: data.email,
       password: data.password,
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: `${window.location.origin}/login`,
         data: {
           nombre_completo: `${data.nombre} ${data.apellido}`,
           tipo: 'tecnico',
@@ -285,7 +342,31 @@ function TecnicoForm({ especialidades }: { especialidades: CategoriaOpcion[] }) 
       }
     }
 
+    // Con "Confirm email" activo en Supabase (Fase 8.1 — es una config global, aplica también acá
+    // aunque la verificación "restrictiva" en sí solo se le exige al cliente), `signUp` no deja
+    // sesión iniciada hasta confirmar — redirigir directo a /dashboard/tecnico (ruta protegida) lo
+    // mandaría a /login sin explicación. Mismo fix que en ClienteForm.
+    if (!authData.session) {
+      setRegistrado(true)
+      return
+    }
     window.location.href = '/dashboard/tecnico'
+  }
+
+  if (registrado) {
+    return (
+      <div className="bg-primary-soft border border-primary-pale rounded-2xl p-8 text-center flex flex-col gap-3 max-w-lg mx-auto">
+        <p className="text-3xl">📩</p>
+        <p className="font-bold text-lg text-[#1B4D2E]">¡Ya casi! Confirmá tu correo</p>
+        <p className="text-sm text-gray-600">
+          Te mandamos un link de confirmación. Entrá a tu casilla y confirmalo — después, un
+          administrador va a revisar tu registro antes de que puedas empezar a recibir trabajos.
+        </p>
+        <a href="/login" className="mt-2 text-primary hover:text-primary-hover font-medium text-sm">
+          Ir a iniciar sesión →
+        </a>
+      </div>
+    )
   }
 
   const err = (f: keyof TecnicoData) => errors[f]?.message

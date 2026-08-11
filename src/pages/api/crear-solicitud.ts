@@ -20,6 +20,7 @@ interface Body {
   longitud?:              number | null
   esCotizacion?:          boolean
   imagenesCotizacion?:   string[]
+  franjaSolicitada?:      string | null
 }
 
 export const POST: APIRoute = async ({ request, cookies }) => {
@@ -33,7 +34,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const body = await request.json() as Body
   const { tecnicoId, categoriaId, categoriaSubitemId, titulo, descripcion,
           precioBase, tasaAplicada, totalEstimado, fechaSolicitada, horaSolicitada, direccion,
-          latitud, longitud, esCotizacion, imagenesCotizacion } = body
+          latitud, longitud, esCotizacion, imagenesCotizacion, franjaSolicitada } = body
 
   if (!categoriaId || !titulo || !fechaSolicitada || !horaSolicitada || !direccion) {
     return new Response(JSON.stringify({ error: 'Datos incompletos' }), { status: 400 })
@@ -81,6 +82,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     longitud:         typeof longitud === 'number' ? longitud : null,
     estado:           esCotizacion ? 'en_cotizacion' : 'pendiente',
     es_cotizacion:    !!esCotizacion,
+    franja_solicitada: franjaSolicitada || null,
   }).select('id').single()
 
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })

@@ -99,9 +99,135 @@ function ImagenUpload({ catId, imagenUrl, onUpdate }: {
 interface Subitem {
   id:              string
   nombre:          string
+  descripcion:     string | null
   precio:          number | null
   porcentaje_tasa: number
   activo:          boolean
+}
+
+// Sub-ítem con guardado explícito (a diferencia de la fila de la categoría, que usa el mismo
+// patrón pero ya existía) — antes se guardaba solo al salir de cada campo (`onBlur`), sin ningún
+// indicador, y en la práctica no quedaba claro si había guardado o no (Jota probó y no lo notó).
+// Botón con ícono de disquete en vez de un texto plano como el resto de los botones de esta
+// pantalla, para que no quede todo con la misma pinta.
+function SubitemRow({ sub, toggling, onToggle, onEliminar, onGuardado }: {
+  sub:        Subitem
+  toggling:   boolean
+  onToggle:   () => void
+  onEliminar: () => void
+  onGuardado: (updated: Subitem) => void
+}) {
+  const [nombre,      setNombre]      = useState(sub.nombre)
+  const [descripcion, setDescripcion] = useState(sub.descripcion ?? '')
+  const [precio,      setPrecio]      = useState(sub.precio != null ? String(sub.precio) : '')
+  const [porcentaje,  setPorcentaje]  = useState(String(sub.porcentaje_tasa))
+  const [guardando,   setGuardando]   = useSaveState()
+
+  const guardar = async () => {
+    setGuardando('saving')
+    const res = await fetch('/api/admin/categoria-subitem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion:      'editar',
+        subitemId:   sub.id,
+        nombre,
+        descripcion,
+        precio,
+        porcentaje,
+      }),
+    })
+    setGuardando(res.ok ? 'ok' : 'error')
+    if (res.ok) {
+      onGuardado({
+        ...sub,
+        nombre:          nombre.trim() || sub.nombre,
+        descripcion:     descripcion.trim() || null,
+        precio:          parseFloat(precio) || null,
+        porcentaje_tasa: parseFloat(porcentaje) || 0,
+      })
+    }
+  }
+
+  const btnCfg = {
+    idle:   { label: 'Guardar',     icon: '💾', cls: 'bg-primary hover:bg-primary-hover text-white' },
+    saving: { label: 'Guardando…',  icon: '💾', cls: 'bg-primary/60 text-white cursor-not-allowed' },
+    ok:     { label: '¡Guardado!',  icon: '✓',  cls: 'bg-green-500 text-white' },
+    error:  { label: 'Error',       icon: '✗',  cls: 'bg-red-500 text-white' },
+  }[guardando]
+
+  return (
+    <div className={`bg-white rounded-xl border border-cream-dark shadow-sm p-3 flex flex-col gap-2 transition-opacity ${!sub.activo ? 'opacity-50' : ''}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={nombre}
+          onChange={e => setNombre(e.target.value)}
+          className="flex-1 min-w-35 font-semibold text-sm text-gray-800 border border-transparent hover:border-cream-dark focus:border-primary rounded-lg px-2 py-1 focus:outline-none bg-white"
+        />
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-sm text-gray-400">$</span>
+          <input
+            type="number" min="0" step="100"
+            value={precio}
+            onChange={e => setPrecio(e.target.value)}
+            placeholder="—"
+            className="w-24 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary bg-white"
+          />
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <input
+            type="number" min="0" max="100" step="0.5"
+            value={porcentaje}
+            onChange={e => setPorcentaje(e.target.value)}
+            className="w-14 border border-cream-dark rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-primary bg-white"
+          />
+          <span className="text-sm text-gray-400">%</span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Descripción — qué incluye</label>
+        <textarea
+          value={descripcion}
+          onChange={e => setDescripcion(e.target.value)}
+          rows={2}
+          placeholder="Ej: hasta 2,5 mts de caños incluidos"
+          className="w-full border border-cream-dark rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-primary bg-white resize-none"
+        />
+      </div>
+
+      <div className="flex items-center gap-2 justify-end">
+        <button
+          type="button"
+          onClick={guardar}
+          disabled={guardando === 'saving'}
+          className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all shrink-0 ${btnCfg.cls}`}
+        >
+          <span aria-hidden="true">{btnCfg.icon}</span>
+          {btnCfg.label}
+        </button>
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={toggling}
+          className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors shrink-0 ${
+            sub.activo
+              ? 'border-cream-dark text-gray-400 hover:border-red-300 hover:text-red-500'
+              : 'border-primary-pale text-primary-light hover:bg-primary-soft'
+          }`}
+        >
+          {toggling ? '…' : sub.activo ? 'Desactivar' : 'Activar'}
+        </button>
+        <button
+          onClick={onEliminar}
+          className="text-gray-300 hover:text-red-500 transition-colors text-lg leading-none shrink-0 px-1"
+          title="Eliminar"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function SubitemsPanel({ catId }: { catId: string }) {
@@ -158,94 +284,45 @@ function SubitemsPanel({ catId }: { catId: string }) {
     if (res.ok) setSubitems(prev => prev.filter(s => s.id !== id))
   }
 
-  const updateField = async (sub: Subitem, field: 'precio' | 'porcentaje_tasa', val: string) => {
-    const updated = { ...sub, [field]: parseFloat(val) || (field === 'precio' ? null : 0) }
-    setSubitems(prev => prev.map(s => s.id === sub.id ? updated : s))
-    await fetch('/api/admin/categoria-subitem', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accion:     'editar',
-        subitemId:  sub.id,
-        nombre:     sub.nombre,
-        precio:     field === 'precio' ? val : sub.precio,
-        porcentaje: field === 'porcentaje_tasa' ? val : sub.porcentaje_tasa,
-      }),
-    })
-  }
-
   const totalPrecio = subitems.filter(s => s.activo).reduce((sum, s) => sum + (s.precio ?? 0), 0)
 
   if (loading) return <div className="px-4 py-3 text-xs text-gray-400">Cargando subitems…</div>
 
   return (
-    <div className="border-t border-cream bg-cream/40 px-4 py-3 flex flex-col gap-2">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sub-ítems</p>
+    <div className="border-t border-cream-dark bg-cream/60 px-4 py-4 flex flex-col gap-3">
+      <p className="text-sm font-bold text-gray-700 uppercase tracking-wide">Sub-ítems</p>
       {subitems.length === 0 && (
-        <p className="text-xs text-gray-400">Sin sub-ítems. Agregá uno abajo.</p>
+        <p className="text-sm text-gray-400">Sin sub-ítems todavía. Agregá uno abajo — por ejemplo "Instalación", con su precio, tasa y una descripción de lo que incluye.</p>
       )}
       {subitems.map(s => (
-        <div key={s.id} className={`flex items-center gap-2 transition-opacity ${!s.activo ? 'opacity-40' : ''}`}>
-          <span className="text-xs text-gray-500 flex-1 truncate">{s.nombre}</span>
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="text-xs text-gray-400">$</span>
-            <input
-              type="number" min="0" step="100"
-              defaultValue={s.precio ?? ''}
-              onBlur={e => updateField(s, 'precio', e.target.value)}
-              placeholder="—"
-              className="w-20 border border-cream-dark rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:border-primary bg-white"
-            />
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <input
-              type="number" min="0" max="100" step="0.5"
-              defaultValue={s.porcentaje_tasa}
-              onBlur={e => updateField(s, 'porcentaje_tasa', e.target.value)}
-              className="w-12 border border-cream-dark rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:border-primary bg-white"
-            />
-            <span className="text-xs text-gray-400">%</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => toggleSubitem(s)}
-            disabled={togglingId === s.id}
-            className={`text-[11px] font-medium px-2 py-1 rounded-full border transition-colors shrink-0 ${
-              s.activo
-                ? 'border-cream-dark text-gray-400 hover:border-red-300 hover:text-red-500'
-                : 'border-primary-pale text-primary-light hover:bg-primary-soft'
-            }`}
-          >
-            {togglingId === s.id ? '…' : s.activo ? 'Desactivar' : 'Activar'}
-          </button>
-          <button
-            onClick={() => eliminar(s.id)}
-            className="text-gray-300 hover:text-red-400 transition-colors text-sm shrink-0"
-            title="Eliminar"
-          >
-            ×
-          </button>
-        </div>
+        <SubitemRow
+          key={s.id}
+          sub={s}
+          toggling={togglingId === s.id}
+          onToggle={() => toggleSubitem(s)}
+          onEliminar={() => eliminar(s.id)}
+          onGuardado={updated => setSubitems(prev => prev.map(x => x.id === updated.id ? updated : x))}
+        />
       ))}
-      {/* Nueva fila */}
-      <div className="flex items-center gap-2 mt-1">
+      {/* Nuevo sub-ítem */}
+      <div className="flex items-center gap-2">
         <input
           value={nuevo}
           onChange={e => setNuevo(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && agregarSubitem()}
-          placeholder="Nuevo sub-ítem…"
-          className="flex-1 border border-cream-dark rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-primary bg-white"
+          placeholder="Nombre del nuevo sub-ítem…"
+          className="flex-1 border border-cream-dark rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary bg-white"
         />
         <button
           onClick={agregarSubitem}
           disabled={adding || !nuevo.trim()}
-          className="text-xs bg-primary hover:bg-primary-hover text-white px-3 py-1 rounded-full transition-colors disabled:opacity-40 shrink-0"
+          className="text-sm font-semibold bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-full transition-colors disabled:opacity-40 shrink-0"
         >
           {adding ? '…' : '+ Agregar'}
         </button>
       </div>
       {subitems.some(s => s.activo && s.precio != null) && (
-        <div className="mt-1 border-t border-cream-dark pt-2 flex justify-between text-xs font-semibold text-gray-700">
+        <div className="border-t border-cream-dark pt-2 flex justify-between text-sm font-semibold text-gray-700">
           <span>Total activos</span>
           <span>${totalPrecio.toLocaleString('es-AR')}</span>
         </div>

@@ -33,7 +33,7 @@ const { data: sol } = await supabase
     gastos_extra, descripcion_gastos, imagenes_trabajo,
     conformidad_cliente, conformidad_en,
     fecha_solicitada, hora_solicitada, direccion, latitud, longitud, franja_asignada,
-    usuarios!cliente_id ( nombre_completo, telefono ),
+    usuarios!cliente_id ( nombre_completo ),
     categorias ( nombre, icono ),
     pagos ( estado, creado_en )
   `)
@@ -172,7 +172,8 @@ const fmtFechaHora = (iso: string) =>
             </div>
           </div>
 
-          <!-- Cliente -->
+          <!-- Cliente — sin teléfono a propósito (privacidad); el contacto pasa siempre por la
+               plataforma. Solo el admin ve los datos de contacto de ambas partes. -->
           <div class="bg-white rounded-2xl border border-cream-dark p-6 flex flex-col gap-4">
             <h2 class="font-serif font-bold text-[#1B4D2E] text-base">Cliente</h2>
             {cliente ? (
@@ -182,7 +183,6 @@ const fmtFechaHora = (iso: string) =>
                 </div>
                 <div class="flex flex-col gap-0.5">
                   <p class="font-semibold text-gray-900 text-sm">{cliente.nombre_completo}</p>
-                  {cliente.telefono && <p class="text-xs text-gray-400">📞 {cliente.telefono}</p>}
                 </div>
               </div>
             ) : (
