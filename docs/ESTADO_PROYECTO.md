@@ -2690,6 +2690,22 @@ usado en el resto de la app: escuchar inserts en `notificaciones` en vez de `sol
       acepte/rechace desde otra → confirmar si el admin ve el cambio reflejarse solo o si hace falta
       el fix de Realtime ya documentado (escuchar `notificaciones` en vez de `solicitudes`).
 
+**Dos ajustes chicos hechos durante la prueba en vivo (11-ago), sobre lo de arriba:**
+- **Label "Técnico asignado" confuso durante la negociación:** en el paso de "Proponer horario"
+  (todavía sin ningún técnico de por medio) la columna decía igual "Técnico asignado", quedaba raro.
+  Ahora el label es dinámico: **"Horario del servicio"** mientras se negocia (sin horario
+  confirmado), **"Asignar técnico"** una vez que el cliente aceptó y falta elegir técnico, y recién
+  **"Técnico asignado"** cuando ya hay uno puesto.
+- **Bloqueo preventivo de horarios ya rechazados:** antes, el admin se enteraba de que una fecha/hora
+  ya había sido rechazada recién al mandar el formulario (redirect con el error). Ahora el propio
+  formulario "Proponer horario" (`dashboard/admin/solicitud/[id].astro`) chequea en vivo, sin
+  recargar, si la fecha+hora elegidas coinciden con una ya rechazada (usando la misma lista que ya
+  se le mostraba al admin) — si coincide, muestra el aviso en rojo y deja el botón deshabilitado
+  hasta que cambie algo. La validación server-side original queda intacta como respaldo (por si el
+  JS no llega a correr).
+
+**Archivos:** `src/pages/dashboard/admin/solicitud/[id].astro`.
+
 ---
 
 ## Reportes de avance previos
