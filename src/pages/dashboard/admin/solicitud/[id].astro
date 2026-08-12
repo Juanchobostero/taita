@@ -350,7 +350,9 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
 
               <!-- Técnico -->
               <div class="flex flex-col gap-3">
-                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Técnico asignado</p>
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  {tecnico ? 'Técnico asignado' : sol.horario_confirmado_cliente ? 'Asignar técnico' : 'Horario del servicio'}
+                </p>
                 {reagendadoFecha && reagendadoHora && (
                   <div class="bg-primary-soft border border-primary-pale text-[#1B4D2E] text-xs rounded-xl px-3 py-2.5">
                     ✅ La solicitud se reagendó al {new Date(`${reagendadoFecha}T00:00:00`).toLocaleDateString('es-AR')} a
@@ -459,7 +461,8 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                   <!-- Todavía no hay horario acordado con el cliente — proponerlo primero, sin
                        técnico (Fase 8.9). El admin ya coordinó disponibilidad con un técnico por
                        fuera de la app antes de llegar acá. -->
-                  <form method="POST" class="flex flex-col gap-2">
+                  <>
+                  <form method="POST" class="flex flex-col gap-2" id="form-proponer-horario">
                     <input type="hidden" name="accion" value="proponer-horario" />
                     {horarioRechazadoOk && (
                       <p class="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
@@ -476,6 +479,7 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                     <input
                       type="date"
                       name="fecha"
+                      id="input-fecha-horario"
                       required
                       value={sol.fecha_solicitada ? (sol.fecha_solicitada as string).slice(0, 10) : ''}
                       class="w-full border border-cream-dark rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary bg-white"
@@ -491,6 +495,7 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                     </select>
                     <select
                       name="hora"
+                      id="select-hora-horario"
                       required
                       class="w-full border border-cream-dark rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary bg-white"
                     >
@@ -502,13 +507,52 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                       Coordiná antes con un técnico disponible y proponele este horario al cliente
                       — todavía no se le asigna ningún técnico.
                     </p>
+                    <p id="aviso-horario-ya-rechazado" class="hidden text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                      Esa fecha y hora ya fueron rechazadas por el cliente — elegí otra combinación.
+                    </p>
                     <button
                       type="submit"
-                      class="bg-primary hover:bg-primary-hover text-white text-sm font-semibold py-2 rounded-xl transition-colors"
+                      id="btn-proponer-horario"
+                      class="bg-primary hover:bg-primary-hover text-white text-sm font-semibold py-2 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
                     >
                       Proponer horario
                     </button>
                   </form>
+                  <script
+                    is:inline
+                    type="application/json"
+                    id="horarios-rechazados-data"
+                    set:html={JSON.stringify(horariosRechazados.map(h => ({ fecha: (h.fecha as string).slice(0, 10), hora: (h.hora as string).slice(0, 5) })))}
+                  />
+                  <script>
+                    // Bloqueo preventivo del lado del cliente (Jota, 11-ago): el servidor ya validaba
+                    // esto al recibir el POST (redirect con `horarioRechazado=1`) — esto solo evita
+                    // que el admin llegue a mandar una combinación que ya sabemos que va a rebotar,
+                    // sin sacar esa validación server-side (queda como respaldo si el JS no corre).
+                    (function () {
+                      const form = document.getElementById('form-proponer-horario')
+                      if (!form) return
+                      const dataEl  = document.getElementById('horarios-rechazados-data')
+                      let rechazados: { fecha: string; hora: string }[] = []
+                      try { rechazados = JSON.parse(dataEl?.textContent || '[]') } catch {}
+
+                      const fechaInput = document.getElementById('input-fecha-horario') as HTMLInputElement | null
+                      const horaSelect = document.getElementById('select-hora-horario') as HTMLSelectElement | null
+                      const aviso      = document.getElementById('aviso-horario-ya-rechazado')
+                      const btn        = document.getElementById('btn-proponer-horario') as HTMLButtonElement | null
+                      if (!fechaInput || !horaSelect || !btn) return
+
+                      const chequear = () => {
+                        const match = rechazados.some(r => r.fecha === fechaInput.value && r.hora === horaSelect.value)
+                        aviso?.classList.toggle('hidden', !match)
+                        btn.disabled = match
+                      }
+                      fechaInput.addEventListener('change', chequear)
+                      horaSelect.addEventListener('change', chequear)
+                      chequear()
+                    })()
+                  </script>
+                  </>
                 )}
               </div>
 
