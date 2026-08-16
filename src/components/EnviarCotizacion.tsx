@@ -12,9 +12,9 @@ export default function EnviarCotizacion({ solicitudId }: Props) {
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
 
-  const total = precio && !isNaN(parseFloat(precio))
-    ? Math.round(parseFloat(precio) * (1 + (parseFloat(tasa) || 0) / 100))
-    : null
+  // El cliente paga el precio tal cual se cotiza — la tasa queda como referencia interna del
+  // admin, no se le suma al total (pedido de Agustín, sesión 11-ago).
+  const total = precio && !isNaN(parseFloat(precio)) ? Math.round(parseFloat(precio)) : null
 
   const enviar = async () => {
     setLoading(true)

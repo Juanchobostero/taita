@@ -41,13 +41,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return new Response(JSON.stringify({ error: 'Esta solicitud ya tiene el cierre cargado.' }), { status: 400 })
     }
 
-    // Recalcular total si hay gastos extras
+    // Recalcular total si hay gastos extras. El cliente paga solo precio + gastos extras — la
+    // tasa de plataforma ya no se le suma (pedido de Agustín, sesión 11-ago); se sigue guardando
+    // `tasa_aplicada` como dato de referencia interna, pero no participa del total cobrado.
     const gastosNum   = parseFloat(gastosExtra) || 0
-    const tasa        = (sol.tasa_aplicada ?? 0) / 100
     const precioBase  = (sol.precio_base ?? 0) + gastosNum
-    const nuevoTotal  = gastosNum > 0
-      ? precioBase + Math.round(precioBase * tasa)
-      : sol.total_estimado
+    const nuevoTotal  = gastosNum > 0 ? precioBase : sol.total_estimado
 
     const updates: Record<string, unknown> = {
       gastos_extra:        gastosNum > 0 ? gastosNum : null,

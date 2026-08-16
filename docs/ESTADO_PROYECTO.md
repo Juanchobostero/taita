@@ -3,12 +3,13 @@
 > Documento vivo. Se actualiza al cerrar cada tanda de trabajo. Para el detalle de qué falta
 > hacer y en qué orden, ver `docs/taita-backlog-tecnico.md` y el plan de tandas más abajo.
 
-**Última actualización:** 2026-08-11 — dos frentes: (1) fix del redirect de confirmación de email
-en producción (`detectSessionInUrl` desactivado + entrada exacta de `/login` en Redirect URLs de
-Supabase, ver detalle en el hilo de soporte de esa sesión) y (2) **análisis y plan** (sin
-implementar todavía) para desacoplar la negociación de horario de la asignación de técnico — ver
-sección "Negociación de horario desacoplada de la asignación de técnico" más abajo, con preguntas
-abiertas a confirmar antes de escribir código.
+**Última actualización:** 2026-08-11 — **el cliente ya no paga la tasa de plataforma, solo el
+precio del servicio** (pedido de Agustín) — ver sección "Precio al cliente sin tasa de plataforma"
+más abajo. Además: fix del redirect de confirmación de email en producción (`detectSessionInUrl`
+desactivado + entrada exacta de `/login` en Redirect URLs de Supabase), negociación de horario
+desacoplada de la asignación de técnico implementada y en pruebas (ver sección propia), y dos
+ajustes chicos sobre eso (label dinámico "Técnico asignado"/"Horario del servicio", bloqueo
+preventivo de horarios ya rechazados en el form del admin).
 
 **Actualización anterior:** 2026-08-10 — **Fase 8 implementada de punta a punta**: verificación de
 email restrictiva del cliente (Supabase Auth + chequeo de MX, técnico queda con validación de
@@ -2705,6 +2706,64 @@ usado en el resto de la app: escuchar inserts en `notificaciones` en vez de `sol
   JS no llega a correr).
 
 **Archivos:** `src/pages/dashboard/admin/solicitud/[id].astro`.
+
+---
+
+## Precio al cliente sin tasa de plataforma (sesión 11-ago)
+
+**Pedido de Agustín:** el cliente tiene que pagar solo el precio del servicio — la tasa de
+plataforma ya no se le suma encima.
+
+**Cómo funcionaba antes:** en el Paso final del wizard (`FormSolicitud.tsx`), el total se
+calculaba como `precio_base * (1 + tasa/100)` — ej. precio base $1.000 + tasa 5% = $1.050
+cobrados. Ese mismo `total_estimado` es el monto que se manda a MercadoPago
+(`api/cliente/dar-conformidad.ts`, `api/cliente/reintentar-pago.ts`), así que el cliente pagaba
+precio base + tasa de verdad, no solo en la pantalla.
+
+**Dato importante encontrado al analizar esto:** el técnico **ya cobraba solo el precio base**,
+sin la tasa (`dashboard/tecnico/solicitud/[id].astro` — "Vas a recibir" = `precio_base +
+gastos_extra`, nunca usó `total_estimado`). La tasa nunca le tocó al técnico — era 100% un recargo
+al cliente que quedaba como ganancia de la plataforma. Por eso el cambio es más chico de lo que
+parece: no afecta nada del lado del técnico, solo el monto que se le muestra/cobra al cliente.
+
+**Qué se cambió** (mismo criterio en las dos pantallas donde se calculaba precio + tasa,
+confirmado con Jota que ambas debían cambiar):
+- `FormSolicitud.tsx` (wizard, Paso final) — el total ya no suma la tasa (`total = precioBase`); se
+  sacó la línea "Tasa de plataforma (X%)" de la tarjeta de estimación que ve el cliente (quedó
+  consistente con `dashboard/cliente/solicitud/[id].astro`, que tampoco le mostraba esa línea).
+- `api/cotizacion/enviar.ts` + `EnviarCotizacion.tsx` (cotización manual del admin, Fase 7b) —
+  mismo cambio: el total que se cotiza y se cobra es el precio tal cual lo pone el admin, sin
+  sumarle la tasa. El campo de tasa queda en el form (dato de referencia), pero ya no participa del
+  cálculo.
+- `api/tecnico/completar.ts` — el recálculo del total cuando el técnico carga gastos extra también
+  sumaba la tasa; corregido para que sea solo `precio_base + gastos_extra` (si no, un trabajo con
+  gastos extra hubiera vuelto a colar la tasa en el cobro final).
+- `dashboard/admin/solicitud/[id].astro` — la línea "Tasa plataforma (X%)" del desglose financiero
+  se mantiene **como referencia interna** (así lo pidió Jota), pero ahora se calcula aparte
+  (`comisionReferencia = precio_base * tasa / 100`) en vez de como `total - técnico`, porque con el
+  cambio esa resta ahora siempre da $0 (correcto: la plataforma no retiene nada de esta
+  transacción). Se le agregó la aclaración "— no se cobra al cliente" para que no genere dudas.
+
+**Qué NO se tocó (a propósito):** las columnas `tasa_aplicada`/`porcentaje_tasa` (categorías,
+sub-ítems, `solicitudes`) siguen existiendo y guardándose igual que antes — solo dejaron de sumarse
+al total. Si en el futuro se quiere volver a cobrar una comisión (ej. descontándosela al técnico en
+vez de sumársela al cliente), el dato ya está disponible sin necesitar una columna nueva.
+
+**Archivos:** `src/components/FormSolicitud.tsx`, `src/components/EnviarCotizacion.tsx`,
+`src/pages/api/cotizacion/enviar.ts`, `src/pages/api/tecnico/completar.ts`,
+`src/pages/dashboard/admin/solicitud/[id].astro`.
+
+**Falta probar:**
+- [ ] Pedir una solicitud de catálogo (categoría/sub-ítem con precio) → confirmar que el Paso final
+      del wizard muestra el total sin la línea de tasa, y que coincide con el precio base.
+- [ ] Como admin, cotizar una solicitud "en cotización" → confirmar que el total que ve el cliente
+      es el precio cotizado, sin la tasa sumada.
+- [ ] Cobrar por MercadoPago (dar conformidad) → confirmar que el monto real cobrado coincide con el
+      precio base (no con precio + tasa).
+- [ ] Como técnico, cargar gastos extra al cerrar un trabajo → confirmar que el nuevo total es
+      precio base + gastos extra, sin tasa agregada.
+- [ ] Panel del admin, Desglose financiero → confirmar que "Tasa plataforma" se ve como referencia
+      (con la aclaración de que no se cobra) y que "Plataforma retiene" da $0.
 
 ---
 

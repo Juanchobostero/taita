@@ -26,7 +26,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       return new Response(JSON.stringify({ error: 'Esta solicitud no está en cotización' }), { status: 409 })
     }
 
-    const total = Math.round(precioNum * (1 + tasaNum / 100))
+    // El cliente paga solo el precio cotizado — la tasa de plataforma ya no se le suma encima
+    // (pedido de Agustín, sesión 11-ago). Se sigue guardando `tasa_aplicada` como dato de
+    // referencia interna para el admin, pero no participa del total cobrado.
+    const total = precioNum
 
     const { error } = await supabase
       .from('solicitudes')
@@ -40,7 +43,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     await supabase.from('cotizacion_mensajes').insert({
       solicitud_id: solicitudId,
       usuario_id:   user.id,
-      mensaje:      `Cotización enviada: $${precioNum.toLocaleString('es-AR')} + ${tasaNum}% de tasa = $${total.toLocaleString('es-AR')} total.`,
+      mensaje:      `Cotización enviada: $${total.toLocaleString('es-AR')}.`,
     })
 
     try {

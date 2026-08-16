@@ -260,7 +260,10 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
     // El sub-ítem elegido pisa el precio/tasa de la categoría "madre" — es más específico.
     const tasa        = sub ? sub.porcentaje_tasa : cat?.porcentaje_tasa ?? 0
     const precioBase   = sub ? sub.precio : cat?.precio_base ?? null
-    const total        = precioBase != null ? Math.round(precioBase * (1 + tasa / 100)) : null
+    // El cliente paga solo el precio del servicio — la tasa de plataforma ya NO se le suma
+    // encima (pedido de Agustín, sesión 11-ago). `tasa` se sigue calculando y mandando al
+    // backend como dato de referencia interna para el admin, pero no participa del total.
+    const total        = precioBase
     return { tasa, precioBase, total }
   }, [categoriaId, categorias, subitemId, subitemsCategoria, esCotizacion])
 
@@ -811,18 +814,6 @@ export default function FormSolicitud({ tecnicoId, tecnicoNombre, categorias, su
                   {precioBase != null ? (
                     <>
                       <p className="text-sm font-semibold">Estimación de costo</p>
-                      <div className="flex flex-col gap-1.5 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-white/70">Precio base</span>
-                          <span className="font-medium">${precioBase.toLocaleString('es-AR')}</span>
-                        </div>
-                        {tasa > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-white/70">Tasa de plataforma ({tasa}%)</span>
-                            <span className="font-medium">${Math.round(precioBase * tasa / 100).toLocaleString('es-AR')}</span>
-                          </div>
-                        )}
-                      </div>
                       <div className="border-t border-white/20 pt-3 flex items-center justify-between">
                         <span className="font-bold">Total estimado</span>
                         <span className="text-2xl font-bold text-amber-400">${total!.toLocaleString('es-AR')}</span>

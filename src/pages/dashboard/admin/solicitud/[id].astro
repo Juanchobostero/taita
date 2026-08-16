@@ -247,6 +247,11 @@ const gastosExtra        = sol.gastos_extra         as number | null
 // restaba los gastos extra al técnico (bug reportado por Agustín, plata real mal repartida).
 const cobrarAlTecnico    = precioBase != null ? precioBase + (gastosExtra ?? 0) : null
 const gananciaPlataforma = (total != null && cobrarAlTecnico != null) ? total - cobrarAlTecnico : null
+// La tasa ya no se le suma al cliente (pedido de Agustín, 11-ago) — `total` ahora es igual a
+// `cobrarAlTecnico`, así que `gananciaPlataforma` da $0 (correcto: la plataforma no retiene nada
+// de esta transacción). Este valor queda solo de referencia interna — cuánto sería la comisión
+// configurada para esta categoría si se llegara a cobrar en el futuro.
+const comisionReferencia = (precioBase != null && tasa != null) ? Math.round(precioBase * tasa / 100) : null
 // Puede haber más de un intento de pago (reintentos tras un rechazo) — se toma el más reciente
 // por fecha, el orden del array embebido de Supabase no está garantizado.
 const pagosSolicitud     = (sol.pagos as unknown as { estado: string; monto: number; creado_en: string }[] | null) ?? []
@@ -757,10 +762,10 @@ const fmt = (n: number) => `$${n.toLocaleString('es-AR', { minimumFractionDigits
                   <span>Precio base</span>
                   <span class="font-medium text-gray-800">{fmt(precioBase)}</span>
                 </div>
-                <div class="flex justify-between text-gray-600">
-                  <span>Tasa plataforma ({tasa ?? 0}%)</span>
-                  <span class="font-medium text-gray-800">
-                    {gananciaPlataforma != null ? fmt(gananciaPlataforma) : '—'}
+                <div class="flex justify-between text-gray-400 text-xs">
+                  <span>Tasa plataforma ({tasa ?? 0}%) — no se cobra al cliente</span>
+                  <span class="font-medium">
+                    {comisionReferencia != null ? fmt(comisionReferencia) : '—'}
                   </span>
                 </div>
 
