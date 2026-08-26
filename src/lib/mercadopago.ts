@@ -10,6 +10,9 @@ import {
 
 const accessToken = import.meta.env.MP_ACCESS_TOKEN
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null
+// Las credenciales de test de Mercado Pago empiezan con "TEST-", las de producción con "APP_USR-"
+// — se usa esto para decidir qué link de checkout devolver (ver `linkDeCheckout` más abajo).
+const esCredencialTest = accessToken?.startsWith('TEST-') ?? false
 
 function siteUrl(): string {
   return import.meta.env.PUBLIC_SITE_URL || 'https://taitasoluciones.com.ar'
@@ -30,6 +33,19 @@ interface CrearPreferenciaParams {
  */
 function esUrlLocal(url: string): boolean {
   return url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1')
+}
+
+/**
+ * Con credenciales de test hay que usar `sandbox_init_point` (el real, `init_point`, no funciona
+ * bien ahí); con credenciales de producción es al revés — `init_point` es el checkout real,
+ * `sandbox_init_point` manda a `sandbox.mercadopago.com.ar` aunque la cuenta sea real (bug
+ * detectado 2026-08-25: eso era lo que le pedía verificación de DNI y terminaba en "too many
+ * requests" — el checkout de sandbox no está pensado para manejar cuentas/tarjetas reales).
+ */
+function linkDeCheckout(preference: { init_point?: string | null; sandbox_init_point?: string | null }): string | null {
+  return esCredencialTest
+    ? (preference.sandbox_init_point ?? preference.init_point ?? null)
+    : (preference.init_point ?? preference.sandbox_init_point ?? null)
 }
 
 export async function crearPreferencia(
@@ -73,7 +89,7 @@ export async function crearPreferencia(
 
   return {
     preferenceId: preference.id!,
-    initPoint:    preference.sandbox_init_point ?? preference.init_point ?? null,
+    initPoint:    linkDeCheckout(preference),
   }
 }
 
@@ -81,7 +97,7 @@ export async function crearPreferencia(
 export async function obtenerLinkPago(preferenceId: string): Promise<string | null> {
   if (!client) return null
   const preference = await new Preference(client).get({ preferenceId })
-  return preference.sandbox_init_point ?? preference.init_point ?? null
+  return linkDeCheckout(preference)
 }
 
 interface PagoMP {

@@ -114,35 +114,23 @@ desarrollador, se pueden reusar entre proyectos.
 
 ### Cuentas de prueba (reutilizadas de otro proyecto, 2026-07-29)
 
-**Vendedor de prueba**
-- User ID: `1180488044`
-- Usuario: `TESTVKNDVYMZ`
-- Contraseña: `qatest4788`
-
-**Comprador de prueba (Jota, cuenta original)**
-- User ID: `1180493422`
-- Usuario: `TETE1322835`
-- Contraseña: `qatest5034`
-
-**Comprador de prueba — Agustín (creado 2026-07-29 para que pruebe él)**
-- User ID: `3575140053`
-- Usuario: `TESTUSER4258...` (ver panel de Mercado Pago → Cuentas de prueba para el usuario completo)
-- Contraseña: `ZG5STk3GjH`
-- Código de verificación: `140053`
-
-**Comprador de prueba — Manu (creado 2026-07-29, amigo que también prueba)**
-- User ID: `3575413443`
-- Usuario: `TESTUSER5637...` (ver panel de Mercado Pago → Cuentas de prueba para el usuario completo)
-- Contraseña: `FWPqGz0ToA`
-- Código de verificación: `413443`
+**Usuarios y contraseñas: no se documentan acá** (incidente de seguridad 2026-08-22 — GitGuardian
+detectó credenciales expuestas en este archivo). Son cuentas de prueba de Mercado Pago (sin plata
+real), pero igual dejaron de listarse acá — ver el panel de Mercado Pago Developers → Cuentas de
+prueba para los datos de acceso de cada una (Vendedor, Comprador Jota, Comprador Agustín, Comprador
+Manu). Los User ID no son secretos, quedan de referencia:
+- Vendedor de prueba: User ID `1180488044`
+- Comprador de prueba (Jota, cuenta original): User ID `1180493422`
+- Comprador de prueba — Agustín: User ID `3575140053`
+- Comprador de prueba — Manu: User ID `3575413443`
 
 **Credenciales de prueba del Vendedor** (app "TEST TAITA SOLUCIONES", creada logueado como el
 Vendedor de prueba de arriba — confirmado que el Access Token termina en `-1180488044`, el mismo
 User ID del vendedor, así que está bien aislado de la cuenta real):
-- Access Token: `APP_USR-8632599657503852-072910-f691368b0cdb77351887432547366b54-1180488044`
-- Public Key: `APP_USR-5d3169ec-392b-4b15-a50c-5e92787b2b54`
-- Estas son las que están cargadas en `MP_ACCESS_TOKEN` / `MP_PUBLIC_KEY` del `.env` local mientras
-  se prueba en sandbox.
+- Access Token / Public Key: **no se documentan acá** (incidente de seguridad 2026-08-22 —
+  GitGuardian detectó el Access Token viejo expuesto en este archivo; fue rotado en el panel de
+  Mercado Pago). Están cargados en `MP_ACCESS_TOKEN` / `MP_PUBLIC_KEY` del `.env` local / Vercel —
+  ver ahí, nunca en este documento.
 
 ### Paso a paso para probar un pago de punta a punta
 
@@ -269,9 +257,8 @@ Mientras probamos, los pagos son **de mentira** — no sale ni entra plata real.
 hace falta usar una cuenta de prueba de Mercado Pago, no la cuenta real de Agustín.
 
 1. Abrí una ventana de incógnito (para no mezclar con tu cuenta real de Mercado Pago).
-2. Andá a `mercadopago.com.ar` e iniciá sesión con estos datos de prueba:
-   - Usuario: `TETE1322835`
-   - Contraseña: `qatest5034`
+2. Andá a `mercadopago.com.ar` e iniciá sesión con la cuenta de prueba "Comprador — Jota" (pedile
+   el usuario/contraseña a Jota directo, no se documentan acá).
 3. En otra pestaña de esa misma ventana, entrá a `https://taitasoluciones.com.ar` con tu usuario
    normal de Taita (cliente), buscá una solicitud ya completada, y dale conformidad si todavía no
    se la diste.
@@ -308,6 +295,108 @@ hace falta usar una cuenta de prueba de Mercado Pago, no la cuenta real de Agust
 - [ ] Credenciales de **test** cargadas en Vercel (Production) para que Agustín pueda probar en
       el dominio real
 - [ ] Probado en producción (dominio real) con credenciales de test — Agustín como comprador
-- [ ] Credenciales de producción **reales** de Agustín cargadas en Vercel (recién al final, cuando
-      todo lo anterior esté validado)
-- [ ] Probado en producción con un pago real chico
+- [x] Credenciales de producción **reales** de Agustín cargadas en Vercel — `MP_ACCESS_TOKEN`,
+      `MP_WEBHOOK_SECRET`, `MP_PUBLIC_KEY`, scope **solo Production** (no Preview, a propósito —
+      ver incidente de seguridad más abajo). 22-ago-2026.
+- [ ] Probado en producción con un pago real chico — en curso, encontrados los dos problemas de la
+      sección "Fricción de Checkout Pro" más abajo, sin resolver todavía.
+
+---
+
+## Incidente de seguridad — Access Token expuesto (22-ago-2026)
+
+GitGuardian avisó por mail que el Access Token de la app de test ("TEST TAITA SOLUCIONES") estaba
+expuesto en texto plano en este mismo documento — tanto en el archivo actual como en ~18 commits
+de historial. También había, en el mismo archivo, usuarios/contraseñas de las 4 cuentas de prueba
+de Mercado Pago y la Public Key de esa app.
+
+**Hecho:**
+- Token rotado en el panel de Mercado Pago (invalida el expuesto, sin importar qué pase con el
+  historial de git).
+- Este documento redactado — ya no tiene ningún valor real, solo referencias a dónde están
+  cargadas las credenciales (`.env` local / Vercel).
+
+**Pendiente, decisión de Jota:** limpiar el historial de git (`git filter-repo` + force-push) —
+no es urgente una vez rotado el token (el que quedó en los commits viejos ya está muerto), es
+prolijidad. Confirmar también si el repo `Juanchobostero/taita` es público en GitHub.
+
+**Lección para no repetir:** ningún valor real (tokens, contraseñas, keys) va en un `.md` — ni
+siquiera de cuentas de prueba. Solo nombres de variables de entorno, igual que ya se hacía bien en
+`ESTADO_PROYECTO.md`.
+
+---
+
+## Pendiente sin resolver — "Failed to fetch" al registrarse (22-ago-2026)
+
+Jota registrando un cliente nuevo en producción (`/registro`) recibió el error crudo "Failed to
+fetch" en el formulario, en vez de un mensaje entendible. Diagnóstico hasta ahora:
+
+- El error viene de `supabase.auth.signUp()` (`RegistroForm.tsx`) — llama directo a la API de
+  Supabase Auth desde el navegador, no pasa por nuestro backend. `mensajeErrorAuth()` no tiene un
+  caso para fallos de red y muestra `error.message` tal cual, de ahí el texto crudo en inglés.
+- Descartado: el proyecto de Supabase no estaba pausado, y `PUBLIC_SUPABASE_URL` en Vercel no
+  cambió — confirmado por Jota.
+- **No se terminó de diagnosticar la causa de fondo** (¿de red? ¿CORS? ¿timing con el redeploy de
+  las env vars de Mercado Pago que se hizo en el mismo momento?) — quedó pendiente porque el foco
+  pasó a los problemas de Checkout Pro (ver sección de abajo).
+
+**Falta:**
+- [ ] Reproducir de nuevo y mirar la pestaña Network del navegador al fallar — confirmar si la
+      request llega a `*.supabase.co` o se corta antes.
+- [ ] Si se reproduce, agregarle a `mensajeErrorAuth()` (`RegistroForm.tsx`) un caso para errores de
+      red (`error.message === 'Failed to fetch'` / `TypeError`) con un mensaje entendible tipo "No
+      pudimos conectar — revisá tu conexión e intentá de nuevo", en vez de mostrar el texto crudo.
+
+---
+
+## Fricción de Checkout Pro — causa real encontrada y arreglada (22/25-ago-2026)
+
+**Diagnóstico inicial (22-ago), descartado más abajo:** probando pagos reales en producción, Jota
+reportó verificación pesada de MP (hasta pedía DNI) y un error final de "too many requests", y que
+en el celular el link no abría la app de Mercado Pago. En su momento se especuló que era fricción
+normal de una cuenta de MP nueva sin historial, y se evaluaron alternativas (Payment Brick,
+transferencia manual, otros procesadores — tabla comparativa más abajo, queda de referencia).
+
+**Causa real (encontrada 25-ago, con evidencia directa):** las dos pruebas de Jota y la de Agustín
+terminaban en `sandbox.mercadopago.com.ar` — confirmado por la URL y la marca de agua "Sandbox de
+Mercado Pago" visible en las capturas — **a pesar de tener cargadas las credenciales de
+producción** en Vercel. No era fricción de Mercado Pago: la app estaba mandando a todo el mundo al
+checkout de prueba.
+
+**Bug encontrado en `src/lib/mercadopago.ts`:** `crearPreferencia()` y `obtenerLinkPago()`
+devolvían `preference.sandbox_init_point ?? preference.init_point` — priorizaban el link de
+sandbox por sobre el real, sin importar qué credencial estuviera cargada. Quedó así de cuando se
+armó la integración en modo test (tenía sentido ahí) y nunca se corrigió al pasar a producción.
+Esto explica los dos síntomas reportados sin necesitar ninguna otra hipótesis:
+- La tarjeta de débito real de Jota "rebotaba" porque el sandbox no procesa tarjetas reales, solo
+  las de prueba ficticias de Mercado Pago.
+- A Agustín (cuenta real) el checkout de sandbox le pedía verificación doble + DNI y terminaba en
+  "too many requests" / loop de redirects — una cuenta real chocando contra un entorno pensado
+  para cuentas de prueba, que Mercado Pago no maneja bien.
+
+**Fix aplicado:** nueva función `linkDeCheckout()` que decide según el tipo de credencial cargada
+(`MP_ACCESS_TOKEN` empieza con `TEST-` → sandbox; con `APP_USR-` → producción) en vez de una
+prioridad fija — así local (con credenciales de test) sigue yendo al sandbox como corresponde, y
+Vercel Production (con las credenciales reales) va al checkout real de Mercado Pago.
+
+**Archivos:** `src/lib/mercadopago.ts`.
+
+**Falta probar (con este fix ya desplegado):**
+- [ ] Redeploy en Vercel para que tome el fix.
+- [ ] Repetir un pago real chico — confirmar que la URL de checkout es `www.mercadopago.com.ar`
+      (o el dominio real, **sin** `sandbox.`), y que una tarjeta real no rebota.
+- [ ] Confirmar si ahí también se resuelve solo el problema del celular (no abría la app) — el
+      checkout de sandbox también puede afectar ese comportamiento; revisar recién después de
+      confirmar que ya se está yendo al checkout real.
+- [ ] Si algo de esto persistiera *después* de confirmar que ya no es sandbox, ahí sí volver a
+      evaluar las alternativas de la tabla de abajo (quedan igual de válidas, solo que ya no son la
+      explicación de lo que se vio hasta ahora).
+
+### Alternativas evaluadas (si hiciera falta más adelante — no aplica al bug de arriba)
+
+| Opción | Qué es | A favor | En contra |
+|---|---|---|---|
+| **Checkout API / Payment Brick de MP** | Mismo Mercado Pago, pero el formulario de pago (tarjeta) se muestra embebido en `taitasoluciones.com.ar`, sin salir del sitio ni forzar login con cuenta de MP — el comprador puede pagar como invitado con tarjeta. | Sin login pesado de cuenta, sin salir del sitio. Mismo proveedor — no hay que migrar usuarios a otra billetera. Mismo costo (0 extra, mismas comisiones de MP). SDK oficial, tokeniza la tarjeta en el navegador — la app nunca toca el número de tarjeta. | Requiere desarrollo nuevo (no es cambiar una variable). Si se mantiene la opción "pagar con cuenta de MP" además de tarjeta, esa opción sigue usando el mismo login/verificación de siempre — la fricción para quien la elija no desaparece sola. |
+| **Transferencia manual (CVU/alias + admin confirma)** | Volver al modelo pre-Mercado Pago: el cliente transfiere y el admin marca el pago como recibido a mano. | Gratis, cero fricción de terceros, ya existía antes como mock (`pagos.estado = 'registrado'`). | Se pierde todo lo automático ya construido (webhook, reconciliación, recibo PDF automático, todos los estados de pago) — sería un paso atrás, no una mejora. |
+| **Todo Pago (Banco Nación) u otro procesador argentino** | Alternativa a Mercado Pago para cobrar online en Argentina. | Existe como opción. | Muchísima menos penetración que Mercado Pago en Argentina. Requeriría integración desde cero. |
+| **Stripe / PayPal** | Procesadores internacionales. | Buena fama de UX. | Stripe no tiene soporte directo para cobrar y liquidar en ARS a una cuenta bancaria argentina sin vueltas. PayPal es poco usado para consumo local en Argentina y tiene mal tipo de cambio. No son una alternativa realista acá.
